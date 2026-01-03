@@ -70,13 +70,7 @@ function AISandboxPage() {
   const [responseArea, setResponseArea] = useState<string[]>([]);
   const [structureContent, setStructureContent] = useState('No sandbox created yet');
   const [promptInput, setPromptInput] = useState('');
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      content: 'Welcome! I can help you generate code with full context of your sandbox files and structure. Just start chatting - I\'ll automatically create a sandbox for you if needed!\n\nTip: If you see package errors like "react-router-dom not found", just type "npm install" or "check packages" to automatically install missing packages.',
-      type: 'system',
-      timestamp: new Date()
-    }
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [aiEnabled] = useState(true);
   const searchParams = useSearchParams();
@@ -1670,10 +1664,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                       // Beautiful loading state while thinking
                       <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                          <div className="mb-8 relative">
-                            <div className="w-48 h-48 mx-auto">
-                              <div className="absolute inset-0 border-8 border-gray-800 rounded-full"></div>
-                              <div className="absolute inset-0 border-8 border-green-500 rounded-full animate-spin border-t-transparent"></div>
+                          <div className="mb-4 relative">
+                            <div className="w-12 h-12 mx-auto">
+                              <div className="absolute inset-0 border-4 border-gray-800 rounded-full"></div>
+                              <div className="absolute inset-0 border-4 border-green-500 rounded-full animate-spin border-t-transparent"></div>
                             </div>
                           </div>
                           <h3 className="text-xl font-medium text-white mb-2">AI is analyzing your request</h3>
@@ -3887,7 +3881,7 @@ Focus on the key sections and content, making it clean and modern.`;
   return (
     <HeaderProvider>
       <div className="font-sans bg-background text-foreground h-screen flex flex-col">
-        <div className="bg-white py-[15px] py-[8px] border-b border-border-faint flex items-center justify-between shadow-sm">
+        <div className="bg-white py-2 px-4 border-b border-border-faint flex items-center justify-between shadow-sm">
           <HeaderBrandKit />
           <div className="flex items-center gap-2">
             {/* Model Selector - Left side */}
@@ -3913,7 +3907,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </select>
             <button
               onClick={() => createSandbox()}
-              className="p-8 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
               title="Create new sandbox"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3922,7 +3916,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </button>
             <button
               onClick={reapplyLastGeneration}
-              className="p-8 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Re-apply last generation"
               disabled={!conversationContext.lastGeneratedCode || !sandboxData}
             >
@@ -3933,7 +3927,7 @@ Focus on the key sections and content, making it clean and modern.`;
             <button
               onClick={downloadZip}
               disabled={!sandboxData}
-              className="p-8 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Download your Vite app as ZIP"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3942,7 +3936,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </button>
             <button
               onClick={() => setShowVersionHistory(!showVersionHistory)}
-              className={`p-8 rounded-lg transition-colors border ${showVersionHistory ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
+              className={`p-2 rounded-lg transition-colors border ${showVersionHistory ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
               title="Version History"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3959,7 +3953,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
         <div className="flex-1 flex overflow-hidden">
           {/* Center Panel - AI Chat (1/3 of remaining width) */}
-          <div className="w-[320px] flex-none flex flex-col border-r border-border bg-background">
+          <div className="w-[320px] flex-none flex flex-col border-r border-border bg-white">
             {/* Sidebar Input Component */}
             {!hasInitialSubmission ? (
               <div className="p-4 border-b border-border">
@@ -4001,12 +3995,12 @@ Focus on the key sections and content, making it clean and modern.`;
                     return (
                       <div key={idx} className="flex flex-col gap-3">
                         {/* Site info with favicon */}
-                        <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-3 text-sm">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={favicon}
                             alt={siteName}
-                            className="w-16 h-16 rounded"
+                            className="w-8 h-8 rounded"
                             onError={(e) => {
                               e.currentTarget.src = `https://www.google.com/s2/favicons?domain=${new URL(sourceURL).hostname}&sz=128`;
                             }}
@@ -4071,7 +4065,7 @@ Focus on the key sections and content, making it clean and modern.`;
             )}
 
             <div
-              className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 scrollbar-hide"
+              className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-hide bg-gray-50"
               ref={chatMessagesRef}>
               {chatMessages.map((msg, idx) => {
                 // Check if this message is from a successful generation
@@ -4086,7 +4080,7 @@ Focus on the key sections and content, making it clean and modern.`;
                   <div key={idx} className="block">
                     <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className="block">
-                        <div className={`block rounded-[10px] px-14 py-8 ${msg.type === 'user' ? 'bg-[#36322F] text-white ml-auto max-w-[80%]' :
+                        <div className={`block rounded-lg px-3 py-2 ${msg.type === 'user' ? 'bg-[#36322F] text-white ml-auto max-w-[80%]' :
                           msg.type === 'ai' ? 'bg-gray-100 text-gray-900 mr-auto max-w-[80%]' :
                             msg.type === 'system' ? 'bg-[#36322F] text-white text-sm' :
                               msg.type === 'command' ? 'bg-[#36322F] text-white font-mono text-sm' :
@@ -4127,14 +4121,14 @@ Focus on the key sections and content, making it clean and modern.`;
                         {/* Show branding data if this is a brand extraction message */}
                         {msg.metadata?.brandingData && (
                           <div className="mt-3 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-xl overflow-hidden max-w-[500px] shadow-sm">
-                            <div className="bg-[#36322F] px-16 py-12">
-                              <div className="flex items-center gap-8">
+                            <div className="bg-[#36322F] px-4 py-3">
+                              <div className="flex items-center gap-2">
                                 <Image
                                   src={`https://www.google.com/s2/favicons?domain=${msg.metadata.sourceUrl}&sz=32`}
                                   alt=""
-                                  width={64}
-                                  height={64}
-                                  className="w-16 h-16"
+                                  width={32}
+                                  height={32}
+                                  className="w-8 h-8"
                                 />
                                 <div className="text-sm font-semibold text-white">
                                   Brand Guidelines
@@ -4142,10 +4136,10 @@ Focus on the key sections and content, making it clean and modern.`;
                               </div>
                             </div>
 
-                            <div className="p-16">
+                            <div className="p-4">
                               {/* Color Scheme Mode */}
                               {msg.metadata.brandingData.colorScheme && (
-                                <div className="mb-16">
+                                <div className="mb-4">
                                   <div className="text-sm">
                                     <span className="text-gray-600 font-medium">Mode:</span>{' '}
                                     <span className="font-semibold text-gray-900 capitalize">{msg.metadata.brandingData.colorScheme}</span>
@@ -4155,12 +4149,12 @@ Focus on the key sections and content, making it clean and modern.`;
 
                               {/* Colors */}
                               {msg.metadata.brandingData.colors && (
-                                <div className="mb-16">
-                                  <div className="text-sm font-semibold text-gray-900 mb-8">Colors</div>
-                                  <div className="flex flex-wrap gap-12">
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Colors</div>
+                                  <div className="flex flex-wrap gap-3">
                                     {msg.metadata.brandingData.colors.primary && (
-                                      <div className="flex items-center gap-8">
-                                        <div className="w-32 h-32 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.primary }} />
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.primary }} />
                                         <div className="text-sm">
                                           <div className="font-semibold text-gray-900">Primary</div>
                                           <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.primary}</div>
@@ -4168,8 +4162,8 @@ Focus on the key sections and content, making it clean and modern.`;
                                       </div>
                                     )}
                                     {msg.metadata.brandingData.colors.accent && (
-                                      <div className="flex items-center gap-8">
-                                        <div className="w-32 h-32 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.accent }} />
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.accent }} />
                                         <div className="text-sm">
                                           <div className="font-semibold text-gray-900">Accent</div>
                                           <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.accent}</div>
@@ -4177,8 +4171,8 @@ Focus on the key sections and content, making it clean and modern.`;
                                       </div>
                                     )}
                                     {msg.metadata.brandingData.colors.background && (
-                                      <div className="flex items-center gap-8">
-                                        <div className="w-32 h-32 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.background }} />
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.background }} />
                                         <div className="text-sm">
                                           <div className="font-semibold text-gray-900">Background</div>
                                           <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.background}</div>
@@ -4186,8 +4180,8 @@ Focus on the key sections and content, making it clean and modern.`;
                                       </div>
                                     )}
                                     {msg.metadata.brandingData.colors.textPrimary && (
-                                      <div className="flex items-center gap-8">
-                                        <div className="w-32 h-32 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.textPrimary }} />
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.textPrimary }} />
                                         <div className="text-sm">
                                           <div className="font-semibold text-gray-900">Text</div>
                                           <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.textPrimary}</div>
@@ -4200,9 +4194,9 @@ Focus on the key sections and content, making it clean and modern.`;
 
                               {/* Typography */}
                               {msg.metadata.brandingData.typography && (
-                                <div className="mb-16">
-                                  <div className="text-sm font-semibold text-gray-900 mb-8">Typography</div>
-                                  <div className="grid grid-cols-2 gap-12 text-sm">
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Typography</div>
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
                                     {msg.metadata.brandingData.typography.fontFamilies?.primary && (
                                       <div>
                                         <span className="text-gray-600 font-medium">Primary:</span>{' '}
@@ -4239,9 +4233,9 @@ Focus on the key sections and content, making it clean and modern.`;
 
                               {/* Spacing */}
                               {msg.metadata.brandingData.spacing && (
-                                <div className="mb-16">
-                                  <div className="text-sm font-semibold text-gray-900 mb-8">Spacing</div>
-                                  <div className="flex flex-wrap gap-16 text-sm">
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Spacing</div>
+                                  <div className="flex flex-wrap gap-4 text-sm">
                                     {msg.metadata.brandingData.spacing.baseUnit && (
                                       <div>
                                         <span className="text-gray-600 font-medium">Base Unit:</span>{' '}
@@ -4260,13 +4254,13 @@ Focus on the key sections and content, making it clean and modern.`;
 
                               {/* Button Styles */}
                               {msg.metadata.brandingData.components?.buttonPrimary && (
-                                <div className="mb-16">
-                                  <div className="text-sm font-semibold text-gray-900 mb-8">Button Styles</div>
-                                  <div className="flex flex-wrap gap-12">
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Button Styles</div>
+                                  <div className="flex flex-wrap gap-3">
                                     <div>
-                                      <div className="text-xs text-gray-600 mb-6 font-medium">Primary Button</div>
+                                      <div className="text-xs text-gray-600 mb-1.5 font-medium">Primary Button</div>
                                       <button
-                                        className="px-16 py-8 text-sm font-medium"
+                                        className="px-4 py-2 text-sm font-medium"
                                         style={{
                                           backgroundColor: msg.metadata.brandingData.components.buttonPrimary.background,
                                           color: msg.metadata.brandingData.components.buttonPrimary.textColor,
@@ -4279,9 +4273,9 @@ Focus on the key sections and content, making it clean and modern.`;
                                     </div>
                                     {msg.metadata.brandingData.components?.buttonSecondary && (
                                       <div>
-                                        <div className="text-xs text-gray-600 mb-6 font-medium">Secondary Button</div>
+                                        <div className="text-xs text-gray-600 mb-1.5 font-medium">Secondary Button</div>
                                         <button
-                                          className="px-16 py-8 text-sm font-medium"
+                                          className="px-4 py-2 text-sm font-medium"
                                           style={{
                                             backgroundColor: msg.metadata.brandingData.components.buttonSecondary.background,
                                             color: msg.metadata.brandingData.components.buttonSecondary.textColor,
@@ -4320,7 +4314,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
                         {/* Show applied files if this is an apply success message */}
                         {msg.metadata?.appliedFiles && msg.metadata.appliedFiles.length > 0 && (
-                          <div className="mt-3 inline-block bg-gray-100 rounded-[10px] p-5">
+                          <div className="mt-3 inline-block bg-gray-100 rounded-lg p-3">
                             <div className="text-sm font-medium mb-3 text-gray-700">
                               {msg.content.includes('Applied') ? 'Files Updated:' : 'Generated Files:'}
                             </div>
@@ -4335,7 +4329,7 @@ Focus on the key sections and content, making it clean and modern.`;
                                 return (
                                   <div
                                     key={`applied-${fileIdx}`}
-                                    className="inline-flex items-center gap-1.5 px-6 py-1.5 bg-[#36322F] text-white rounded-[10px] text-sm animate-fade-in-up"
+                                    className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-sm animate-fade-in-up"
                                     style={{ animationDelay: `${fileIdx * 30}ms` }}
                                   >
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full ${fileType === 'css' ? 'bg-blue-400' :
@@ -4359,7 +4353,7 @@ Focus on the key sections and content, making it clean and modern.`;
                               {generationProgress.files.map((file, fileIdx) => (
                                 <div
                                   key={`complete-${fileIdx}`}
-                                  className="inline-flex items-center gap-1.5 px-6 py-1.5 bg-[#36322F] text-white rounded-[10px] text-xs animate-fade-in-up"
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
                                   style={{ animationDelay: `${fileIdx * 30}ms` }}
                                 >
                                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${file.type === 'css' ? 'bg-blue-400' :
@@ -4395,7 +4389,7 @@ Focus on the key sections and content, making it clean and modern.`;
                     {generationProgress.files.map((file, idx) => (
                       <div
                         key={`file-${idx}`}
-                        className="inline-flex items-center gap-1.5 px-6 py-1.5 bg-[#36322F] text-white rounded-[10px] text-xs animate-fade-in-up"
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
                         style={{ animationDelay: `${idx * 30}ms` }}
                       >
                         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
