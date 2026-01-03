@@ -1,7 +1,7 @@
-// GitHub Commit API - Create commits and push files
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions, getGitHubToken } from '@/lib/auth';
+import { githubCommitSchema, validateAndParse, sanitizeFilePath } from '@/lib/api-validation';
 
 async function getToken(request: NextRequest): Promise<string | null> {
     const session = await getServerSession(authOptions);
@@ -19,28 +19,36 @@ async function getToken(request: NextRequest): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest) {
-    const token = await getToken(request);
-
-    if (!token) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     try {
-        const body = await request.json();
-        const { repoFullName, branch, message, files } = body;
+        const token = await getToken(request);
 
-        if (!repoFullName || !branch || !message || !files) {
-            return NextResponse.json(
-                { error: 'Missing required fields' },
-                { status: 400 }
-            );
+        if (!token) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
+
+        let body: unknown;
+        try {
+            body = await request.json();
+        } catch {
+            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+        }
+
+        const validation = validateAndParse(githubCommitSchema, body);
+        if (!validation.success) {
+            return validation.error;
+        }
+
+        const { repoFullName, branch, message, files } = validation.data;
+
+        const sanitizedFiles = files.map(f => ({
+            path: sanitizeFilePath(f.path),
+            content: f.content,
+        }));
 
         const [owner, repo] = repoFullName.split('/');
         const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
 
-        // Step 1: Get the current commit SHA for the branch
-        const refResponse = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
+        const refResponse = await fetch(`${baseUrl}/git/refs/heads/${encodeURIComponent(branch)}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3+json',
@@ -48,7 +56,6 @@ export async function POST(request: NextRequest) {
         });
 
         if (!refResponse.ok) {
-            // Branch might not exist, try to create it from default branch
             const repoInfoResponse = await fetch(baseUrl, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -65,9 +72,8 @@ export async function POST(request: NextRequest) {
 
             const repoInfo = await repoInfoResponse.json();
 
-            // Get default branch ref
             const defaultRefResponse = await fetch(
-                `${baseUrl}/git/refs/heads/${repoInfo.default_branch}`,
+                `${baseUrl}/git/refs/heads/${encodeURIComponent(repoInfo.default_branch)}`,
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -85,7 +91,6 @@ export async function POST(request: NextRequest) {
 
             const defaultRef = await defaultRefResponse.json();
 
-            // Create new branch from default
             const createBranchResponse = await fetch(`${baseUrl}/git/refs`, {
                 method: 'POST',
                 headers: {
@@ -108,8 +113,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Step 2: Get the current tree
-        const latestRefResponse = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
+        const latestRefResponse = await fetch(`${baseUrl}/git/refs/heads/${encodeURIComponent(branch)}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Accept': 'application/vnd.github.v3+json',
@@ -129,9 +133,8 @@ export async function POST(request: NextRequest) {
         const latestCommit = await commitResponse.json();
         const baseTreeSha = latestCommit.tree.sha;
 
-        // Step 3: Create blobs for each file
         const treeItems = await Promise.all(
-            files.map(async (file: { path: string; content: string }) => {
+            sanitizedFiles.map(async (file) => {
                 const blobResponse = await fetch(`${baseUrl}/git/blobs`, {
                     method: 'POST',
                     headers: {
@@ -156,7 +159,6 @@ export async function POST(request: NextRequest) {
             })
         );
 
-        // Step 4: Create a new tree
         const treeResponse = await fetch(`${baseUrl}/git/trees`, {
             method: 'POST',
             headers: {
@@ -172,7 +174,6 @@ export async function POST(request: NextRequest) {
 
         const newTree = await treeResponse.json();
 
-        // Step 5: Create a new commit
         const newCommitResponse = await fetch(`${baseUrl}/git/commits`, {
             method: 'POST',
             headers: {
@@ -189,8 +190,7 @@ export async function POST(request: NextRequest) {
 
         const newCommit = await newCommitResponse.json();
 
-        // Step 6: Update the branch reference
-        const updateRefResponse = await fetch(`${baseUrl}/git/refs/heads/${branch}`, {
+        const updateRefResponse = await fetch(`${baseUrl}/git/refs/heads/${encodeURIComponent(branch)}`, {
             method: 'PATCH',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -216,13 +216,13 @@ export async function POST(request: NextRequest) {
             sha: newCommit.sha,
             url: `https://github.com/${repoFullName}/commit/${newCommit.sha}`,
             message: message,
-            filesCommitted: files.length,
+            filesCommitted: sanitizedFiles.length,
         });
 
     } catch (error: any) {
         console.error('[GitHub Commit] Error:', error);
         return NextResponse.json(
-            { error: error.message || 'Commit failed' },
+            { error: 'Commit failed' },
             { status: 500 }
         );
     }

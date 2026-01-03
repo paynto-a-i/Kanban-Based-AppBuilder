@@ -734,13 +734,13 @@ interface AppState {
 | API keys server-side only | ✅ Done | Critical |
 | Sandbox isolation verified | ✅ Done (Vercel) | Critical |
 | User authentication | ✅ Done (NextAuth) | Critical |
-| Input sanitization | 🟡 Partial | Critical |
+| Input sanitization | ✅ Done (Zod schemas) | Critical |
 | GitHub token security | ✅ Done (DB storage) | High |
 | Rate limiting | ✅ Done | High |
 | Secrets handling | 🟡 Partial | High |
 | HTTPS everywhere | ✅ Done (Vercel) | Critical |
 | CORS configured | 🟡 Partial | Medium |
-| Security headers | 🔴 Not Started | Medium |
+| Security headers | ✅ Done | Medium |
 
 ---
 
@@ -769,7 +769,7 @@ interface AppState {
 1. ✅ GitHub export flow
 2. 🔴 "Come up with 3 UIs" feature (future)
 3. 🟡 Animations and transitions
-4. 🟡 Error handling and edge cases
+4. ✅ Error handling and edge cases
 
 ## Sprint 5: Multi-Tenant (Days 13-18) ✅
 1. ✅ User authentication (NextAuth.js)
@@ -817,23 +817,24 @@ interface AppState {
 
 ### Environment Variables Required
 ```env
-# Database
-DATABASE_URL=postgresql://...
+# Required Services
+FIRECRAWL_API_KEY=...              # Website scraping
 
-# NextAuth
+# AI Provider (at least one)
+OPENAI_API_KEY=...                 # https://platform.openai.com
+
+# Sandbox (Vercel)
+VERCEL_TOKEN=...                   # Personal access token
+VERCEL_TEAM_ID=team_xxxxxxxxx      # Your Vercel team ID
+VERCEL_PROJECT_ID=prj_xxxxxxxxx    # Your Vercel project ID
+SANDBOX_PROVIDER=vercel
+
+# Authentication (optional - for user accounts)
+DATABASE_URL=postgresql://...
 NEXTAUTH_SECRET=<generate with: openssl rand -base64 32>
 NEXTAUTH_URL=https://your-domain.com
-
-# GitHub OAuth
 GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
-
-# AI Providers
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-
-# Sandbox
-VERCEL_SANDBOX_API_KEY=...
 ```
 
 ### Pre-Launch Commands
@@ -841,8 +842,8 @@ VERCEL_SANDBOX_API_KEY=...
 # Generate Prisma client
 npx prisma generate
 
-# Run database migrations
-npx prisma migrate deploy
+# Push database schema
+npx prisma db push
 ```
 
 ---
@@ -851,10 +852,11 @@ npx prisma migrate deploy
 
 - All ticket movements animate smoothly ✅
 - Loading states show skeleton UI 🟡
-- Error states provide clear recovery options 🟡
+- Error states provide clear recovery options ✅
 - Mobile responsiveness is secondary for MVP
 - Focus on desktop experience first
-- **Security audit recommended before public launch**
+- Build continues when tickets require input (skips them) ✅
+- Auth is optional - users can use app without signing in ✅
 
 ---
 
@@ -865,3 +867,4 @@ npx prisma migrate deploy
 | 1.0.0 | 2026-01-03 | Initial combined specification |
 | 1.1.0 | 2026-01-03 | Added multi-tenant, security, MCP specs |
 | 1.2.0 | 2026-01-03 | Updated with implementation progress - Auth, Dashboard, GitHub Export, Guardrails complete |
+| 1.3.0 | 2026-01-03 | Production hardening - Security headers, input validation (Zod), middleware auth, build skips awaiting_input tickets |

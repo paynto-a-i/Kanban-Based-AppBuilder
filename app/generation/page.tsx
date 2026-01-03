@@ -728,7 +728,9 @@ Visual Features: ${uiOption.features.join(', ')}`;
 
     if (backlogTickets.length === 0 && awaitingInputTickets.length === 0) return;
 
-    if (awaitingInputTickets.length > 0) {
+    if (awaitingInputTickets.length > 0 && backlogTickets.length > 0) {
+      addChatMessage(`${awaitingInputTickets.length} task(s) require input and will be skipped. Building ${backlogTickets.length} ready task(s).`, 'system');
+    } else if (awaitingInputTickets.length > 0 && backlogTickets.length === 0) {
       addChatMessage(`${awaitingInputTickets.length} task(s) require input before building. Please provide the required credentials/API keys.`, 'system');
       return;
     }
@@ -747,6 +749,8 @@ Visual Features: ${uiOption.features.join(', ')}`;
     const nextTicket = kanban.getNextBuildableTicket();
     if (!nextTicket || kanban.isPaused) {
       setKanbanBuildActive(false);
+      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build complete' }));
+      setTimeout(() => setActiveTab('preview'), 1000);
       return;
     }
 
@@ -791,6 +795,15 @@ Requirements:
       let generatedCode = '';
       const files: string[] = [];
 
+      setGenerationProgress(prev => ({
+        ...prev,
+        isGenerating: true,
+        status: `Generating: ${nextTicket.title}`,
+        streamedCode: '',
+        files: [],
+      }));
+      setActiveTab('generation');
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -808,6 +821,29 @@ Requirements:
 
                 const progress = Math.min(90, (generatedCode.length / 5000) * 100);
                 kanban.updateTicketProgress(nextTicket.id, progress);
+
+                setGenerationProgress(prev => ({
+                  ...prev,
+                  streamedCode: generatedCode,
+                }));
+
+                const fileRegex = /<file path="([^"]+)">([\s\S]*?)(?:<\/file>|$)/g;
+                const parsedFiles: Array<{ path: string; content: string; type: string; completed: boolean }> = [];
+                let match;
+                while ((match = fileRegex.exec(generatedCode)) !== null) {
+                  const filePath = match[1];
+                  const content = match[2];
+                  const ext = filePath.split('.').pop() || '';
+                  parsedFiles.push({
+                    path: filePath,
+                    content,
+                    type: ext,
+                    completed: content.includes('</file>') || generatedCode.includes(`</file>`)
+                  });
+                }
+                if (parsedFiles.length > 0) {
+                  setGenerationProgress(prev => ({ ...prev, files: parsedFiles }));
+                }
               } else if (data.type === 'complete') {
                 generatedCode = data.generatedCode || generatedCode;
               }
@@ -820,6 +856,7 @@ Requirements:
 
       kanban.updateTicketStatus(nextTicket.id, 'applying');
       kanban.updateTicketProgress(nextTicket.id, 95);
+      setGenerationProgress(prev => ({ ...prev, status: 'Applying code...' }));
 
       await applyGeneratedCode(generatedCode, false);
 
@@ -832,11 +869,16 @@ Requirements:
       kanban.updateTicketStatus(nextTicket.id, 'done');
       kanban.unblockDependents(nextTicket.id);
 
+      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Complete' }));
+
       if (!kanban.isPaused) {
         setTimeout(() => handleContinueKanbanBuild(), 500);
+      } else {
+        setTimeout(() => setActiveTab('preview'), 1000);
       }
     } catch (error: any) {
       kanban.updateTicketStatus(nextTicket.id, 'failed', error.message);
+      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${error.message}` }));
 
       if (!kanban.isPaused) {
         kanban.skipTicket(nextTicket.id);
