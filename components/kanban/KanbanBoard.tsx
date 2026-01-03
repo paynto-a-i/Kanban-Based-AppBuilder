@@ -22,9 +22,10 @@ const COLUMN_EMOJIS: Record<string, string> = {
 };
 
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
   content: string;
-  timestamp: number;
+  type: 'user' | 'ai' | 'system' | 'file-update' | 'command' | 'error';
+  timestamp: Date;
+  metadata?: any;
 }
 
 interface KanbanBoardProps {
@@ -171,21 +172,21 @@ export default function KanbanBoard({
               )}
 
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`relative pl-6 text-xs group ${msg.role === 'user' ? 'opacity-90' : ''}`}>
+                <div key={i} className={`relative pl-6 text-xs group ${msg.type === 'user' ? 'opacity-90' : ''}`}>
                   {/* Dot Indicator */}
-                  <div className={`absolute left-[4px] top-1.5 w-1.5 h-1.5 rounded-full border border-zinc-900 ring-2 ring-[#0f0f11] z-10 ${msg.role === 'user' ? 'bg-blue-500' :
-                      msg.role === 'system' ? 'bg-amber-500' :
+                  <div className={`absolute left-[4px] top-1.5 w-1.5 h-1.5 rounded-full border border-zinc-900 ring-2 ring-[#0f0f11] z-10 ${msg.type === 'user' ? 'bg-blue-500' :
+                      msg.type === 'system' ? 'bg-amber-500' :
                         'bg-green-500'
                     }`} />
 
                   {/* Message Content */}
                   <div className="flex flex-col">
-                    <span className={`font-mono text-[10px] uppercase mb-0.5 ${msg.role === 'user' ? 'text-blue-400' :
-                        msg.role === 'system' ? 'text-amber-400' :
+                    <span className={`font-mono text-[10px] uppercase mb-0.5 ${msg.type === 'user' ? 'text-blue-400' :
+                        msg.type === 'system' ? 'text-amber-400' :
                           'text-green-400'
                       }`}>
-                      {msg.role === 'user' ? 'User_Input' :
-                        msg.role === 'system' ? 'System_Event' : 'Agent_Response'}
+                      {msg.type === 'user' ? 'User_Input' :
+                        msg.type === 'system' ? 'System_Event' : 'Agent_Response'}
                     </span>
                     <span className="text-zinc-300 leading-relaxed break-words whitespace-pre-wrap">
                       {msg.content.replace(/```[\s\S]*?```/g, '[Code Block Generated]')}
