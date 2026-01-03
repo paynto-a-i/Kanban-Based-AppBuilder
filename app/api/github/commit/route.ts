@@ -1,14 +1,29 @@
 // GitHub Commit API - Create commits and push files
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions, getGitHubToken } from '@/lib/auth';
+
+async function getToken(request: NextRequest): Promise<string | null> {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) {
+        const token = await getGitHubToken(session.user.id);
+        if (token) return token;
+    }
+    
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    
+    return null;
+}
 
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get('Authorization');
+    const token = await getToken(request);
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!token) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.substring(7);
 
     try {
         const body = await request.json();

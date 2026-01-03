@@ -29,6 +29,7 @@ import { useVersioning } from '@/hooks/useVersioning';
 import { GitHubConnectButton, VersionHistoryPanel, SaveStatusIndicator } from '@/components/versioning';
 import { saveGitHubConnection } from '@/lib/versioning/github';
 import { useBuildTracker } from '@/hooks/useBuildTracker';
+import { UserMenu, LoginButton } from '@/components/auth';
 
 interface SandboxData {
   sandboxId: string;
@@ -3975,7 +3976,8 @@ Focus on the key sections and content, making it clean and modern.`;
               </svg>
             </button>
             <div className="border-l border-gray-200 h-6 mx-1" />
-            <GitHubConnectButton className="text-sm" />
+            <LoginButton className="text-sm" />
+            <UserMenu />
             {versioning.saveStatus.local !== 'idle' && (
               <SaveStatusIndicator status={versioning.saveStatus} />
             )}

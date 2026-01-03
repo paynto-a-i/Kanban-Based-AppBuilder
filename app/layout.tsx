@@ -3,6 +3,7 @@ import { Inter, Roboto_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SessionProvider } from "@/components/auth/SessionProvider";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -39,9 +40,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} font-sans`}>
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+        <SessionProvider>
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -58,3 +58,5 @@ repomix-output.txt
 bun.lockb
 .env*.local
 nul
+
+/lib/generated/prisma

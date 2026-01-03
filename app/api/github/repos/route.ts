@@ -1,15 +1,30 @@
 // GitHub Repositories API
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions, getGitHubToken } from '@/lib/auth';
+
+async function getToken(request: NextRequest): Promise<string | null> {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.id) {
+        const token = await getGitHubToken(session.user.id);
+        if (token) return token;
+    }
+    
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    
+    return null;
+}
 
 // GET - List user's repositories
 export async function GET(request: NextRequest) {
-    const authHeader = request.headers.get('Authorization');
+    const token = await getToken(request);
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!token) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.substring(7);
 
     try {
         const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
@@ -54,13 +69,11 @@ export async function GET(request: NextRequest) {
 
 // POST - Create a new repository
 export async function POST(request: NextRequest) {
-    const authHeader = request.headers.get('Authorization');
+    const token = await getToken(request);
 
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (!token) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.substring(7);
 
     try {
         const body = await request.json();
