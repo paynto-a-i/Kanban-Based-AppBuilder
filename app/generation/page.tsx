@@ -1558,8 +1558,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                                     <div
                                       key={fullPath}
                                       className={`flex items-center gap-2 py-0.5 px-3 rounded cursor-pointer transition-all ${isSelected
-                                          ? 'bg-blue-500 text-white'
-                                          : 'text-gray-700 hover:bg-gray-100'
+                                        ? 'bg-blue-500 text-white'
+                                        : 'text-gray-700 hover:bg-gray-100'
                                         }`}
                                       onClick={() => handleFileClick(fullPath)}
                                     >
@@ -1716,9 +1716,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                               <div className="w-16 h-16 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               <span className="font-mono text-sm">{generationProgress.currentFile.path}</span>
                               <span className={`px-2 py-0.5 text-xs rounded ${generationProgress.currentFile.type === 'css' ? 'bg-blue-600 text-white' :
-                                  generationProgress.currentFile.type === 'javascript' ? 'bg-yellow-600 text-white' :
-                                    generationProgress.currentFile.type === 'json' ? 'bg-green-600 text-white' :
-                                      'bg-gray-200 text-gray-700'
+                                generationProgress.currentFile.type === 'javascript' ? 'bg-yellow-600 text-white' :
+                                  generationProgress.currentFile.type === 'json' ? 'bg-green-600 text-white' :
+                                    'bg-gray-200 text-gray-700'
                                 }`}>
                                 {generationProgress.currentFile.type === 'javascript' ? 'JSX' : generationProgress.currentFile.type.toUpperCase()}
                               </span>
@@ -1757,9 +1757,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                               <span className="font-mono text-sm">{file.path}</span>
                             </div>
                             <span className={`px-2 py-0.5 text-xs rounded ${file.type === 'css' ? 'bg-blue-600 text-white' :
-                                file.type === 'javascript' ? 'bg-yellow-600 text-white' :
-                                  file.type === 'json' ? 'bg-green-600 text-white' :
-                                    'bg-gray-200 text-gray-700'
+                              file.type === 'javascript' ? 'bg-yellow-600 text-white' :
+                                file.type === 'json' ? 'bg-green-600 text-white' :
+                                  'bg-gray-200 text-gray-700'
                               }`}>
                               {file.type === 'javascript' ? 'JSX' : file.type.toUpperCase()}
                             </span>
@@ -1965,8 +1965,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                           <span
                             key={index}
                             className={`px-2 py-1 text-xs rounded-full transition-all ${codeApplicationState.installedPackages?.includes(pkg)
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-gray-100 text-gray-600'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-600'
                               }`}
                           >
                             {pkg}
@@ -2073,6 +2073,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
           onSetBuildMode={kanban.setBuildMode}
           buildMode={kanban.buildMode}
           tickets={kanban.tickets}
+          chatMessages={conversationHistory}
+          chatInput={aiChatInput}
+          setChatInput={setAiChatInput}
+          onSendMessage={sendChatMessage}
         />
       );
     }
@@ -3955,7 +3959,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
         <div className="flex-1 flex overflow-hidden">
           {/* Center Panel - AI Chat (1/3 of remaining width) */}
-          <div className={`flex-1 max-w-[400px] flex flex-col border-r border-border bg-background ${activeTab === 'kanban' ? 'hidden' : ''}`}>
+          <div className={`w-[320px] flex-none flex flex-col border-r border-border bg-background ${activeTab === 'kanban' ? 'hidden' : ''}`}>
             {/* Sidebar Input Component */}
             {!hasInitialSubmission ? (
               <div className="p-4 border-b border-border">
@@ -4083,18 +4087,18 @@ Focus on the key sections and content, making it clean and modern.`;
                     <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className="block">
                         <div className={`block rounded-[10px] px-14 py-8 ${msg.type === 'user' ? 'bg-[#36322F] text-white ml-auto max-w-[80%]' :
-                            msg.type === 'ai' ? 'bg-gray-100 text-gray-900 mr-auto max-w-[80%]' :
-                              msg.type === 'system' ? 'bg-[#36322F] text-white text-sm' :
-                                msg.type === 'command' ? 'bg-[#36322F] text-white font-mono text-sm' :
-                                  msg.type === 'error' ? 'bg-red-900 text-red-100 text-sm border border-red-700' :
-                                    'bg-[#36322F] text-white text-sm'
+                          msg.type === 'ai' ? 'bg-gray-100 text-gray-900 mr-auto max-w-[80%]' :
+                            msg.type === 'system' ? 'bg-[#36322F] text-white text-sm' :
+                              msg.type === 'command' ? 'bg-[#36322F] text-white font-mono text-sm' :
+                                msg.type === 'error' ? 'bg-red-900 text-red-100 text-sm border border-red-700' :
+                                  'bg-[#36322F] text-white text-sm'
                           }`}>
                           {msg.type === 'command' ? (
                             <div className="flex items-start gap-2">
                               <span className={`text-xs ${msg.metadata?.commandType === 'input' ? 'text-blue-400' :
-                                  msg.metadata?.commandType === 'error' ? 'text-red-400' :
-                                    msg.metadata?.commandType === 'success' ? 'text-green-400' :
-                                      'text-gray-400'
+                                msg.metadata?.commandType === 'error' ? 'text-red-400' :
+                                  msg.metadata?.commandType === 'success' ? 'text-green-400' :
+                                    'text-gray-400'
                                 }`}>
                                 {msg.metadata?.commandType === 'input' ? '$' : '>'}
                               </span>
@@ -4335,9 +4339,9 @@ Focus on the key sections and content, making it clean and modern.`;
                                     style={{ animationDelay: `${fileIdx * 30}ms` }}
                                   >
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full ${fileType === 'css' ? 'bg-blue-400' :
-                                        fileType === 'javascript' ? 'bg-yellow-400' :
-                                          fileType === 'json' ? 'bg-green-400' :
-                                            'bg-gray-400'
+                                      fileType === 'javascript' ? 'bg-yellow-400' :
+                                        fileType === 'json' ? 'bg-green-400' :
+                                          'bg-gray-400'
                                       }`} />
                                     {fileName}
                                   </div>
@@ -4359,9 +4363,9 @@ Focus on the key sections and content, making it clean and modern.`;
                                   style={{ animationDelay: `${fileIdx * 30}ms` }}
                                 >
                                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${file.type === 'css' ? 'bg-blue-400' :
-                                      file.type === 'javascript' ? 'bg-yellow-400' :
-                                        file.type === 'json' ? 'bg-green-400' :
-                                          'bg-gray-400'
+                                    file.type === 'javascript' ? 'bg-yellow-400' :
+                                      file.type === 'json' ? 'bg-green-400' :
+                                        'bg-gray-400'
                                     }`} />
                                   {file.path.split('/').pop()}
                                 </div>
@@ -4500,8 +4504,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('generation')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'generation'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'bg-transparent text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -4514,8 +4518,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('preview')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'preview'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'bg-transparent text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -4529,8 +4533,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('kanban')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'kanban'
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'bg-transparent text-gray-600 hover:text-gray-900'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
