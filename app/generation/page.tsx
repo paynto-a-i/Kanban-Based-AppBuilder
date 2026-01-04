@@ -116,6 +116,7 @@ function AISandboxPage() {
   const [isPlanning, setIsPlanning] = useState(false);
   const [kanbanBuildActive, setKanbanBuildActive] = useState(false);
   const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
+  const [sandboxExpired, setSandboxExpired] = useState(false);
 
   const kanban = useKanbanBoard();
 
@@ -550,6 +551,53 @@ Visual Features: ${uiOption.features.join(', ')}`;
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldAutoGenerate, homeUrlInput, showHomeScreen]);
+
+  // Keep-alive effect: ping sandbox periodically during active builds to prevent timeout
+  useEffect(() => {
+    if (!kanbanBuildActive && !generationProgress.isGenerating) return;
+    if (!sandboxData?.sandboxId) return;
+
+    const keepAlive = async () => {
+      try {
+        const response = await fetch('/api/sandbox-status');
+        const data = await response.json();
+        
+        if (data.sandboxStopped) {
+          console.log('[keep-alive] Sandbox expired during build');
+          setSandboxExpired(true);
+        }
+      } catch (e) {
+        console.error('[keep-alive] Health check failed:', e);
+      }
+    };
+
+    // Ping every 2 minutes to keep sandbox alive
+    const interval = setInterval(keepAlive, 2 * 60 * 1000);
+    
+    // Also ping immediately
+    keepAlive();
+
+    return () => clearInterval(interval);
+  }, [kanbanBuildActive, generationProgress.isGenerating, sandboxData?.sandboxId]);
+
+  // Handle sandbox expiration - auto-recreate if needed
+  useEffect(() => {
+    if (!sandboxExpired) return;
+
+    const handleExpiredSandbox = async () => {
+      console.log('[sandbox-expired] Detected expired sandbox, attempting to recreate...');
+      setSandboxData(null);
+      setSandboxExpired(false);
+      
+      // Create new sandbox
+      const newSandbox = await createSandbox(true);
+      if (newSandbox) {
+        addChatMessage('Sandbox was recreated after expiration. Please retry your last action.', 'system');
+      }
+    };
+
+    handleExpiredSandbox();
+  }, [sandboxExpired]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateStatus = (text: string, active: boolean) => {
     setStatus({ text, active });
@@ -2011,8 +2059,24 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               />
             </div>
 
+            {/* Sandbox expired overlay */}
+            {sandboxExpired && (
+              <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-30">
+                <div className="text-center max-w-md p-6">
+                  <div className="w-16 h-16 mx-auto mb-4 text-orange-500">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Sandbox Expired</h3>
+                  <p className="text-sm text-gray-600 mb-4">The sandbox session has timed out. Creating a new one...</p>
+                  <div className="w-8 h-8 mx-auto border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              </div>
+            )}
+
             {/* Preview refreshing overlay */}
-            {isPreviewRefreshing && (
+            {isPreviewRefreshing && !sandboxExpired && (
               <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-20">
                 <div className="text-center">
                   <div className="w-10 h-10 mx-auto mb-3 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
