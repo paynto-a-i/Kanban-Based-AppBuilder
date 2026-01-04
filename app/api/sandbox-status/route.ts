@@ -9,41 +9,63 @@ declare global {
 
 export async function GET() {
   try {
-    // Check sandbox manager first, then fall back to global state
     const provider = sandboxManager.getActiveProvider() || global.activeSandboxProvider;
     const sandboxExists = !!provider;
 
     let sandboxHealthy = false;
     let sandboxInfo = null;
+    let sandboxStopped = false;
 
     if (sandboxExists && provider) {
       try {
-        // Check if sandbox is healthy by getting its info
         const providerInfo = provider.getSandboxInfo();
-        sandboxHealthy = !!providerInfo;
         
-        sandboxInfo = {
-          sandboxId: providerInfo?.sandboxId || global.sandboxData?.sandboxId,
-          url: providerInfo?.url || global.sandboxData?.url,
-          filesTracked: global.existingFiles ? Array.from(global.existingFiles) : [],
-          lastHealthCheck: new Date().toISOString()
-        };
-      } catch (error) {
+        if (providerInfo && typeof provider.checkHealth === 'function') {
+          const healthResult = await provider.checkHealth();
+          sandboxHealthy = healthResult.healthy;
+          sandboxStopped = healthResult.error === 'SANDBOX_STOPPED';
+          
+          if (sandboxStopped) {
+            global.activeSandboxProvider = null;
+            global.sandboxData = null;
+            sandboxManager.clearActiveProvider?.();
+          }
+        } else {
+          sandboxHealthy = !!providerInfo;
+        }
+        
+        if (!sandboxStopped) {
+          sandboxInfo = {
+            sandboxId: providerInfo?.sandboxId || global.sandboxData?.sandboxId,
+            url: providerInfo?.url || global.sandboxData?.url,
+            filesTracked: global.existingFiles ? Array.from(global.existingFiles) : [],
+            lastHealthCheck: new Date().toISOString()
+          };
+        }
+      } catch (error: any) {
         console.error('[sandbox-status] Health check failed:', error);
+        if (error?.message?.includes('SANDBOX_STOPPED') || error?.message?.includes('410')) {
+          sandboxStopped = true;
+          global.activeSandboxProvider = null;
+          global.sandboxData = null;
+        }
         sandboxHealthy = false;
       }
     }
     
     return NextResponse.json({
       success: true,
-      active: sandboxExists,
+      active: sandboxExists && !sandboxStopped,
       healthy: sandboxHealthy,
+      sandboxStopped,
       sandboxData: sandboxInfo,
-      message: sandboxHealthy 
-        ? 'Sandbox is active and healthy' 
-        : sandboxExists 
-          ? 'Sandbox exists but is not responding' 
-          : 'No active sandbox'
+      message: sandboxStopped
+        ? 'Sandbox has stopped - please create a new one'
+        : sandboxHealthy 
+          ? 'Sandbox is active and healthy' 
+          : sandboxExists 
+            ? 'Sandbox exists but is not responding' 
+            : 'No active sandbox'
     });
     
   } catch (error) {

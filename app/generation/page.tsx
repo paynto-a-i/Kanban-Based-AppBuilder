@@ -665,30 +665,32 @@ Visual Features: ${uiOption.features.join(', ')}`;
       const response = await fetch('/api/sandbox-status');
       const data = await response.json();
 
+      if (data.sandboxStopped) {
+        console.log('[checkSandboxStatus] Sandbox stopped, clearing state and creating new one');
+        setSandboxData(null);
+        updateStatus('Sandbox stopped - creating new one...', false);
+        await createSandbox(true);
+        return;
+      }
+
       if (data.active && data.healthy && data.sandboxData) {
         console.log('[checkSandboxStatus] Setting sandboxData from API:', data.sandboxData);
         setSandboxData(data.sandboxData);
         updateStatus('Sandbox active', true);
       } else if (data.active && !data.healthy) {
-        // Sandbox exists but not responding
         updateStatus('Sandbox not responding', false);
-        // Keep existing sandboxData if we have it - don't clear it
       } else {
-        // Only clear sandboxData if we don't already have it or if we're explicitly checking from a fresh state
-        // This prevents clearing sandboxData during normal operation when it should persist
         if (!sandboxData) {
           console.log('[checkSandboxStatus] No existing sandboxData, clearing state');
           setSandboxData(null);
           updateStatus('No sandbox', false);
         } else {
-          // Keep existing sandboxData and just update status
           console.log('[checkSandboxStatus] Keeping existing sandboxData, sandbox inactive but data preserved');
           updateStatus('Sandbox status unknown', false);
         }
       }
     } catch (error) {
       console.error('Failed to check sandbox status:', error);
-      // Only clear on error if we don't have existing sandboxData
       if (!sandboxData) {
         setSandboxData(null);
         updateStatus('Error', false);
@@ -764,54 +766,44 @@ Visual Features: ${uiOption.features.join(', ')}`;
     // Ensure sandbox exists before proceeding
     if (!sandboxData) {
       const newSandbox = await createSandbox(true);
-      // Critical: Check if sandbox creation actually succeeded
       if (!newSandbox && !sandboxData) {
         setKanbanBuildActive(false);
         addChatMessage('❌ Failed to create sandbox. Please try again or refresh the page.', 'error');
-        console.error('[handleStartKanbanBuild] Sandbox creation failed, aborting build');
         return;
       }
     }
 
-    await handleContinueKanbanBuild();
-  };
+    // Mark all backlog tickets as generating at once
+    backlogTickets.forEach(ticket => {
+      kanban.updateTicketStatus(ticket.id, 'generating');
+    });
 
-  const handleContinueKanbanBuild = async () => {
-    const nextTicket = kanban.getNextBuildableTicket();
-    if (!nextTicket || kanban.isPaused) {
-      setKanbanBuildActive(false);
-      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build complete' }));
-      setTimeout(() => setActiveTab('preview'), 1000);
-      return;
-    }
-
-    kanban.setCurrentTicketId(nextTicket.id);
-    kanban.updateTicketStatus(nextTicket.id, 'generating');
-
-    try {
-      let userInputsSection = '';
-      if (nextTicket.userInputs && Object.keys(nextTicket.userInputs).length > 0) {
-        userInputsSection = `\n\nUSER PROVIDED CREDENTIALS/CONFIG:\n${Object.entries(nextTicket.userInputs)
-          .map(([key, value]) => `- ${key}: ${value}`)
-          .join('\n')}\n\nIMPORTANT: Use these credentials in the code. Store them in environment variables (.env) and reference them via process.env.`;
+    // Build combined prompt from all tickets
+    const ticketDescriptions = backlogTickets.map((ticket, idx) => {
+      let desc = `${idx + 1}. ${ticket.title}: ${ticket.description}`;
+      if (ticket.userInputs && Object.keys(ticket.userInputs).length > 0) {
+        desc += `\n   Credentials: ${Object.entries(ticket.userInputs).map(([k, v]) => `${k}=${v}`).join(', ')}`;
       }
+      return desc;
+    }).join('\n');
 
-      const ticketPrompt = `Generate code for this specific feature:
+    const combinedPrompt = `Build a complete application with ALL of the following features simultaneously:
 
-FEATURE: ${nextTicket.title}
-DESCRIPTION: ${nextTicket.description}
-TYPE: ${nextTicket.type}${userInputsSection}
+FEATURES TO BUILD:
+${ticketDescriptions}
 
 Requirements:
-- Create only the files needed for this feature
-- Use modern React with Tailwind CSS
-- Make it production-ready`;
+- Generate ALL files needed for ALL features in a single response
+- Use modern React with TypeScript and Tailwind CSS
+- Create a cohesive, production-ready application
+- Ensure all components work together seamlessly`;
 
+    try {
       const response = await fetch('/api/generate-ai-code-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: ticketPrompt,
+          prompt: combinedPrompt,
           model: aiModel,
           context: { sandboxId: sandboxData?.sandboxId },
         }),
@@ -824,16 +816,19 @@ Requirements:
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let generatedCode = '';
-      const files: string[] = [];
+      const completedFiles = new Set<string>();
 
       setGenerationProgress(prev => ({
         ...prev,
         isGenerating: true,
-        status: `Generating: ${nextTicket.title}`,
+        status: `Building ${backlogTickets.length} features...`,
         streamedCode: '',
         files: [],
       }));
       setActiveTab('generation');
+
+      // Start build tracker
+      buildTracker.startBuild(`Building ${backlogTickets.length} features`);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -848,16 +843,22 @@ Requirements:
               const data = JSON.parse(line.slice(6));
               if (data.type === 'stream' && data.raw) {
                 generatedCode += data.text;
-                kanban.updateTicketCode(nextTicket.id, generatedCode);
 
-                const progress = Math.min(90, (generatedCode.length / 5000) * 100);
-                kanban.updateTicketProgress(nextTicket.id, progress);
+                // Use build tracker to process streamed code and update tickets
+                buildTracker.processStreamedCode(generatedCode);
+
+                // Update overall progress
+                const progress = Math.min(85, (generatedCode.length / 10000) * 100);
+                backlogTickets.forEach(ticket => {
+                  kanban.updateTicketProgress(ticket.id, progress);
+                });
 
                 setGenerationProgress(prev => ({
                   ...prev,
                   streamedCode: generatedCode,
                 }));
 
+                // Parse files for UI display
                 const fileRegex = /<file path="([^"]+)">([\s\S]*?)(?:<\/file>|$)/g;
                 const parsedFiles: Array<{ path: string; content: string; type: string; completed: boolean }> = [];
                 let match;
@@ -865,16 +866,13 @@ Requirements:
                   const filePath = match[1];
                   const content = match[2];
                   const ext = filePath.split('.').pop() || '';
-                  // Check if THIS file's content block was properly closed
-                  // by looking for </file> immediately after the matched content
-                  const matchEndIndex = match.index + match[0].length;
                   const hasClosingTag = match[0].includes('</file>');
-                  parsedFiles.push({
-                    path: filePath,
-                    content,
-                    type: ext,
-                    completed: hasClosingTag
-                  });
+                  parsedFiles.push({ path: filePath, content, type: ext, completed: hasClosingTag });
+                  
+                  // Mark tickets as progressing based on file types
+                  if (hasClosingTag && !completedFiles.has(filePath)) {
+                    completedFiles.add(filePath);
+                  }
                 }
                 if (parsedFiles.length > 0) {
                   setGenerationProgress(prev => ({ ...prev, files: parsedFiles }));
@@ -883,49 +881,43 @@ Requirements:
                 generatedCode = data.generatedCode || generatedCode;
               }
             } catch (e) {
-              // Log parse errors for debugging (don't throw - stream may have partial JSON)
               console.debug('[stream-parse] Partial JSON chunk, continuing...', e);
             }
           }
         }
       }
 
-      kanban.updateTicketStatus(nextTicket.id, 'applying');
-      kanban.updateTicketProgress(nextTicket.id, 95);
+      // Mark all as applying
+      buildTracker.markApplying();
+      backlogTickets.forEach(ticket => {
+        kanban.updateTicketStatus(ticket.id, 'applying');
+        kanban.updateTicketProgress(ticket.id, 90);
+      });
       setGenerationProgress(prev => ({ ...prev, status: 'Applying code...' }));
 
       await applyGeneratedCode(generatedCode, false);
 
-      const fileMatches = generatedCode.matchAll(/<file path="([^"]+)">/g);
-      for (const match of fileMatches) {
-        files.push(match[1]);
-      }
+      // Mark all as done
+      buildTracker.markCompleted();
+      const allFiles = Array.from(generatedCode.matchAll(/<file path="([^"]+)">/g)).map(m => m[1]);
+      backlogTickets.forEach(ticket => {
+        kanban.updateTicketFiles(ticket.id, allFiles);
+        kanban.updateTicketStatus(ticket.id, 'done');
+        kanban.updateTicketProgress(ticket.id, 100);
+      });
 
-      kanban.updateTicketFiles(nextTicket.id, files);
-      kanban.updateTicketStatus(nextTicket.id, 'done');
-      kanban.unblockDependents(nextTicket.id);
+      setKanbanBuildActive(false);
+      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build complete' }));
+      setTimeout(() => setActiveTab('preview'), 1000);
 
-      setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Complete' }));
-
-      if (!kanban.isPaused) {
-        setTimeout(() => handleContinueKanbanBuild(), 500);
-      } else {
-        setTimeout(() => setActiveTab('preview'), 1000);
-      }
     } catch (error: any) {
-      // Mark as failed with error message for user visibility
-      kanban.updateTicketStatus(nextTicket.id, 'failed', error.message);
+      buildTracker.markFailed(error.message);
+      backlogTickets.forEach(ticket => {
+        kanban.updateTicketStatus(ticket.id, 'failed', error.message);
+      });
+      setKanbanBuildActive(false);
       setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${error.message}` }));
-
-      // Show user-friendly error message
-      addChatMessage(`⚠️ Task "${nextTicket.title}" failed: ${error.message}. Continuing with next task...`, 'system');
-
-      // Continue build if not paused - unblock dependents but keep 'failed' status intact
-      // (Previously this called skipTicket which changed status to 'skipped', causing confusion)
-      if (!kanban.isPaused) {
-        kanban.unblockDependents(nextTicket.id);  // Allow dependent tasks to proceed
-        setTimeout(() => handleContinueKanbanBuild(), 500);
-      }
+      addChatMessage(`❌ Build failed: ${error.message}`, 'error');
     }
   };
 

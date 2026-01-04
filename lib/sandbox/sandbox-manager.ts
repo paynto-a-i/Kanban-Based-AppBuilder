@@ -102,6 +102,16 @@ class SandboxManager {
   }
 
   /**
+   * Clear the active provider (for stopped sandboxes)
+   */
+  clearActiveProvider(): void {
+    if (this.activeSandboxId) {
+      this.sandboxes.delete(this.activeSandboxId);
+      this.activeSandboxId = null;
+    }
+  }
+
+  /**
    * Get a specific sandbox provider
    */
   getProvider(sandboxId: string): SandboxProvider | null {

@@ -598,6 +598,29 @@ body {
     return !!this.sandbox;
   }
 
+  async checkHealth(): Promise<{ healthy: boolean; error?: string }> {
+    if (!this.sandbox) {
+      return { healthy: false, error: 'No sandbox instance' };
+    }
+
+    try {
+      const result = await this.sandbox.runCommand({
+        cmd: 'echo',
+        args: ['health-check'],
+        cwd: '/vercel/sandbox'
+      });
+      return { healthy: result.exitCode === 0 };
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes('SANDBOX_STOPPED') || errorMsg.includes('410')) {
+        this.sandbox = null;
+        this.sandboxInfo = null;
+        return { healthy: false, error: 'SANDBOX_STOPPED' };
+      }
+      return { healthy: false, error: errorMsg };
+    }
+  }
+
   async makePersistent(): Promise<{ persistentUrl: string; expiresAt: Date } | null> {
     if (!this.sandbox || !this.sandboxInfo) {
       return null;
