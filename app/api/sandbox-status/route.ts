@@ -19,27 +19,69 @@ export async function GET() {
     if (sandboxExists && provider) {
       try {
         const providerInfo = provider.getSandboxInfo();
-        
+        const url = providerInfo?.url || global.sandboxData?.url;
+
+        // Health check: prefer provider-level check (detects SANDBOX_STOPPED), then use URL probe to get status code.
+        let healthStatusCode: number | null = null;
+        let healthError: string | undefined;
+
         if (providerInfo && typeof provider.checkHealth === 'function') {
           const healthResult = await provider.checkHealth();
           sandboxHealthy = healthResult.healthy;
-          sandboxStopped = healthResult.error === 'SANDBOX_STOPPED';
-          
-          if (sandboxStopped) {
-            global.activeSandboxProvider = null;
-            global.sandboxData = null;
-            sandboxManager.clearActiveProvider?.();
+          if (!sandboxHealthy && healthResult.error) {
+            healthError = healthResult.error;
           }
+          sandboxStopped = healthResult.error === 'SANDBOX_STOPPED';
         } else {
           sandboxHealthy = !!providerInfo;
         }
-        
-        if (!sandboxStopped) {
+
+        // Probe sandbox URL to detect stopped sandboxes (410) and surface status code for debugging.
+        if (url) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+          try {
+            const res = await fetch(url, {
+              method: 'HEAD',
+              cache: 'no-store',
+              signal: controller.signal,
+            });
+
+            healthStatusCode = res.status;
+
+            if (res.status === 410) {
+              sandboxHealthy = false;
+              sandboxStopped = true;
+              healthError = 'SANDBOX_STOPPED';
+            } else {
+              sandboxHealthy = res.ok;
+              if (!res.ok && !healthError) {
+                healthError = `HTTP ${res.status}`;
+              }
+            }
+          } catch (err) {
+            sandboxHealthy = false;
+            healthError = healthError || (err instanceof Error ? err.message : String(err));
+          } finally {
+            clearTimeout(timer);
+          }
+        } else if (!healthError) {
+          healthError = 'No sandbox URL available';
+        }
+
+        if (sandboxStopped) {
+          global.activeSandboxProvider = null;
+          global.sandboxData = null;
+          sandboxManager.clearActiveProvider();
+          sandboxInfo = null;
+        } else {
           sandboxInfo = {
             sandboxId: providerInfo?.sandboxId || global.sandboxData?.sandboxId,
-            url: providerInfo?.url || global.sandboxData?.url,
+            url,
             filesTracked: global.existingFiles ? Array.from(global.existingFiles) : [],
-            lastHealthCheck: new Date().toISOString()
+            lastHealthCheck: new Date().toISOString(),
+            healthStatusCode,
+            healthError,
           };
         }
       } catch (error: any) {
@@ -48,6 +90,7 @@ export async function GET() {
           sandboxStopped = true;
           global.activeSandboxProvider = null;
           global.sandboxData = null;
+          sandboxManager.clearActiveProvider();
         }
         sandboxHealthy = false;
       }

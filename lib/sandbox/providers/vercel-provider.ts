@@ -22,9 +22,12 @@ export class VercelProvider extends SandboxProvider {
       this.existingFiles.clear();
 
       // Create Vercel sandbox
+      const defaultTimeoutMs = 30 * 60 * 1000; // 30 minutes
+      const envTimeoutMs = Number(process.env.VERCEL_SANDBOX_TIMEOUT_MS);
+      const timeoutMs = Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : defaultTimeoutMs;
 
       const sandboxConfig: any = {
-        timeout: 300000, // 5 minutes in ms
+        timeout: timeoutMs, // ms
         runtime: 'node22', // Use node22 runtime for Vercel sandboxes
         ports: [5173] // Vite port
       };

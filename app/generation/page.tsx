@@ -475,10 +475,9 @@ Visual Features: ${uiOption.features.join(', ')}`;
   }, [showHomeScreen, homeUrlInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    // Only check sandbox status on mount if we don't already have sandboxData
-    // AND we're not auto-starting a new generation (which would create a new sandbox)
+    // Check sandbox status on mount (unless we're auto-starting a new generation)
     const autoStart = sessionStorage.getItem('autoStart');
-    if (!sandboxData && autoStart !== 'true') {
+    if (autoStart !== 'true') {
       checkSandboxStatus();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -734,7 +733,13 @@ Visual Features: ${uiOption.features.join(', ')}`;
         setSandboxData(data.sandboxData);
         updateStatus('Sandbox active', true);
       } else if (data.active && !data.healthy) {
-        updateStatus('Sandbox not responding', false);
+        const healthStatusCode = data?.sandboxData?.healthStatusCode;
+        const healthError = data?.sandboxData?.healthError;
+
+        updateStatus(healthStatusCode === 410 ? 'Sandbox stopped' : 'Sandbox not responding', false);
+        if (healthError) {
+          console.warn('[checkSandboxStatus] Sandbox health error:', healthError);
+        }
       } else {
         if (!sandboxData) {
           console.log('[checkSandboxStatus] No existing sandboxData, clearing state');
