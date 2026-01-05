@@ -46,6 +46,49 @@ interface PlanTicket {
   databaseConfig?: DatabaseConfig;
 }
 
+const SUPABASE_INPUT_REQUESTS: InputRequest[] = [
+  {
+    id: 'supabase_url',
+    type: 'url',
+    label: 'Supabase URL',
+    placeholder: 'https://xxxxxxxxxxxx.supabase.co',
+    description: 'Your Supabase project URL (Project Settings → API).',
+    required: true,
+    sensitive: false,
+  },
+  {
+    id: 'supabase_anon_key',
+    type: 'api_key',
+    label: 'Supabase Anon Key',
+    placeholder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…',
+    description: 'Your Supabase public anon key (Project Settings → API).',
+    required: true,
+    sensitive: true,
+  },
+];
+
+function ensureSupabaseInputs(ticket: PlanTicket): PlanTicket {
+  const text = `${ticket.title}\n${ticket.description ?? ''}`.toLowerCase();
+  const needsSupabase =
+    text.includes('supabase') ||
+    ticket.databaseConfig?.provider === 'supabase';
+
+  if (!needsSupabase) return ticket;
+
+  const existing = ticket.inputRequests ?? [];
+  const existingIds = new Set(existing.map(r => r.id));
+  const merged = [...existing];
+  for (const req of SUPABASE_INPUT_REQUESTS) {
+    if (!existingIds.has(req.id)) merged.push(req);
+  }
+
+  return {
+    ...ticket,
+    requiresInput: true,
+    inputRequests: merged,
+  };
+}
+
 const PLANNING_PROMPT = `You are a build planner for a React application generator. Analyze the user's request and break it down into discrete, buildable feature tickets.
 
 RULES:
@@ -170,8 +213,13 @@ export async function POST(request: NextRequest) {
           }
 
           const baseTime = Date.now();
-          const tickets = (parsed.tickets || []).map((ticket: PlanTicket, index: number) => {
-            const requiresInput = ticket.requiresInput || (ticket.type === 'integration' && ticket.inputRequests && ticket.inputRequests.length > 0);
+          const tickets = (parsed.tickets || [])
+            .map((ticket: PlanTicket) => ensureSupabaseInputs(ticket))
+            .map((ticket: PlanTicket, index: number) => {
+              const requiresInput =
+                Boolean(ticket.requiresInput) ||
+                (ticket.type === 'integration' && ticket.inputRequests && ticket.inputRequests.length > 0) ||
+                (ticket.type === 'database' && ticket.inputRequests && ticket.inputRequests.length > 0);
             return {
               id: `ticket-${baseTime}-${index}`,
               ...ticket,

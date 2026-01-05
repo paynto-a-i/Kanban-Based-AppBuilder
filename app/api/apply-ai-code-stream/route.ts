@@ -4,6 +4,7 @@ import { parseMorphEdits, applyMorphEditToFile } from '@/lib/morph-fast-apply';
 import type { SandboxState } from '@/types/sandbox';
 import type { ConversationState } from '@/types/conversation';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
+import path from 'path';
 
 declare global {
   var conversationState: ConversationState | null;
@@ -543,6 +544,8 @@ export async function POST(request: NextRequest) {
 
         // Filter out config files that shouldn't be created
         const configFiles = ['tailwind.config.js', 'vite.config.js', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.js'];
+        // Files that we *do* allow creating, but must remain at repo root (do not prefix into src/)
+        const rootFiles = ['.env.example'];
         let filteredFiles = filesArray.filter(file => {
           if (!file || typeof file !== 'object') return false;
           const fileName = (file.path || '').split('/').pop() || '';
@@ -597,12 +600,72 @@ export async function POST(request: NextRequest) {
             if (!normalizedPath.startsWith('src/') &&
                 !normalizedPath.startsWith('public/') &&
                 normalizedPath !== 'index.html' &&
-                !configFiles.includes(fileName)) {
+                !configFiles.includes(fileName) &&
+                !rootFiles.includes(fileName)) {
               normalizedPath = 'src/' + normalizedPath;
             }
             return !morphUpdatedPaths.has(normalizedPath);
           });
         }
+
+        // Write-order matters for Vite: if we write src/App.jsx before its imported components exist,
+        // Vite can briefly throw 500s / import-analysis errors during HMR. To reduce this, write leaf
+        // modules first and entry points last.
+        const normalizeGeneratedPath = (p: string) => {
+          let normalizedPath = p.startsWith('/') ? p.slice(1) : p;
+          const fileName = normalizedPath.split('/').pop() || '';
+          if (!normalizedPath.startsWith('src/') &&
+              !normalizedPath.startsWith('public/') &&
+              normalizedPath !== 'index.html' &&
+              !configFiles.includes(fileName) &&
+              !rootFiles.includes(fileName)) {
+            normalizedPath = 'src/' + normalizedPath;
+          }
+          return normalizedPath;
+        };
+
+        const writeRank = (normalizedPath: string) => {
+          // Lower rank writes first
+          if (normalizedPath.startsWith('src/components/')) return 10;
+          if (normalizedPath.startsWith('src/')) return 20;
+          if (normalizedPath.startsWith('public/')) return 30;
+          if (normalizedPath.endsWith('src/index.css')) return 40;
+          // Entry points last
+          if (normalizedPath === 'src/App.jsx' || normalizedPath === 'src/App.tsx') return 90;
+          if (normalizedPath === 'src/main.jsx' || normalizedPath === 'src/main.tsx') return 95;
+          if (normalizedPath === 'src/index.jsx' || normalizedPath === 'src/index.tsx') return 95;
+          if (normalizedPath === 'index.html') return 99;
+          return 50;
+        };
+
+        filteredFiles = [...filteredFiles].sort((a, b) => {
+          const aNorm = normalizeGeneratedPath(a.path);
+          const bNorm = normalizeGeneratedPath(b.path);
+          const rankDiff = writeRank(aNorm) - writeRank(bNorm);
+          if (rankDiff !== 0) return rankDiff;
+          // Prefer deeper paths first (leaf modules), then stable by path
+          const depthDiff = bNorm.split('/').length - aNorm.split('/').length;
+          if (depthDiff !== 0) return depthDiff;
+          return aNorm.localeCompare(bNorm);
+        });
+
+        // Some generators produce TSX entrypoints (App.tsx / main.tsx) but the Vite template still boots
+        // from src/main.jsx → src/App.jsx. We patch the runtime entry to point at the generated TSX app
+        // so the preview actually updates.
+        const normalizedPathsSet = new Set(filteredFiles.map(f => normalizeGeneratedPath(f.path)));
+        const appImportPath =
+          normalizedPathsSet.has('src/App.tsx') ? './App.tsx' :
+          normalizedPathsSet.has('src/App.ts') ? './App.ts' :
+          null;
+        const desiredEntry =
+          normalizedPathsSet.has('src/main.tsx') ? '/src/main.tsx' :
+          normalizedPathsSet.has('src/main.ts') ? '/src/main.ts' :
+          null;
+        const shouldPatchIndexHtml = Boolean(desiredEntry) && !normalizedPathsSet.has('index.html');
+        const shouldPatchExistingMainJsx = Boolean(appImportPath) && !normalizedPathsSet.has('src/main.jsx');
+
+        // Track the final written content so we can do post-write validation/repairs (e.g. missing imports).
+        const writtenFilesContent = new Map<string, string>();
         
         for (const [index, file] of filteredFiles.entries()) {
           try {
@@ -623,16 +686,33 @@ export async function POST(request: NextRequest) {
             if (!normalizedPath.startsWith('src/') &&
               !normalizedPath.startsWith('public/') &&
               normalizedPath !== 'index.html' &&
-              !configFiles.includes(normalizedPath.split('/').pop() || '')) {
+              !configFiles.includes(normalizedPath.split('/').pop() || '') &&
+              !rootFiles.includes(normalizedPath.split('/').pop() || '')) {
               normalizedPath = 'src/' + normalizedPath;
             }
 
             const isUpdate = global.existingFiles.has(normalizedPath);
 
-            // Remove any CSS imports from JSX/JS files (we're using Tailwind)
+            // Remove any CSS imports from JSX/JS files (we're using Tailwind).
+            // Keep the global Tailwind entry import (./index.css) since Vite needs one CSS entrypoint.
             let fileContent = file.content;
             if (file.path.endsWith('.jsx') || file.path.endsWith('.js') || file.path.endsWith('.tsx') || file.path.endsWith('.ts')) {
-              fileContent = fileContent.replace(/import\s+['"]\.\/[^'"]+\.css['"];?\s*\n?/g, '');
+              fileContent = fileContent.replace(/import\s+['"]\.\/(?!index\.css)[^'"]+\.css['"];?\s*\n?/g, '');
+
+              // If we're writing an entry file, make sure it points to the TS app when present.
+              if (appImportPath && (normalizedPath === 'src/main.tsx' || normalizedPath === 'src/main.ts')) {
+                fileContent = fileContent.replace(
+                  /import\s+App\s+from\s+['"]\.\/App(?:\.[jt]sx?)?['"]\s*;?/g,
+                  `import App from '${appImportPath}'`
+                );
+                if (!/import\s+['"]\.\/index\.css['"]/.test(fileContent)) {
+                  // Keep Tailwind styles in the runtime bundle.
+                  fileContent = fileContent.replace(
+                    /(import\s+ReactDOM[^;]*;?\s*\n)/,
+                    `$1import './index.css'\n`
+                  );
+                }
+              }
             }
 
             // Fix common Tailwind CSS errors in CSS files
@@ -643,6 +723,9 @@ export async function POST(request: NextRequest) {
               fileContent = fileContent.replace(/shadow-4xl/g, 'shadow-2xl');
               fileContent = fileContent.replace(/shadow-5xl/g, 'shadow-2xl');
             }
+
+            // Store the final content we'll write (used later for missing-import placeholder generation)
+            writtenFilesContent.set(normalizedPath, fileContent);
 
             // Create directory if needed
             const dirPath = normalizedPath.includes('/') ? normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) : '';
@@ -683,6 +766,198 @@ export async function POST(request: NextRequest) {
               error: (error as Error).message
             });
           }
+        }
+
+        // Prefer patching the existing Vite template entry (src/main.jsx) to import App.tsx so we keep
+        // the CSS import (Tailwind). Fall back to patching index.html only if we can't patch main.jsx.
+        let entryPatched = false;
+
+        if (shouldPatchExistingMainJsx && appImportPath) {
+          try {
+            const existingMain = await providerInstance.readFile('src/main.jsx');
+            let patchedMain = existingMain
+              .replace(/import\s+App\s+from\s+['"]\.\/App\.jsx['"]\s*;?/g, `import App from '${appImportPath}'`)
+              .replace(/import\s+App\s+from\s+['"]\.\/App['"]\s*;?/g, `import App from '${appImportPath}'`);
+
+            if (patchedMain !== existingMain) {
+              await providerInstance.writeFile('src/main.jsx', patchedMain);
+
+              if (global.sandboxState?.fileCache) {
+                global.sandboxState.fileCache.files['src/main.jsx'] = {
+                  content: patchedMain,
+                  lastModified: Date.now()
+                };
+              }
+
+              if (global.existingFiles) global.existingFiles.add('src/main.jsx');
+              if (results.filesUpdated) results.filesUpdated.push('src/main.jsx');
+
+              await sendProgress({
+                type: 'file-complete',
+                fileName: 'src/main.jsx',
+                action: 'updated'
+              });
+
+              entryPatched = true;
+            }
+          } catch (e) {
+            console.warn('[apply-ai-code-stream] Failed to patch src/main.jsx entrypoint:', e);
+          }
+        }
+
+        if (!entryPatched && shouldPatchIndexHtml && desiredEntry) {
+          try {
+            const existingIndex = await providerInstance.readFile('index.html');
+            const patchedIndex = existingIndex.replace(/\/src\/main\.(jsx|js|tsx|ts)/g, desiredEntry);
+
+            if (patchedIndex !== existingIndex) {
+              await providerInstance.writeFile('index.html', patchedIndex);
+
+              // Update file cache
+              if (global.sandboxState?.fileCache) {
+                global.sandboxState.fileCache.files['index.html'] = {
+                  content: patchedIndex,
+                  lastModified: Date.now()
+                };
+              }
+
+              // Track for subsequent edits
+              if (global.existingFiles) global.existingFiles.add('index.html');
+
+              if (results.filesUpdated) results.filesUpdated.push('index.html');
+
+              await sendProgress({
+                type: 'file-complete',
+                fileName: 'index.html',
+                action: 'updated'
+              });
+            }
+          } catch (e) {
+            console.warn('[apply-ai-code-stream] Failed to patch index.html entrypoint:', e);
+          }
+        }
+
+        // Safety net: if the AI references local modules it didn't actually generate, Vite will hard-fail
+        // import-analysis and the preview becomes unusable. Detect missing relative imports and create
+        // minimal placeholder modules so the sandbox can boot and the user can iteratively refine.
+        try {
+          const existingFiles = new Set(await providerInstance.listFiles());
+          const createdPlaceholders = new Set<string>();
+
+          const EXTS = ['.tsx', '.ts', '.jsx', '.js', '.json'] as const;
+
+          const shouldSkipSource = (src: string) => {
+            const lower = src.toLowerCase();
+            return (
+              lower.endsWith('.css') ||
+              lower.endsWith('.scss') ||
+              lower.endsWith('.sass') ||
+              lower.endsWith('.less') ||
+              lower.endsWith('.svg') ||
+              lower.endsWith('.png') ||
+              lower.endsWith('.jpg') ||
+              lower.endsWith('.jpeg') ||
+              lower.endsWith('.gif') ||
+              lower.endsWith('.webp')
+            );
+          };
+
+          const extractRelativeImports = (content: string) => {
+            const sources = new Set<string>();
+            const fromRe = /\b(?:import|export)\s+(?:type\s+)?[^'"]*?\sfrom\s+['"]([^'"]+)['"]/g;
+            const sideEffectRe = /\bimport\s+['"]([^'"]+)['"]/g;
+            const dynamicRe = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+            for (const re of [fromRe, sideEffectRe, dynamicRe]) {
+              let m: RegExpExecArray | null;
+              while ((m = re.exec(content)) !== null) {
+                sources.add(m[1]);
+              }
+            }
+            return [...sources].filter(s => s.startsWith('.'));
+          };
+
+          const getDefaultImportName = (content: string, source: string) => {
+            const re = new RegExp(String.raw`^\s*import\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s*(?:,|\s+from)\s+['"]${source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`, 'm');
+            const match = content.match(re);
+            return match?.[1];
+          };
+
+          const ensurePlaceholder = async (importerPath: string, source: string, importerContent: string) => {
+            if (shouldSkipSource(source)) return;
+
+            const importerDir = path.posix.dirname(importerPath);
+            const resolvedBase = path.posix.normalize(path.posix.join(importerDir, source));
+
+            // Avoid writing outside the sandbox root
+            if (resolvedBase.startsWith('..')) return;
+
+            const ext = path.posix.extname(resolvedBase);
+            const candidates: string[] = [];
+            if (ext) {
+              candidates.push(resolvedBase);
+            } else {
+              for (const e of EXTS) {
+                candidates.push(resolvedBase + e);
+                candidates.push(path.posix.join(resolvedBase, `index${e}`));
+              }
+            }
+
+            const exists = candidates.some(c =>
+              existingFiles.has(c) ||
+              writtenFilesContent.has(c) ||
+              createdPlaceholders.has(c)
+            );
+
+            if (exists) return;
+
+            const defaultImport = getDefaultImportName(importerContent, source);
+            const componentLike =
+              Boolean(defaultImport && defaultImport[0] === defaultImport[0].toUpperCase()) ||
+              resolvedBase.includes('/pages/') ||
+              resolvedBase.includes('/components/');
+
+            const importerIsTs = importerPath.endsWith('.ts') || importerPath.endsWith('.tsx');
+            const placeholderExt = ext || (componentLike ? (importerIsTs ? '.tsx' : '.jsx') : (importerIsTs ? '.ts' : '.js'));
+
+            const placeholderPath = ext ? resolvedBase : resolvedBase + placeholderExt;
+
+            const componentName = defaultImport || path.posix.basename(placeholderPath, path.posix.extname(placeholderPath)) || 'Placeholder';
+
+            const placeholderContent = componentLike
+              ? `export default function ${componentName}() {\n  return (\n    <div className=\"p-6\">\n      <h1 className=\"text-xl font-semibold\">${componentName}</h1>\n      <p className=\"text-sm text-gray-600\">Placeholder generated automatically. Implement this module next.</p>\n    </div>\n  );\n}\n`
+              : `// Placeholder generated automatically. Implement this module next.\nexport default {};\n`;
+
+            await providerInstance.writeFile(placeholderPath, placeholderContent);
+
+            createdPlaceholders.add(placeholderPath);
+            existingFiles.add(placeholderPath);
+
+            if (global.sandboxState?.fileCache) {
+              global.sandboxState.fileCache.files[placeholderPath] = {
+                content: placeholderContent,
+                lastModified: Date.now()
+              };
+            }
+            if (global.existingFiles) global.existingFiles.add(placeholderPath);
+            if (results.filesCreated) results.filesCreated.push(placeholderPath);
+
+            await sendProgress({
+              type: 'file-complete',
+              fileName: placeholderPath,
+              action: 'created'
+            });
+          };
+
+          for (const [importerPath, importerContent] of writtenFilesContent.entries()) {
+            if (!/\.(tsx|ts|jsx|js)$/.test(importerPath)) continue;
+            const sources = extractRelativeImports(importerContent);
+            for (const src of sources) {
+              await ensurePlaceholder(importerPath, src, importerContent);
+            }
+          }
+        } catch (e) {
+          console.warn('[apply-ai-code-stream] Failed missing-import placeholder pass:', e);
         }
 
         // Step 3: Execute commands
