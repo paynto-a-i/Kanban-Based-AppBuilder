@@ -5,5 +5,6 @@ export { default as KanbanTicketModal } from './KanbanTicketModal';
 export { default as TicketEditor } from './TicketEditor';
 export { default as InputRequestModal } from './InputRequestModal';
 export { RegressionWarningModal } from './RegressionWarningModal';
+export { default as CodeReviewPanel } from './CodeReviewPanel';
 export * from './types';
 export { useKanbanBoard } from './hooks/useKanbanBoard';

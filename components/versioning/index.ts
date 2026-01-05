@@ -5,3 +5,4 @@ export { VersionHistoryPanel } from './VersionHistoryPanel';
 export { SaveStatusIndicator } from './SaveStatusIndicator';
 export { RepoSelector } from './RepoSelector';
 export { ExportToGitHub } from './ExportToGitHub';
+export { default as GitSyncToggle } from './GitSyncToggle';

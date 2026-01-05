@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import type { SandboxProvider } from '@/lib/sandbox/types';
+import type { SandboxState } from '@/types/sandbox';
 
 declare global {
-  // Legacy global (E2B) - may not be present when using Vercel provider
   var activeSandbox: any;
-  // Current global used by create-ai-sandbox-v2
-  var activeSandboxProvider: SandboxProvider | null;
-  var sandboxState: any;
+  var activeSandboxProvider: any;
+  var sandboxState: SandboxState;
 }
 
 export async function GET() {
