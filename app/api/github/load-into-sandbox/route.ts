@@ -16,6 +16,43 @@ function isValidBranch(value: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(value);
 }
 
+function patchViteConfigAllowAllHosts(contents: string): { patched: string; changed: boolean } {
+  if (!contents) return { patched: contents, changed: false };
+  if (/\ballowedHosts\b/.test(contents)) return { patched: contents, changed: false };
+
+  // If there's an existing server block, inject allowedHosts inside it.
+  const serverBlock = /(server\s*:\s*\{\s*)/m;
+  if (serverBlock.test(contents)) {
+    return {
+      patched: contents.replace(serverBlock, `$1allowedHosts: 'all', `),
+      changed: true,
+    };
+  }
+
+  // If using defineConfig({ ... }), inject a server block at the top-level.
+  const defineConfigBlock = /(defineConfig\s*\(\s*\{\s*)/m;
+  if (defineConfigBlock.test(contents)) {
+    return {
+      patched: contents.replace(
+        defineConfigBlock,
+        `$1\n  server: { allowedHosts: 'all' },\n  `
+      ),
+      changed: true,
+    };
+  }
+
+  // If exporting a plain object, inject server at the top-level.
+  const exportDefaultObject = /(export\s+default\s+\{\s*)/m;
+  if (exportDefaultObject.test(contents)) {
+    return {
+      patched: contents.replace(exportDefaultObject, `$1\n  server: { allowedHosts: 'all' },\n  `),
+      changed: true,
+    };
+  }
+
+  return { patched: contents, changed: false };
+}
+
 async function ensureCommandSuccess(
   provider: any,
   command: string,
@@ -138,6 +175,73 @@ export async function POST(request: NextRequest) {
 
           await run('extract', 'Extracting repository', 'tar -xzf /tmp/repo.tgz --strip-components=1 -C /vercel/sandbox');
           await run('cleanup', 'Cleaning up temporary files', 'rm -f /tmp/repo.tgz', { allowFailure: true });
+
+          // Vite 6+ blocks unknown hosts by default. Patch config to allow the sandbox host.
+          stepStart('vite_config', 'Configuring Vite host allowlist');
+          try {
+            let isViteProject = false;
+            let devScript = '';
+            try {
+              const pkgRaw = await provider.readFile('package.json');
+              const pkg = JSON.parse(pkgRaw);
+              devScript = String(pkg?.scripts?.dev || '');
+              isViteProject = /(^|\s)vite(\s|$)/.test(devScript) || devScript.includes('vite ');
+            } catch {
+              isViteProject = false;
+            }
+
+            if (!isViteProject) {
+              send({ type: 'log', step: 'vite_config', message: 'No Vite dev script detected; skipping host allowlist patch.' });
+              stepDone('vite_config');
+            } else {
+              const configMatch = devScript.match(/--config(?:=|\s+)(['"]?)([^'"\s]+)\1/);
+              const candidateConfigPaths = [
+                configMatch?.[2],
+                'vite.config.ts',
+                'vite.config.mts',
+                'vite.config.js',
+                'vite.config.mjs',
+                'vite.config.cjs',
+              ].filter(Boolean) as string[];
+
+              let chosenConfigPath: string | null = null;
+              let chosenConfigContent: string | null = null;
+
+              for (const p of candidateConfigPaths) {
+                try {
+                  const raw = await provider.readFile(p);
+                  chosenConfigPath = p;
+                  chosenConfigContent = raw;
+                  break;
+                } catch {
+                  // try next
+                }
+              }
+
+              if (!chosenConfigPath) {
+                // If no config exists, create a minimal one at root (Vite will pick it up).
+                chosenConfigPath = 'vite.config.ts';
+                chosenConfigContent = `import { defineConfig } from 'vite';\n\nexport default defineConfig({\n  server: {\n    allowedHosts: 'all',\n  },\n});\n`;
+                await provider.writeFile(chosenConfigPath, chosenConfigContent);
+                send({ type: 'log', step: 'vite_config', message: `Created ${chosenConfigPath} with server.allowedHosts='all'.` });
+                stepDone('vite_config');
+              } else if (chosenConfigContent != null) {
+                const { patched, changed } = patchViteConfigAllowAllHosts(chosenConfigContent);
+                if (changed) {
+                  await provider.writeFile(chosenConfigPath, patched);
+                  send({ type: 'log', step: 'vite_config', message: `Patched ${chosenConfigPath}: server.allowedHosts='all'.` });
+                } else {
+                  send({ type: 'log', step: 'vite_config', message: `No changes needed for ${chosenConfigPath}.` });
+                }
+                stepDone('vite_config');
+              } else {
+                stepDone('vite_config');
+              }
+            }
+          } catch (err: any) {
+            stepError('vite_config', err?.message || 'Failed to patch Vite config');
+            throw err;
+          }
 
           // npm install output is large; emit a start/done without logs
           stepStart('npm_install', 'Installing dependencies (npm install)');

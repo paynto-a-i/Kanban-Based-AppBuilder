@@ -1197,6 +1197,7 @@ Requirements:
         { id: 'download', label: 'Downloading repository', status: 'pending' },
         { id: 'extract', label: 'Extracting repository', status: 'pending' },
         { id: 'cleanup', label: 'Cleaning up', status: 'pending' },
+        { id: 'vite_config', label: 'Configuring Vite host allowlist', status: 'pending' },
         { id: 'npm_install', label: 'Installing dependencies', status: 'pending' },
         { id: 'restart_vite', label: 'Restarting dev server', status: 'pending' },
       ]);
