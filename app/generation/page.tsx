@@ -38,6 +38,8 @@ import { CodeReviewPanel, RegressionWarningModal } from '@/components/kanban';
 import { useSoftDelete } from '@/hooks/useSoftDelete';
 import { useAutoRefactor } from '@/hooks/useAutoRefactor';
 import { useGitHubImport } from '@/hooks/useGitHubImport';
+import { usePlanVersions, type PlanVersion } from '@/hooks/usePlanVersions';
+import { PlanVersionHistoryPanel } from '@/components/planning';
 
 interface SandboxData {
   sandboxId: string;
@@ -85,6 +87,7 @@ function AISandboxPage() {
   const [aiEnabled] = useState(true);
   const searchParams = useSearchParams();
   const router = useRouter();
+  const projectId = searchParams.get('project');
   const [aiModel, setAiModel] = useState(() => {
     const modelParam = searchParams.get('model');
     return appConfig.ai.availableModels.includes(modelParam || '') ? modelParam! : appConfig.ai.defaultModel;
@@ -176,6 +179,12 @@ function AISandboxPage() {
 
   const versioning = useVersioning({ enableAutoSave: true, autoSaveInterval: 5 * 60 * 1000 });
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionHistoryTab, setVersionHistoryTab] = useState<'plan' | 'code'>('plan');
+
+  const planVersions = usePlanVersions({
+    planId: kanban.plan?.id || 'active',
+    projectId,
+  });
 
   // Git Sync hook for auto-committing on ticket completion
   const gitSync = useGitSync({
@@ -1059,6 +1068,16 @@ Apply these design specifications consistently across all components.`;
                 kanban.setTickets(prev => [...prev, data.ticket]);
               } else if (data.type === 'plan_complete') {
                 kanban.setPlan(data.plan);
+                // Snapshot the initial plan (for plan versioning)
+                if (data.plan?.tickets && Array.isArray(data.plan.tickets) && data.plan.tickets.length > 0) {
+                  void planVersions.createSnapshot({
+                    source: 'initial_plan',
+                    name: '📦 Initial plan',
+                    description: 'Snapshot captured when planning completed',
+                    tickets: data.plan.tickets,
+                    planIdOverride: data.plan?.id || null,
+                  });
+                }
               }
             } catch (e) {
               console.error('Failed to parse plan event:', e);
@@ -1329,6 +1348,15 @@ Requirements:
       return;
     }
 
+    // Snapshot the plan as it is being locked for execution ("Move to Pipeline")
+    void planVersions.createSnapshot({
+      source: 'move_to_pipeline',
+      name: '🔒 Plan locked (Move to Pipeline)',
+      description: 'Snapshot captured when build started',
+      tickets: kanban.tickets,
+      planIdOverride: kanban.plan?.id || null,
+    });
+
     setKanbanBuildActive(true);
     kanban.setIsPaused(false);
 
@@ -1548,6 +1576,48 @@ Requirements:
       setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${error.message}` }));
       addChatMessage(`❌ Build failed: ${error.message}`, 'error');
     }
+  };
+
+  const handleCreateManualPlanSnapshot = async () => {
+    const created = await planVersions.createSnapshot({
+      source: 'manual',
+      name: '💾 Plan snapshot',
+      description: 'Manual snapshot',
+      tickets: kanban.tickets,
+      planIdOverride: kanban.plan?.id || null,
+    });
+    if (created) {
+      addChatMessage(`📌 Saved plan snapshot: ${created.name}`, 'system');
+    }
+  };
+
+  const handleRestorePlanSnapshot = async (version: PlanVersion) => {
+    if (kanbanBuildActive) {
+      addChatMessage('⏳ Cannot restore plan while build is running.', 'system');
+      return;
+    }
+
+    const ok =
+      typeof window !== 'undefined' &&
+      window.confirm(`Restore snapshot "${version.name}"?\n\nThis will replace your current plan.`); // eslint-disable-line no-alert
+
+    if (!ok) return;
+
+    // Create a quick backup snapshot before restoring (local only if server isn't available)
+    await planVersions.createSnapshot({
+      source: 'manual',
+      name: '💾 Backup (before restore)',
+      description: `Backup before restoring "${version.name}"`,
+      tickets: kanban.tickets,
+      planIdOverride: kanban.plan?.id || null,
+    });
+
+    kanban.setTickets(version.tickets || []);
+    if (kanban.plan) {
+      kanban.setPlan({ ...kanban.plan, tickets: version.tickets || [], updatedAt: new Date() });
+    }
+    setActiveTab('kanban');
+    addChatMessage(`🔁 Restored plan snapshot: ${version.name}`, 'system');
   };
 
   const renderRepoLoadModal = () => {
@@ -5723,19 +5793,56 @@ Focus on the key sections and content, making it clean and modern.`;
 
           {showVersionHistory && (
             <div className="w-[280px] border-l border-gray-200 bg-gray-900 flex-shrink-0 overflow-hidden">
-              <VersionHistoryPanel
-                versions={versioning.versions}
-                currentVersionId={versioning.currentProject?.currentVersionId}
-                onRestore={async (versionId) => {
-                  const files = await versioning.restoreVersion(versionId);
-                  if (files && sandboxData) {
-                    const code = files.map(f => `<file path="${f.path}">${f.content}</file>`).join('\n');
-                    await applyGeneratedCode(code, false);
-                    addChatMessage('Version restored successfully!', 'system');
-                  }
-                }}
-                className="h-full"
-              />
+              <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-800">
+                <button
+                  onClick={() => setVersionHistoryTab('plan')}
+                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                    versionHistoryTab === 'plan'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  Plan
+                </button>
+                <button
+                  onClick={() => setVersionHistoryTab('code')}
+                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                    versionHistoryTab === 'code'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  Code
+                </button>
+              </div>
+
+              {versionHistoryTab === 'plan' ? (
+                <PlanVersionHistoryPanel
+                  versions={planVersions.versions}
+                  currentTickets={kanban.tickets}
+                  isLoading={planVersions.isLoading}
+                  error={planVersions.error}
+                  onRefresh={planVersions.refresh}
+                  onCreateSnapshot={handleCreateManualPlanSnapshot}
+                  onRestore={handleRestorePlanSnapshot}
+                  restoreDisabled={kanbanBuildActive}
+                  className="h-full"
+                />
+              ) : (
+                <VersionHistoryPanel
+                  versions={versioning.versions}
+                  currentVersionId={versioning.currentProject?.currentVersionId}
+                  onRestore={async (versionId) => {
+                    const files = await versioning.restoreVersion(versionId);
+                    if (files && sandboxData) {
+                      const code = files.map(f => `<file path="${f.path}">${f.content}</file>`).join('\n');
+                      await applyGeneratedCode(code, false);
+                      addChatMessage('Version restored successfully!', 'system');
+                    }
+                  }}
+                  className="h-full"
+                />
+              )}
             </div>
           )}
         </div>
