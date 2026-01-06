@@ -908,7 +908,8 @@ Apply these design specifications consistently across all components.`;
     generating: 3,
     applying: 4,
     testing: 5,
-    done: 6,
+    pr_review: 6,
+    done: 7,
     blocked: -1,
     failed: -1,
     skipped: -1,
@@ -921,6 +922,7 @@ Apply these design specifications consistently across all components.`;
     generating: 'Generating',
     applying: 'Applying',
     testing: 'Testing',
+    pr_review: 'PR Review',
     done: 'Done',
     blocked: 'Blocked',
     failed: 'Failed',
@@ -930,7 +932,7 @@ Apply these design specifications consistently across all components.`;
   const isRegressionMove = (fromStatus: TicketStatus, toStatus: TicketStatus): boolean => {
     const fromOrder = STATUS_ORDER[fromStatus];
     const toOrder = STATUS_ORDER[toStatus];
-    return fromOrder >= 0 && toOrder >= 0 && fromOrder >= STATUS_ORDER.done && toOrder < fromOrder;
+    return fromOrder >= 0 && toOrder >= 0 && fromOrder >= STATUS_ORDER.pr_review && toOrder < fromOrder;
   };
 
   const handleMoveTicket = (ticketId: string, newStatus: TicketStatus) => {
@@ -1224,6 +1226,12 @@ Requirements:
       // Update files on tickets
       backlogTickets.forEach(ticket => {
         kanban.updateTicketFiles(ticket.id, allFiles);
+      });
+
+      // Move into PR Review while Bugbot runs
+      backlogTickets.forEach(ticket => {
+        kanban.updateTicketStatus(ticket.id, 'pr_review');
+        kanban.updateTicketProgress(ticket.id, 95);
       });
 
       // Run Bugbot code review

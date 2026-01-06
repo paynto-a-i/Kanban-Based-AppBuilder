@@ -15,6 +15,7 @@ const COLUMN_EMOJIS: Record<string, string> = {
   generating: '⚡',
   applying: '🔧',
   testing: '🧪',
+  pr_review: '🔎',
   done: '✅',
   blocked: '🚫',
   failed: '❌',

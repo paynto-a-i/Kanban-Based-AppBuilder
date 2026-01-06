@@ -64,7 +64,7 @@ export default function KanbanColumn({
     e.dataTransfer.setData('ticketId', ticketId);
   };
 
-  const isActiveColumn = id === 'generating' || id === 'applying' || id === 'testing';
+  const isActiveColumn = id === 'generating' || id === 'applying' || id === 'testing' || id === 'pr_review';
 
   const emptyMessages: Record<TicketStatus, string> = {
     planning: 'AI analyzing...',
@@ -73,6 +73,7 @@ export default function KanbanColumn({
     generating: 'Waiting...',
     applying: 'Applying changes...',
     testing: 'Running tests...',
+    pr_review: 'Awaiting review...',
     done: 'No completed tasks',
     blocked: 'No blockers',
     failed: 'No failures',
@@ -102,6 +103,7 @@ export default function KanbanColumn({
                   {id === 'generating' && 'AI Agent'}
                   {id === 'applying' && 'Builder'}
                   {id === 'testing' && 'Validator'}
+                  {id === 'pr_review' && 'Reviewer'}
                   {id === 'done' && 'Complete'}
                   {id === 'awaiting_input' && 'User'}
                   {id === 'planning' && 'Planner'}

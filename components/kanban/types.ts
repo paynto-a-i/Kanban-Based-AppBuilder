@@ -5,6 +5,7 @@ export type TicketStatus =
   | 'generating'
   | 'applying'
   | 'testing'
+  | 'pr_review'
   | 'done'
   | 'blocked'
   | 'failed'
@@ -119,6 +120,7 @@ export const COLUMN_CONFIG: { id: TicketStatus; title: string; color: string }[]
   { id: 'generating', title: 'Generating', color: '#3B82F6' },
   { id: 'applying', title: 'Applying', color: '#F59E0B' },
   { id: 'testing', title: 'Testing', color: '#8B5CF6' },
+  { id: 'pr_review', title: 'PR Review', color: '#6366F1' },
   { id: 'done', title: 'Done', color: '#22C55E' },
 ];
 
@@ -154,6 +156,7 @@ export const TICKET_ACTIONS: Record<TicketStatus, string[]> = {
   generating: ['view-code'],
   applying: ['view-code'],
   testing: ['view-code'],
+  pr_review: ['view-code'],
   done: ['view-code', 'regenerate'],
   failed: ['retry', 'skip', 'edit', 'view-error'],
   blocked: ['view-blockers'],

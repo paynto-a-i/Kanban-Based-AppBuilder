@@ -6,6 +6,7 @@ const COLUMN_ORDER: TicketStatus[] = [
   'generating',
   'applying',
   'testing',
+  'pr_review',
   'done',
 ];
 
@@ -46,7 +47,7 @@ export function useTicketMovement() {
     const isBackward = toIndex < fromIndex;
 
     if (isBackward) {
-      if (fromColumn === 'done' || fromColumn === 'testing') {
+      if (fromColumn === 'done' || fromColumn === 'pr_review' || fromColumn === 'testing') {
         return {
           isValid: true,
           isBackward: true,
