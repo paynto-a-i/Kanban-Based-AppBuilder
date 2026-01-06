@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { getGitHubConnection } from '@/lib/versioning/github';
 
 interface ImportedFile {
   path: string;
@@ -42,6 +43,11 @@ export function useGitHubImport() {
     error: null,
   });
 
+  const getAuthHeaders = () => {
+    const connection = getGitHubConnection();
+    return connection?.accessToken ? { Authorization: `Bearer ${connection.accessToken}` } : {};
+  };
+
   const previewImport = useCallback(async (
     repoFullName: string,
     branch: string = 'main'
@@ -50,7 +56,8 @@ export function useGitHubImport() {
 
     try {
       const response = await fetch(
-        `/api/github/import?repo=${encodeURIComponent(repoFullName)}&branch=${encodeURIComponent(branch)}`
+        `/api/github/import?repo=${encodeURIComponent(repoFullName)}&branch=${encodeURIComponent(branch)}`,
+        { headers: getAuthHeaders() }
       );
 
       if (!response.ok) {
@@ -81,13 +88,13 @@ export function useGitHubImport() {
     repoFullName: string,
     branch: string = 'main',
     maxFiles: number = 100
-  ): Promise<ImportResult | null> => {
+  ): Promise<ImportResult> => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
       const response = await fetch('/api/github/import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ repoFullName, branch, maxFiles }),
       });
 
@@ -111,7 +118,7 @@ export function useGitHubImport() {
         isLoading: false,
         error: error.message,
       }));
-      return null;
+      throw error;
     }
   }, []);
 
