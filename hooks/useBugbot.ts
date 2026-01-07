@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface ReviewIssue {
   severity: 'error' | 'warning' | 'info';
@@ -45,7 +45,31 @@ export function useBugbot() {
     error: null,
   });
 
+  // Refs for loading guards and cleanup
+  const isReviewingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const reviewCode = useCallback(async (review: TicketReview): Promise<ReviewResult | null> => {
+    // Guard against concurrent reviews
+    if (isReviewingRef.current) {
+      console.log('[useBugbot] Review already in progress, skipping');
+      return null;
+    }
+
+    isReviewingRef.current = true;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
     setState(prev => ({ ...prev, isReviewing: true, error: null }));
 
     try {
@@ -57,6 +81,7 @@ export function useBugbot() {
           ticketId: review.ticketId,
           ticketTitle: review.ticketTitle,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
@@ -73,21 +98,31 @@ export function useBugbot() {
         timestamp: new Date().toISOString(),
       };
 
-      setState(prev => ({
-        ...prev,
-        isReviewing: false,
-        lastReview: result,
-        reviewHistory: [historyItem, ...prev.reviewHistory.slice(0, 19)],
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isReviewing: false,
+          lastReview: result,
+          reviewHistory: [historyItem, ...prev.reviewHistory.slice(0, 19)],
+        }));
+      }
 
       return result;
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        isReviewing: false,
-        error: error.message || 'Review failed',
-      }));
+      if (error.name === 'AbortError') {
+        console.log('[useBugbot] Review request aborted');
+        return null;
+      }
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isReviewing: false,
+          error: error.message || 'Review failed',
+        }));
+      }
       return null;
+    } finally {
+      isReviewingRef.current = false;
     }
   }, []);
 

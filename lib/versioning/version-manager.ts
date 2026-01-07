@@ -11,6 +11,7 @@ import {
     VersionTrigger
 } from './types';
 import { localStorageAdapter } from './local-storage-adapter';
+import { supabaseStorageAdapter } from './supabase-adapter';
 import {
     generateId,
     generateVersionName,
@@ -21,10 +22,32 @@ import {
 
 class VersionManager {
     private localStorage: StorageAdapter;
+    private supabaseStorage: StorageAdapter;
+    private useSupabase: boolean = false;
     private gitHubEnabled: boolean = false;
 
     constructor() {
         this.localStorage = localStorageAdapter;
+        this.supabaseStorage = supabaseStorageAdapter;
+    }
+
+    enableSupabase(userId: string): void {
+        (this.supabaseStorage as any).setUserId(userId);
+        this.useSupabase = true;
+        console.log('[VersionManager] Supabase storage enabled');
+    }
+
+    disableSupabase(): void {
+        this.useSupabase = false;
+        console.log('[VersionManager] Supabase storage disabled, using localStorage');
+    }
+
+    isSupabaseEnabled(): boolean {
+        return this.useSupabase && this.supabaseStorage.isAvailable();
+    }
+
+    private get storage(): StorageAdapter {
+        return this.isSupabaseEnabled() ? this.supabaseStorage : this.localStorage;
     }
 
     // ============================================
@@ -52,22 +75,22 @@ class VersionManager {
             totalFiles: 0
         };
 
-        await this.localStorage.saveProject(project);
+        await this.storage.saveProject(project);
         console.log(`[VersionManager] Created project: ${project.id}`);
 
         return project;
     }
 
     async getProject(projectId: string): Promise<Project | null> {
-        return this.localStorage.getProject(projectId);
+        return this.storage.getProject(projectId);
     }
 
     async listProjects(): Promise<Project[]> {
-        return this.localStorage.listProjects();
+        return this.storage.listProjects();
     }
 
     async updateProject(projectId: string, updates: Partial<Project>): Promise<Project | null> {
-        const project = await this.localStorage.getProject(projectId);
+        const project = await this.storage.getProject(projectId);
         if (!project) return null;
 
         const updated: Project = {
@@ -76,12 +99,12 @@ class VersionManager {
             updatedAt: new Date().toISOString()
         };
 
-        await this.localStorage.saveProject(updated);
+        await this.storage.saveProject(updated);
         return updated;
     }
 
     async deleteProject(projectId: string): Promise<void> {
-        await this.localStorage.deleteProject(projectId);
+        await this.storage.deleteProject(projectId);
         console.log(`[VersionManager] Deleted project: ${projectId}`);
     }
 
@@ -90,19 +113,19 @@ class VersionManager {
     // ============================================
 
     async createVersion(options: CreateVersionOptions): Promise<ProjectVersion> {
-        const project = await this.localStorage.getProject(options.projectId);
+        const project = await this.storage.getProject(options.projectId);
         if (!project) {
             throw new Error(`Project not found: ${options.projectId}`);
         }
 
         // Get next version number
-        const versions = await this.localStorage.listVersions(options.projectId);
+        const versions = await this.storage.listVersions(options.projectId);
         const nextVersionNumber = versions.length > 0
             ? Math.max(...versions.map(v => v.versionNumber)) + 1
             : 1;
 
         // Check if there are actual changes from last version
-        const latestVersion = await this.localStorage.getLatestVersion(options.projectId);
+        const latestVersion = await this.storage.getLatestVersion(options.projectId);
         if (latestVersion && !hasChanges(latestVersion.files, options.files)) {
             // No changes, skip creating version for auto-saves
             if (options.trigger === 'auto_save') {
@@ -131,10 +154,8 @@ class VersionManager {
             parentVersionId: latestVersion?.id
         };
 
-        // Save to local storage (always, as backup)
-        await this.localStorage.saveVersion(version);
+        await this.storage.saveVersion(version);
 
-        // Update project metadata
         await this.updateProject(options.projectId, {
             currentVersionId: version.id,
             totalVersions: nextVersionNumber,
@@ -143,13 +164,14 @@ class VersionManager {
 
         console.log(`[VersionManager] Created version ${nextVersionNumber} for project ${options.projectId}`);
 
-        // Push to GitHub if enabled
         if (options.pushToGitHub && this.gitHubEnabled && project.github?.autoCommit) {
             try {
                 await this.pushVersionToGitHub(version, project);
             } catch (error) {
                 console.error('[VersionManager] GitHub push failed, version saved locally:', error);
-                // Don't throw - local save succeeded
+                version.gitPushFailed = true;
+                version.gitPushError = error instanceof Error ? error.message : 'Unknown error';
+                await this.storage.saveVersion(version);
             }
         }
 
@@ -157,19 +179,19 @@ class VersionManager {
     }
 
     async getVersion(versionId: string): Promise<ProjectVersion | null> {
-        return this.localStorage.getVersion(versionId);
+        return this.storage.getVersion(versionId);
     }
 
     async listVersions(projectId: string): Promise<ProjectVersion[]> {
-        return this.localStorage.listVersions(projectId);
+        return this.storage.listVersions(projectId);
     }
 
     async getLatestVersion(projectId: string): Promise<ProjectVersion | null> {
-        return this.localStorage.getLatestVersion(projectId);
+        return this.storage.getLatestVersion(projectId);
     }
 
     async restoreVersion(options: RestoreVersionOptions): Promise<ProjectVersion | null> {
-        const version = await this.localStorage.getVersion(options.versionId);
+        const version = await this.storage.getVersion(options.versionId);
         if (!version) {
             console.error(`[VersionManager] Version not found: ${options.versionId}`);
             return null;
@@ -177,7 +199,7 @@ class VersionManager {
 
         // Optionally create a backup of current state before restoring
         if (options.createBackup) {
-            const latestVersion = await this.localStorage.getLatestVersion(version.projectId);
+            const latestVersion = await this.storage.getLatestVersion(version.projectId);
             if (latestVersion && latestVersion.id !== version.id) {
                 console.log('[VersionManager] Creating backup before restore');
                 // Note: Caller should create backup with current sandbox files
@@ -195,12 +217,12 @@ class VersionManager {
     }
 
     async deleteVersion(versionId: string): Promise<void> {
-        await this.localStorage.deleteVersion(versionId);
+        await this.storage.deleteVersion(versionId);
     }
 
     async compareVersions(versionId1: string, versionId2: string): Promise<VersionDiff | null> {
-        const v1 = await this.localStorage.getVersion(versionId1);
-        const v2 = await this.localStorage.getVersion(versionId2);
+        const v1 = await this.storage.getVersion(versionId1);
+        const v2 = await this.storage.getVersion(versionId2);
 
         if (!v1 || !v2) return null;
 
@@ -257,7 +279,7 @@ class VersionManager {
         // Update version with commit info
         version.gitCommitSha = result.sha;
         version.gitCommitUrl = result.url;
-        await this.localStorage.saveVersion(version);
+        await this.storage.saveVersion(version);
 
         console.log(`[VersionManager] Pushed to GitHub: ${result.sha}`);
     }
@@ -271,10 +293,10 @@ class VersionManager {
         versions: ProjectVersion[];
         exportedAt: string;
     } | null> {
-        const project = await this.localStorage.getProject(projectId);
+        const project = await this.storage.getProject(projectId);
         if (!project) return null;
 
-        const versions = await this.localStorage.listVersions(projectId);
+        const versions = await this.storage.listVersions(projectId);
 
         return {
             project,
@@ -300,7 +322,7 @@ class VersionManager {
             updatedAt: new Date().toISOString()
         };
 
-        await this.localStorage.saveProject(project);
+        await this.storage.saveProject(project);
 
         // Import versions with new IDs
         for (const version of data.versions) {
@@ -316,13 +338,13 @@ class VersionManager {
                     : undefined
             };
 
-            await this.localStorage.saveVersion(importedVersion);
+            await this.storage.saveVersion(importedVersion);
         }
 
         // Update current version reference
         if (data.project.currentVersionId) {
             project.currentVersionId = idMap.get(data.project.currentVersionId) || null;
-            await this.localStorage.saveProject(project);
+            await this.storage.saveProject(project);
         }
 
         console.log(`[VersionManager] Imported project: ${newProjectId}`);
@@ -390,17 +412,19 @@ class VersionManager {
         limit: number;
         percentage: number;
         projectCount: number;
+        storageType: string;
     }> {
         const projects = await this.listProjects();
-        const storageInfo = await (this.localStorage as any).getStorageInfo?.() || {
+        const storageInfo = await (this.storage as any).getStorageInfo?.() || {
             used: 0,
-            limit: 10 * 1024 * 1024,
+            limit: this.isSupabaseEnabled() ? Infinity : 10 * 1024 * 1024,
             percentage: 0
         };
 
         return {
             ...storageInfo,
-            projectCount: projects.length
+            projectCount: projects.length,
+            storageType: this.storage.name
         };
     }
 }

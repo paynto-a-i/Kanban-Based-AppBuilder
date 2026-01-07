@@ -4,6 +4,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import {
     Project,
     ProjectVersion,
@@ -28,6 +29,11 @@ interface UseVersioningOptions {
 }
 
 interface UseVersioningReturn {
+    // Auth state
+    isAuthenticated: boolean;
+    user: { id: string; name?: string | null; email?: string | null; image?: string | null } | null;
+    isUsingSupabase: boolean;
+
     // Project state
     currentProject: Project | null;
     versions: ProjectVersion[];
@@ -74,6 +80,8 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         enableAutoSave = true
     } = options;
 
+    const { data: session, status: sessionStatus } = useSession();
+
     // State
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
     const [versions, setVersions] = useState<ProjectVersion[]>([]);
@@ -93,6 +101,20 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
     // Refs for auto-save
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
     const pendingSaveRef = useRef<(() => Promise<void>) | null>(null);
+
+    // Enable Supabase storage when user is authenticated
+    // Guest users continue with localStorage
+    useEffect(() => {
+        if (sessionStatus === 'authenticated' && session?.user?.id) {
+            versionManager.enableSupabase(session.user.id);
+            console.log('[useVersioning] Supabase storage enabled for user:', session.user.id);
+        } else {
+            versionManager.disableSupabase();
+            if (sessionStatus === 'unauthenticated') {
+                console.log('[useVersioning] Using localStorage (guest mode)');
+            }
+        }
+    }, [session, sessionStatus]);
 
     // Initialize GitHub state
     useEffect(() => {
@@ -167,8 +189,12 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         }
     }, []);
 
-    // Load project
     const loadProject = useCallback(async (projectId: string): Promise<void> => {
+        if (!projectId) {
+            setError('Invalid project ID');
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
 
@@ -181,7 +207,7 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
             const projectVersions = await versionManager.listVersions(projectId);
 
             setCurrentProject(project);
-            setVersions(projectVersions);
+            setVersions(projectVersions ?? []);
         } catch (err: any) {
             setError(err.message);
             throw err;
@@ -307,19 +333,17 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         setSaveStatus(prev => ({ ...prev, github: 'disabled' }));
     }, []);
 
-    // Manual save trigger (to be called by parent component)
     const triggerManualSave = useCallback(() => {
-        if (pendingSaveRef.current) {
+        if (typeof pendingSaveRef.current === 'function') {
             pendingSaveRef.current();
         }
     }, []);
 
-    // Setup auto-save timer
     useEffect(() => {
         if (!enableAutoSave || !currentProject) return;
 
         autoSaveTimerRef.current = setInterval(() => {
-            if (pendingSaveRef.current) {
+            if (typeof pendingSaveRef.current === 'function') {
                 pendingSaveRef.current();
             }
         }, autoSaveInterval);
@@ -331,7 +355,18 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         };
     }, [enableAutoSave, autoSaveInterval, currentProject]);
 
+    const isAuthenticated = sessionStatus === 'authenticated';
+    const user = session?.user ? {
+        id: session.user.id as string,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image
+    } : null;
+
     return {
+        isAuthenticated,
+        user,
+        isUsingSupabase: versionManager.isSupabaseEnabled(),
         currentProject,
         versions,
         isLoading,

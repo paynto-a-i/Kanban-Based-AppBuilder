@@ -1,20 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-
-interface RefactorChange {
-  file: string;
-  description: string;
-  original: string;
-  fixed: string;
-}
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface RefactorResult {
   success: boolean;
-  analyzedFiles: number;
   changesApplied: number;
-  changes: RefactorChange[];
-  summary: string;
+  filesModified: string[];
+  errors?: string[];
 }
 
 interface AutoRefactorState {
@@ -30,14 +22,34 @@ export function useAutoRefactor() {
     error: null,
   });
 
+  // Refs for loading guards and cleanup
+  const isRefactoringRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const refactorAfterSoftDelete = useCallback(async (
     sandboxId: string,
-    affectedFiles: string[],
-    ticketId?: string
+    deletedFiles: string[],
+    ticketId: string
   ): Promise<RefactorResult | null> => {
-    if (!sandboxId || affectedFiles.length === 0) {
+    // Guard against concurrent refactoring
+    if (isRefactoringRef.current) {
+      console.log('[useAutoRefactor] Refactor already in progress, skipping');
       return null;
     }
+
+    isRefactoringRef.current = true;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
 
     setState(prev => ({ ...prev, isRefactoring: true, error: null }));
 
@@ -45,46 +57,57 @@ export function useAutoRefactor() {
       const response = await fetch('/api/auto-refactor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sandboxId, affectedFiles, ticketId }),
+        body: JSON.stringify({
+          sandboxId,
+          deletedFiles,
+          ticketId,
+        }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Refactoring failed');
+        const error = await response.json();
+        throw new Error(error.error || 'Auto-refactor failed');
       }
 
       const result: RefactorResult = await response.json();
 
-      setState(prev => ({
-        ...prev,
-        isRefactoring: false,
-        lastResult: result,
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isRefactoring: false,
+          lastResult: result,
+        }));
+      }
 
       return result;
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        isRefactoring: false,
-        error: error.message,
-      }));
+      if (error.name === 'AbortError') {
+        console.log('[useAutoRefactor] Refactor request aborted');
+        return null;
+      }
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isRefactoring: false,
+          error: error.message || 'Auto-refactor failed',
+        }));
+      }
       return null;
+    } finally {
+      isRefactoringRef.current = false;
     }
   }, []);
 
-  const clearState = useCallback(() => {
-    setState({
-      isRefactoring: false,
-      lastResult: null,
-      error: null,
-    });
+  const clearError = useCallback(() => {
+    setState(prev => ({ ...prev, error: null }));
   }, []);
 
   return {
     ...state,
     refactorAfterSoftDelete,
-    clearState,
+    clearError,
   };
 }
 
-export type { RefactorChange, RefactorResult, AutoRefactorState };
+export type { RefactorResult, AutoRefactorState };

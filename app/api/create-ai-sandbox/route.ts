@@ -14,7 +14,6 @@ declare global {
 }
 
 export async function POST() {
-  // Check if sandbox creation is already in progress
   if (global.sandboxCreationInProgress && global.sandboxCreationPromise) {
     console.log('[create-ai-sandbox] Sandbox creation already in progress, waiting for existing creation...');
     try {
@@ -23,11 +22,9 @@ export async function POST() {
       return NextResponse.json(existingResult);
     } catch (error) {
       console.error('[create-ai-sandbox] Existing sandbox creation failed:', error);
-      // Continue with new creation if the existing one failed
     }
   }
 
-  // Check if we already have an active sandbox
   if (global.activeSandbox && global.sandboxData) {
     console.log('[create-ai-sandbox] Returning existing active sandbox');
     return NextResponse.json({
@@ -37,10 +34,14 @@ export async function POST() {
     });
   }
 
-  // Set the creation flag
+  if (global.sandboxCreationInProgress) {
+    return NextResponse.json(
+      { error: 'Sandbox creation already in progress' },
+      { status: 429 }
+    );
+  }
+
   global.sandboxCreationInProgress = true;
-  
-  // Create the promise that other requests can await
   global.sandboxCreationPromise = createSandboxInternal();
   
   try {

@@ -37,9 +37,8 @@ import { useBugbot, ReviewResult } from '@/hooks/useBugbot';
 import { CodeReviewPanel, RegressionWarningModal } from '@/components/kanban';
 import { useSoftDelete } from '@/hooks/useSoftDelete';
 import { useAutoRefactor } from '@/hooks/useAutoRefactor';
-import { useGitHubImport } from '@/hooks/useGitHubImport';
-import { usePlanVersions, type PlanVersion } from '@/hooks/usePlanVersions';
-import { PlanVersionHistoryPanel } from '@/components/planning';
+import ErrorCorrectionAgent from '@/components/ErrorCorrectionAgent';
+import HMRErrorDetector, { DetectedError } from '@/components/HMRErrorDetector';
 
 interface SandboxData {
   sandboxId: string;
@@ -87,7 +86,6 @@ function AISandboxPage() {
   const [aiEnabled] = useState(true);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const projectId = searchParams.get('project');
   const [aiModel, setAiModel] = useState(() => {
     const modelParam = searchParams.get('model');
     return appConfig.ai.availableModels.includes(modelParam || '') ? modelParam! : appConfig.ai.defaultModel;
@@ -129,20 +127,14 @@ function AISandboxPage() {
   const [isPreviewRefreshing, setIsPreviewRefreshing] = useState(false);
   const [sandboxExpired, setSandboxExpired] = useState(false);
 
+  // Auto-fix error correction state
+  const [autoFixEnabled, setAutoFixEnabled] = useState(true);
+  const [autoFixStatus, setAutoFixStatus] = useState<'idle' | 'detecting' | 'fixing' | 'success' | 'failed'>('idle');
+
   // UI Options state for 3-mockup generation
   const [showUIOptions, setShowUIOptions] = useState(false);
   const [uiOptions, setUIOptions] = useState<UIOption[]>([]);
   const [isLoadingUIOptions, setIsLoadingUIOptions] = useState(false);
-  const [isImportingRepo, setIsImportingRepo] = useState(false);
-  const [lastImportedRepo, setLastImportedRepo] = useState<{ repoFullName: string; branch: string } | null>(null);
-  const [isLoadingRepoIntoSandbox, setIsLoadingRepoIntoSandbox] = useState(false);
-  const [repoLoadModalOpen, setRepoLoadModalOpen] = useState(false);
-  const [repoLoadStatus, setRepoLoadStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
-  const [repoLoadError, setRepoLoadError] = useState<string | null>(null);
-  const [repoLoadSteps, setRepoLoadSteps] = useState<
-    Array<{ id: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; detail?: string }>
-  >([]);
-  const [repoLoadLogs, setRepoLoadLogs] = useState<string[]>([]);
   const [selectedUIOption, setSelectedUIOption] = useState<UIOption | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<string>('');
 
@@ -157,7 +149,6 @@ function AISandboxPage() {
   const bugbot = useBugbot();
   const softDelete = useSoftDelete();
   const autoRefactor = useAutoRefactor();
-  const githubImport = useGitHubImport();
 
   // Regression warning state
   const [regressionWarning, setRegressionWarning] = useState<{
@@ -179,12 +170,6 @@ function AISandboxPage() {
 
   const versioning = useVersioning({ enableAutoSave: true, autoSaveInterval: 5 * 60 * 1000 });
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [versionHistoryTab, setVersionHistoryTab] = useState<'plan' | 'code'>('plan');
-
-  const planVersions = usePlanVersions({
-    planId: kanban.plan?.id || 'active',
-    projectId,
-  });
 
   // Git Sync hook for auto-committing on ticket completion
   const gitSync = useGitSync({
@@ -929,8 +914,7 @@ Apply these design specifications consistently across all components.`;
     generating: 3,
     applying: 4,
     testing: 5,
-    pr_review: 6,
-    done: 7,
+    done: 6,
     blocked: -1,
     failed: -1,
     skipped: -1,
@@ -943,7 +927,6 @@ Apply these design specifications consistently across all components.`;
     generating: 'Generating',
     applying: 'Applying',
     testing: 'Testing',
-    pr_review: 'PR Review',
     done: 'Done',
     blocked: 'Blocked',
     failed: 'Failed',
@@ -953,7 +936,7 @@ Apply these design specifications consistently across all components.`;
   const isRegressionMove = (fromStatus: TicketStatus, toStatus: TicketStatus): boolean => {
     const fromOrder = STATUS_ORDER[fromStatus];
     const toOrder = STATUS_ORDER[toStatus];
-    return fromOrder >= 0 && toOrder >= 0 && fromOrder >= STATUS_ORDER.pr_review && toOrder < fromOrder;
+    return fromOrder >= 0 && toOrder >= 0 && fromOrder >= STATUS_ORDER.done && toOrder < fromOrder;
   };
 
   const handleMoveTicket = (ticketId: string, newStatus: TicketStatus) => {
@@ -1025,7 +1008,7 @@ Apply these design specifications consistently across all components.`;
     setRegressionWarning(null);
   };
 
-  const planBuild = async (prompt: string, uiStyle?: UIOption, context?: any) => {
+  const planBuild = async (prompt: string, uiStyle?: UIOption) => {
     setIsPlanning(true);
     kanban.setTickets([]);
 
@@ -1035,7 +1018,6 @@ Apply these design specifications consistently across all components.`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           prompt,
-          context,
           uiStyle: uiStyle ? {
             name: uiStyle.name,
             style: uiStyle.style,
@@ -1068,16 +1050,6 @@ Apply these design specifications consistently across all components.`;
                 kanban.setTickets(prev => [...prev, data.ticket]);
               } else if (data.type === 'plan_complete') {
                 kanban.setPlan(data.plan);
-                // Snapshot the initial plan (for plan versioning)
-                if (data.plan?.tickets && Array.isArray(data.plan.tickets) && data.plan.tickets.length > 0) {
-                  void planVersions.createSnapshot({
-                    source: 'initial_plan',
-                    name: '📦 Initial plan',
-                    description: 'Snapshot captured when planning completed',
-                    tickets: data.plan.tickets,
-                    planIdOverride: data.plan?.id || null,
-                  });
-                }
               }
             } catch (e) {
               console.error('Failed to parse plan event:', e);
@@ -1089,249 +1061,6 @@ Apply these design specifications consistently across all components.`;
       addChatMessage(`Failed to create build plan: ${error.message}`, 'system');
     } finally {
       setIsPlanning(false);
-    }
-  };
-
-  const truncateForPrompt = (content: string, maxChars: number) => {
-    if (!content) return '';
-    if (content.length <= maxChars) return content;
-    return `${content.slice(0, maxChars)}\n\n// ... truncated ...`;
-  };
-
-  const buildGitHubImportPlanningContext = (files: Array<{ path: string; content: string }>) => {
-    const filePaths = files.map(f => f.path).sort();
-
-    const fileList = filePaths
-      .slice(0, 200)
-      .map(p => `- ${p}`)
-      .join('\n');
-
-    const find = (path: string) => files.find(f => f.path === path);
-    const keyPaths = [
-      'package.json',
-      'README.md',
-      'README.mdx',
-      'src/main.tsx',
-      'src/main.jsx',
-      'src/App.tsx',
-      'src/App.jsx',
-      'vite.config.ts',
-      'vite.config.js',
-      'next.config.js',
-    ];
-
-    const keySnippets = keyPaths
-      .map(path => {
-        const file = find(path);
-        if (!file) return null;
-        return `// FILE: ${path}\n${truncateForPrompt(file.content, 2500)}`;
-      })
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-
-    const contextText = `Repo files (showing ${Math.min(filePaths.length, 200)} of ${filePaths.length}):\n${fileList}\n\nKey files:\n${keySnippets || '(none found)'}`;
-    return { filePaths, contextText };
-  };
-
-  const handleGitHubImportAndPlan = async (
-    repoFullName: string,
-    branch: string,
-    maxFiles: number,
-    model: string,
-    goalPrompt?: string
-  ) => {
-    setIsImportingRepo(true);
-    setHasInitialSubmission(true);
-    setAiModel(model);
-    setActiveTab('kanban');
-
-    try {
-      addChatMessage(`🐙 Importing GitHub repo ${repoFullName}@${branch} (up to ${maxFiles} files)...`, 'system');
-
-      const result = await githubImport.importRepo(repoFullName, branch, maxFiles);
-      if (!result?.success) {
-        throw new Error(githubImport.error || 'Import failed');
-      }
-
-      addChatMessage(`✅ Imported ${result.importedFiles} file(s) from ${repoFullName}@${branch}`, 'system');
-      setLastImportedRepo({ repoFullName, branch });
-
-      const { filePaths, contextText } = buildGitHubImportPlanningContext(result.files);
-      const goal =
-        goalPrompt?.trim() ||
-        'Analyze this codebase and propose a safe, incremental plan to improve it and implement missing MVP features.';
-
-      const prompt = `You are planning changes for an existing codebase imported from GitHub.
-
-Repo: ${repoFullName}
-Branch: ${branch}
-
-User goal:
-${goal}
-
-Context:
-${contextText}
-
-Requirements:
-- Prefer modifying existing files over creating new ones.
-- Keep changes incremental, testable, and dependency-aware.
-- Include a ticket to verify build/run if the repo appears to be a React/Vite app.`;
-
-      await planBuild(prompt, undefined, { existingFiles: filePaths, github: { repoFullName, branch } });
-    } catch (error: any) {
-      console.error('[GitHub Import] Failed:', error);
-      addChatMessage(`❌ GitHub import failed: ${error.message}`, 'error');
-      setLastImportedRepo(null);
-      setHasInitialSubmission(false);
-    } finally {
-      setIsImportingRepo(false);
-    }
-  };
-
-  const handleLoadImportedRepoIntoSandbox = async () => {
-    if (!sandboxData) {
-      addChatMessage('❌ No active sandbox to load into. Create a sandbox first.', 'error');
-      return;
-    }
-
-    if (!lastImportedRepo) {
-      addChatMessage('❌ No imported repo found. Import a repo first.', 'error');
-      return;
-    }
-
-    setIsLoadingRepoIntoSandbox(true);
-    try {
-      addChatMessage(
-        `⬇️ Loading ${lastImportedRepo.repoFullName}@${lastImportedRepo.branch} into sandbox...`,
-        'system'
-      );
-
-      setRepoLoadModalOpen(true);
-      setRepoLoadStatus('running');
-      setRepoLoadError(null);
-      setRepoLoadLogs([]);
-      setRepoLoadSteps([
-        { id: 'stop_vite', label: 'Stopping dev server', status: 'pending' },
-        { id: 'clear_sandbox', label: 'Clearing sandbox files', status: 'pending' },
-        { id: 'download', label: 'Downloading repository', status: 'pending' },
-        { id: 'extract', label: 'Extracting repository', status: 'pending' },
-        { id: 'cleanup', label: 'Cleaning up', status: 'pending' },
-        { id: 'vite_config', label: 'Configuring Vite host allowlist', status: 'pending' },
-        { id: 'npm_install', label: 'Installing dependencies', status: 'pending' },
-        { id: 'restart_vite', label: 'Restarting dev server', status: 'pending' },
-      ]);
-
-      const response = await fetch('/api/github/load-into-sandbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sandboxId: sandboxData.sandboxId,
-          repoFullName: lastImportedRepo.repoFullName,
-          branch: lastImportedRepo.branch,
-        }),
-      });
-
-      // If server returned a non-stream error, handle it
-      if (!response.ok || !response.body) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || `Failed to load repo into sandbox (HTTP ${response.status})`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let sawComplete = false;
-      let sawError = false;
-      let errorMessage: string | null = null;
-
-      const updateStep = (stepId: string, status: 'pending' | 'running' | 'done' | 'error', detail?: string) => {
-        setRepoLoadSteps(prev =>
-          prev.map(s => (s.id === stepId ? { ...s, status, detail: detail ?? s.detail } : s))
-        );
-      };
-
-      const appendLog = (line: string) => {
-        const trimmed = line?.trim();
-        if (!trimmed) return;
-        setRepoLoadLogs(prev => [...prev, trimmed].slice(-200));
-      };
-
-      const handleEvent = (evt: any) => {
-        if (!evt || typeof evt !== 'object') return;
-        if (evt.type === 'step' && typeof evt.step === 'string') {
-          const status = evt.status as any;
-          if (status === 'running' || status === 'done' || status === 'error') {
-            updateStep(evt.step, status, evt.detail || evt.message);
-          }
-          return;
-        }
-
-        if (evt.type === 'log') {
-          appendLog(`[${evt.step || 'log'}]\n${evt.message || ''}`.trim());
-          return;
-        }
-
-        if (evt.type === 'error') {
-          sawError = true;
-          errorMessage = evt.message || 'Failed to load repo into sandbox';
-          setRepoLoadStatus('error');
-          setRepoLoadError(errorMessage);
-          return;
-        }
-
-        if (evt.type === 'complete') {
-          sawComplete = true;
-          setRepoLoadStatus('success');
-          return;
-        }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
-        for (const part of parts) {
-          const lines = part.split('\n');
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const raw = line.slice(6);
-            try {
-              const evt = JSON.parse(raw);
-              handleEvent(evt);
-            } catch {
-              // ignore malformed chunks
-            }
-          }
-        }
-      }
-
-      if (sawError) {
-        throw new Error(errorMessage || 'Failed to load repo into sandbox');
-      }
-
-      // If we didn't get an explicit complete event, treat stream end as success
-      if (!sawComplete) {
-        setRepoLoadStatus(prev => (prev === 'running' ? 'success' : prev));
-      }
-
-      addChatMessage('✅ Repo loaded into sandbox. Dev server restarted.', 'system');
-
-      // Force refresh the preview iframe (if mounted)
-      if (iframeRef.current && sandboxData.url) {
-        iframeRef.current.src = `${sandboxData.url}?t=${Date.now()}`;
-      }
-      setIsPreviewRefreshing(true);
-      setTimeout(() => setIsPreviewRefreshing(false), 1000);
-    } catch (error: any) {
-      console.error('[GitHub Load Into Sandbox] Failed:', error);
-      addChatMessage(`❌ Failed to load repo into sandbox: ${error.message}`, 'error');
-      setRepoLoadStatus('error');
-      setRepoLoadError(error.message || 'Failed to load repo into sandbox');
-    } finally {
-      setIsLoadingRepoIntoSandbox(false);
     }
   };
 
@@ -1347,15 +1076,6 @@ Requirements:
       addChatMessage(`${awaitingInputTickets.length} task(s) require input before building. Please provide the required credentials/API keys.`, 'system');
       return;
     }
-
-    // Snapshot the plan as it is being locked for execution ("Move to Pipeline")
-    void planVersions.createSnapshot({
-      source: 'move_to_pipeline',
-      name: '🔒 Plan locked (Move to Pipeline)',
-      description: 'Snapshot captured when build started',
-      tickets: kanban.tickets,
-      planIdOverride: kanban.plan?.id || null,
-    });
 
     setKanbanBuildActive(true);
     kanban.setIsPaused(false);
@@ -1512,12 +1232,6 @@ Requirements:
         kanban.updateTicketFiles(ticket.id, allFiles);
       });
 
-      // Move into PR Review while Bugbot runs
-      backlogTickets.forEach(ticket => {
-        kanban.updateTicketStatus(ticket.id, 'pr_review');
-        kanban.updateTicketProgress(ticket.id, 95);
-      });
-
       // Run Bugbot code review
       setGenerationProgress(prev => ({ ...prev, status: 'Running code review...' }));
       addChatMessage('🔍 Running Bugbot code review...', 'system');
@@ -1576,175 +1290,6 @@ Requirements:
       setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${error.message}` }));
       addChatMessage(`❌ Build failed: ${error.message}`, 'error');
     }
-  };
-
-  const handleCreateManualPlanSnapshot = async () => {
-    const created = await planVersions.createSnapshot({
-      source: 'manual',
-      name: '💾 Plan snapshot',
-      description: 'Manual snapshot',
-      tickets: kanban.tickets,
-      planIdOverride: kanban.plan?.id || null,
-    });
-    if (created) {
-      addChatMessage(`📌 Saved plan snapshot: ${created.name}`, 'system');
-    }
-  };
-
-  const handleRestorePlanSnapshot = async (version: PlanVersion) => {
-    if (kanbanBuildActive) {
-      addChatMessage('⏳ Cannot restore plan while build is running.', 'system');
-      return;
-    }
-
-    const ok =
-      typeof window !== 'undefined' &&
-      window.confirm(`Restore snapshot "${version.name}"?\n\nThis will replace your current plan.`); // eslint-disable-line no-alert
-
-    if (!ok) return;
-
-    // Create a quick backup snapshot before restoring (local only if server isn't available)
-    await planVersions.createSnapshot({
-      source: 'manual',
-      name: '💾 Backup (before restore)',
-      description: `Backup before restoring "${version.name}"`,
-      tickets: kanban.tickets,
-      planIdOverride: kanban.plan?.id || null,
-    });
-
-    kanban.setTickets(version.tickets || []);
-    if (kanban.plan) {
-      kanban.setPlan({ ...kanban.plan, tickets: version.tickets || [], updatedAt: new Date() });
-    }
-    setActiveTab('kanban');
-    addChatMessage(`🔁 Restored plan snapshot: ${version.name}`, 'system');
-  };
-
-  const renderRepoLoadModal = () => {
-    if (!repoLoadModalOpen) return null;
-
-    const titleRepo = lastImportedRepo ? `${lastImportedRepo.repoFullName}@${lastImportedRepo.branch}` : 'Imported repo';
-    const canClose = repoLoadStatus !== 'running';
-    const statusLabel =
-      repoLoadStatus === 'running'
-        ? 'Working…'
-        : repoLoadStatus === 'success'
-          ? 'Done'
-          : repoLoadStatus === 'error'
-            ? 'Failed'
-            : 'Idle';
-
-    const statusClass =
-      repoLoadStatus === 'running'
-        ? 'bg-blue-50 text-blue-700 border-blue-200'
-        : repoLoadStatus === 'success'
-          ? 'bg-green-50 text-green-700 border-green-200'
-          : repoLoadStatus === 'error'
-            ? 'bg-red-50 text-red-700 border-red-200'
-            : 'bg-gray-50 text-gray-700 border-gray-200';
-
-    return (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-        <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-gray-900 truncate">Loading repo into sandbox</div>
-              <div className="text-xs text-gray-500 truncate">{titleRepo}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] px-2 py-1 rounded-full border ${statusClass}`}>{statusLabel}</span>
-              <button
-                onClick={() => canClose && setRepoLoadModalOpen(false)}
-                disabled={!canClose}
-                className={`h-8 w-8 rounded-md border flex items-center justify-center ${
-                  canClose ? 'border-gray-200 hover:bg-gray-50 text-gray-700' : 'border-gray-100 text-gray-300 cursor-not-allowed'
-                }`}
-                title={canClose ? 'Close' : 'Working…'}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          <div className="px-4 py-3">
-            <div className="text-xs text-gray-600">
-              This can take a couple minutes (especially during <span className="font-medium">npm install</span>).
-            </div>
-          </div>
-
-          <div className="px-4 pb-3 space-y-2">
-            {repoLoadSteps.length === 0 ? (
-              <div className="text-xs text-gray-500">Preparing…</div>
-            ) : (
-              <div className="space-y-1.5">
-                {repoLoadSteps.map(step => {
-                  const icon =
-                    step.status === 'done'
-                      ? '✅'
-                      : step.status === 'running'
-                        ? '⏳'
-                        : step.status === 'error'
-                          ? '❌'
-                          : '•';
-
-                  const rowClass =
-                    step.status === 'running'
-                      ? 'border-blue-200 bg-blue-50'
-                      : step.status === 'done'
-                        ? 'border-green-200 bg-green-50'
-                        : step.status === 'error'
-                          ? 'border-red-200 bg-red-50'
-                          : 'border-gray-200 bg-white';
-
-                  return (
-                    <div key={step.id} className={`rounded-lg border px-3 py-2 ${rowClass}`}>
-                      <div className="flex items-start gap-2">
-                        <span className="text-sm leading-5">{icon}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-medium text-gray-900">{step.label}</div>
-                          {step.detail ? (
-                            <div className="mt-0.5 text-[11px] text-gray-600 whitespace-pre-wrap break-words">
-                              {step.detail}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {repoLoadStatus === 'error' && repoLoadError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 whitespace-pre-wrap">
-                {repoLoadError}
-              </div>
-            ) : null}
-
-            {repoLoadLogs.length > 0 ? (
-              <div className="mt-2">
-                <div className="text-[10px] font-semibold text-gray-500 mb-1">Logs (tail)</div>
-                <pre className="max-h-40 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-2 text-[10px] text-gray-700 whitespace-pre-wrap break-words">
-{repoLoadLogs.slice(-20).join('\n\n')}
-                </pre>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
-            <button
-              onClick={() => setRepoLoadModalOpen(false)}
-              disabled={!canClose}
-              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
-                canClose ? 'border-gray-200 hover:bg-gray-50 text-gray-700' : 'border-gray-100 text-gray-300 cursor-not-allowed'
-              }`}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const sandboxCreationRef = useRef<boolean>(false);
@@ -4955,6 +4500,21 @@ Focus on the key sections and content, making it clean and modern.`;
               onDisable={gitSync.disableSync}
               className="mr-2"
             />
+            <button
+              onClick={() => setAutoFixEnabled(!autoFixEnabled)}
+              className={`p-2 rounded-lg transition-colors border ${autoFixEnabled 
+                ? 'bg-green-50 border-green-200 text-green-700' 
+                : 'bg-gray-50 border-gray-200 text-gray-400'}`}
+              title={autoFixEnabled ? 'Auto-fix enabled (click to disable)' : 'Auto-fix disabled (click to enable)'}
+            >
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              {autoFixStatus === 'fixing' && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+              )}
+            </button>
             <LoginButton className="text-sm" />
             <UserMenu />
             {versioning.saveStatus.local !== 'idle' && (
@@ -4982,10 +4542,7 @@ Focus on the key sections and content, making it clean and modern.`;
                     // Generate 3 UI options for user to choose from
                     await generateUIOptions(prompt);
                   }}
-                  onImportSubmit={async (repoFullName, branch, maxFiles, model, goalPrompt) => {
-                    await handleGitHubImportAndPlan(repoFullName, branch, maxFiles, model, goalPrompt);
-                  }}
-                  disabled={generationProgress.isGenerating || isPlanning || isLoadingUIOptions || isImportingRepo}
+                  disabled={loading || generationProgress.isGenerating || isPlanning || isLoadingUIOptions}
                 />
               </div>
             ) : null}
@@ -4993,7 +4550,7 @@ Focus on the key sections and content, making it clean and modern.`;
             {(isPlanning || kanban.tickets.length > 0) && hasInitialSubmission && (
               <div className="flex-1 overflow-y-auto border-b border-border">
                 <div className="p-3 border-b border-gray-100 bg-gray-50 sticky top-0 z-10">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {isPlanning && (
                         <div className="w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -5002,31 +4559,14 @@ Focus on the key sections and content, making it clean and modern.`;
                         {isPlanning ? 'Planning Build...' : `Build Plan (${kanban.tickets.length} tasks)`}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {!isPlanning && kanban.tickets.length > 0 && lastImportedRepo && sandboxData && (
-                        <button
-                          onClick={handleLoadImportedRepoIntoSandbox}
-                          disabled={isLoadingRepoIntoSandbox || kanbanBuildActive}
-                          className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
-                            isLoadingRepoIntoSandbox || kanbanBuildActive
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-blue-600 text-white hover:bg-blue-700'
-                          }`}
-                          title="Replace sandbox files with the imported repo and restart dev server"
-                        >
-                          {isLoadingRepoIntoSandbox ? 'Loading…' : 'Load to sandbox'}
-                        </button>
-                      )}
-
-                      {!isPlanning && kanban.tickets.length > 0 && !kanbanBuildActive && (
-                        <button
-                          onClick={handleStartKanbanBuild}
-                          className="px-2 py-1 text-[10px] font-medium rounded bg-orange-500 text-white hover:bg-orange-600 transition-colors"
-                        >
-                          Start Build
-                        </button>
-                      )}
-                    </div>
+                    {!isPlanning && kanban.tickets.length > 0 && !kanbanBuildActive && (
+                      <button
+                        onClick={handleStartKanbanBuild}
+                        className="px-2 py-1 text-[10px] font-medium rounded bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                      >
+                        Start Build
+                      </button>
+                    )}
                   </div>
                   {kanban.tickets.length > 0 && (
                     <div className="mt-2">
@@ -5793,56 +5333,19 @@ Focus on the key sections and content, making it clean and modern.`;
 
           {showVersionHistory && (
             <div className="w-[280px] border-l border-gray-200 bg-gray-900 flex-shrink-0 overflow-hidden">
-              <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-800">
-                <button
-                  onClick={() => setVersionHistoryTab('plan')}
-                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
-                    versionHistoryTab === 'plan'
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                  }`}
-                >
-                  Plan
-                </button>
-                <button
-                  onClick={() => setVersionHistoryTab('code')}
-                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
-                    versionHistoryTab === 'code'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                  }`}
-                >
-                  Code
-                </button>
-              </div>
-
-              {versionHistoryTab === 'plan' ? (
-                <PlanVersionHistoryPanel
-                  versions={planVersions.versions}
-                  currentTickets={kanban.tickets}
-                  isLoading={planVersions.isLoading}
-                  error={planVersions.error}
-                  onRefresh={planVersions.refresh}
-                  onCreateSnapshot={handleCreateManualPlanSnapshot}
-                  onRestore={handleRestorePlanSnapshot}
-                  restoreDisabled={kanbanBuildActive}
-                  className="h-full"
-                />
-              ) : (
-                <VersionHistoryPanel
-                  versions={versioning.versions}
-                  currentVersionId={versioning.currentProject?.currentVersionId}
-                  onRestore={async (versionId) => {
-                    const files = await versioning.restoreVersion(versionId);
-                    if (files && sandboxData) {
-                      const code = files.map(f => `<file path="${f.path}">${f.content}</file>`).join('\n');
-                      await applyGeneratedCode(code, false);
-                      addChatMessage('Version restored successfully!', 'system');
-                    }
-                  }}
-                  className="h-full"
-                />
-              )}
+              <VersionHistoryPanel
+                versions={versioning.versions}
+                currentVersionId={versioning.currentProject?.currentVersionId}
+                onRestore={async (versionId) => {
+                  const files = await versioning.restoreVersion(versionId);
+                  if (files && sandboxData) {
+                    const code = files.map(f => `<file path="${f.path}">${f.content}</file>`).join('\n');
+                    await applyGeneratedCode(code, false);
+                    addChatMessage('Version restored successfully!', 'system');
+                  }
+                }}
+                className="h-full"
+              />
             </div>
           )}
         </div>
@@ -5884,9 +5387,6 @@ Focus on the key sections and content, making it clean and modern.`;
             onCancel={handleRegressionCancel}
           />
         )}
-
-        {/* Load Repo Into Sandbox Progress Modal */}
-        {renderRepoLoadModal()}
 
         {/* Fullscreen Preview Modal */}
         {isFullscreenPreview && sandboxData?.url && (
@@ -5941,6 +5441,38 @@ Focus on the key sections and content, making it clean and modern.`;
               </div>
             </div>
           </div>
+        )}
+
+        {/* Error Correction Agent - monitors sandbox for errors and auto-fixes */}
+        {sandboxData && autoFixEnabled && (
+          <>
+            <ErrorCorrectionAgent
+              iframeRef={iframeRef}
+              sandboxId={sandboxData.sandboxId}
+              enabled={autoFixEnabled}
+              maxRetries={3}
+              onFixApplied={(file, success) => {
+                if (success) {
+                  addChatMessage(`Auto-fixed error in ${file}`, 'system');
+                } else {
+                  addChatMessage(`Could not auto-fix error in ${file}. Manual intervention may be needed.`, 'error');
+                }
+              }}
+              onStatusChange={setAutoFixStatus}
+            />
+            <HMRErrorDetector
+              iframeRef={iframeRef}
+              enableAutoFix={autoFixEnabled}
+              onErrorDetected={(errors) => {
+                errors.forEach(error => {
+                  if (error.type === 'npm-missing' && error.package) {
+                    addChatMessage(`Missing package detected: ${error.package}. Installing...`, 'system');
+                    checkAndInstallPackages();
+                  }
+                });
+              }}
+            />
+          </>
         )}
 
       </div>

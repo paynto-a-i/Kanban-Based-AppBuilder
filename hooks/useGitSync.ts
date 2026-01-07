@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { getGitHubConnection, commitFiles, isGitHubConnected } from '@/lib/versioning/github';
 
 interface TicketForSync {
@@ -49,7 +49,18 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
     syncHistory: [],
   });
 
+  // Refs for loading guards and cleanup
+  const isSyncingRef = useRef(false);
   const configRef = useRef<GitSyncOptions | null>(null);
+  const mountedRef = useRef(true);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadConfig = useCallback((): GitSyncOptions | null => {
     if (typeof window === 'undefined') return null;
@@ -94,21 +105,30 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
     files: Array<{ path: string; content: string }>
   ): Promise<boolean> => {
     const config = configRef.current || loadConfig();
-    
+
     if (!config?.repoFullName || !state.isEnabled) {
       return false;
     }
 
     if (!isGitHubConnected()) {
-      setState(prev => ({ ...prev, error: 'GitHub not connected' }));
+      if (mountedRef.current) {
+        setState(prev => ({ ...prev, error: 'GitHub not connected' }));
+      }
       return false;
     }
 
+    // Guard against concurrent syncs
+    if (isSyncingRef.current) {
+      console.log('[useGitSync] Sync already in progress, skipping');
+      return false;
+    }
+
+    isSyncingRef.current = true;
     setState(prev => ({ ...prev, isSyncing: true, error: null }));
 
     try {
       const commitMessage = generateCommitMessage(ticket);
-      
+
       const result = await commitFiles({
         repoFullName: config.repoFullName,
         branch: config.branch || 'main',
@@ -129,14 +149,16 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
           timestamp: new Date().toISOString(),
         };
 
-        setState(prev => ({
-          ...prev,
-          isSyncing: false,
-          lastSyncedTicketId: ticket.id,
-          lastCommitSha: result.sha!,
-          lastCommitUrl: result.url!,
-          syncHistory: [historyItem, ...prev.syncHistory.slice(0, 49)],
-        }));
+        if (mountedRef.current) {
+          setState(prev => ({
+            ...prev,
+            isSyncing: false,
+            lastSyncedTicketId: ticket.id,
+            lastCommitSha: result.sha!,
+            lastCommitUrl: result.url!,
+            syncHistory: [historyItem, ...prev.syncHistory.slice(0, 49)],
+          }));
+        }
 
         options?.onSyncComplete?.({
           ticketId: ticket.id,
@@ -150,13 +172,17 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to sync to GitHub';
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        error: errorMessage,
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isSyncing: false,
+          error: errorMessage,
+        }));
+      }
       options?.onSyncError?.(errorMessage, ticket.id);
       return false;
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [state.isEnabled, loadConfig, options]);
 
@@ -165,17 +191,28 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
     message: string
   ): Promise<boolean> => {
     const config = configRef.current || loadConfig();
-    
+
     if (!config?.repoFullName) {
-      setState(prev => ({ ...prev, error: 'Git sync not configured' }));
+      if (mountedRef.current) {
+        setState(prev => ({ ...prev, error: 'Git sync not configured' }));
+      }
       return false;
     }
 
     if (!isGitHubConnected()) {
-      setState(prev => ({ ...prev, error: 'GitHub not connected' }));
+      if (mountedRef.current) {
+        setState(prev => ({ ...prev, error: 'GitHub not connected' }));
+      }
       return false;
     }
 
+    // Guard against concurrent syncs
+    if (isSyncingRef.current) {
+      console.log('[useGitSync] Sync already in progress, skipping');
+      return false;
+    }
+
+    isSyncingRef.current = true;
     setState(prev => ({ ...prev, isSyncing: true, error: null }));
 
     try {
@@ -191,23 +228,29 @@ export function useGitSync(options?: Partial<GitSyncOptions>) {
       });
 
       if (result.success && result.sha) {
-        setState(prev => ({
-          ...prev,
-          isSyncing: false,
-          lastCommitSha: result.sha!,
-          lastCommitUrl: result.url!,
-        }));
+        if (mountedRef.current) {
+          setState(prev => ({
+            ...prev,
+            isSyncing: false,
+            lastCommitSha: result.sha!,
+            lastCommitUrl: result.url!,
+          }));
+        }
         return true;
       } else {
         throw new Error(result.error || 'Commit failed');
       }
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        isSyncing: false,
-        error: error.message || 'Failed to sync',
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isSyncing: false,
+          error: error.message || 'Failed to sync',
+        }));
+      }
       return false;
+    } finally {
+      isSyncingRef.current = false;
     }
   }, [loadConfig]);
 

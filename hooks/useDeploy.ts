@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 type DeployProvider = 'vercel' | 'netlify';
 
@@ -37,11 +37,27 @@ export function useDeploy() {
     },
   });
 
+  // Refs for loading guards and cleanup
+  const isDeployingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+
+  // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
     async function checkProviders() {
       try {
-        const res = await fetch('/api/deploy');
-        if (res.ok) {
+        const res = await fetch('/api/deploy', { signal: controller.signal });
+        if (res.ok && mountedRef.current) {
           const data = await res.json();
           setState(prev => ({
             ...prev,
@@ -51,14 +67,28 @@ export function useDeploy() {
             },
           }));
         }
-      } catch (error) {
-        console.error('[useDeploy] Failed to check providers:', error);
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('[useDeploy] Failed to check providers:', error);
+        }
       }
     }
     checkProviders();
+
+    return () => controller.abort();
   }, []);
 
   const deploy = useCallback(async (options: DeployOptions): Promise<string | null> => {
+    // Guard against concurrent deployments
+    if (isDeployingRef.current) {
+      console.log('[useDeploy] Deployment already in progress, skipping');
+      return null;
+    }
+
+    isDeployingRef.current = true;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
     setState(prev => ({ ...prev, isDeploying: true, error: null }));
 
     try {
@@ -66,6 +96,7 @@ export function useDeploy() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(options),
+        signal: abortControllerRef.current.signal,
       });
 
       const data = await response.json();
@@ -74,24 +105,34 @@ export function useDeploy() {
         throw new Error(data.error || 'Deployment failed');
       }
 
-      setState(prev => ({
-        ...prev,
-        isDeploying: false,
-        lastDeployment: {
-          provider: options.provider,
-          url: data.deploymentUrl,
-          timestamp: new Date().toISOString(),
-        },
-      }));
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isDeploying: false,
+          lastDeployment: {
+            provider: options.provider,
+            url: data.deploymentUrl,
+            timestamp: new Date().toISOString(),
+          },
+        }));
+      }
 
       return data.deploymentUrl;
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        isDeploying: false,
-        error: error.message || 'Deployment failed',
-      }));
+      if (error.name === 'AbortError') {
+        console.log('[useDeploy] Deployment request aborted');
+        return null;
+      }
+      if (mountedRef.current) {
+        setState(prev => ({
+          ...prev,
+          isDeploying: false,
+          error: error.message || 'Deployment failed',
+        }));
+      }
       return null;
+    } finally {
+      isDeployingRef.current = false;
     }
   }, []);
 

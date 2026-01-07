@@ -1,6 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
 export type Database = {
   public: {
@@ -178,48 +176,29 @@ export const supabase = isSupabaseConfigured
   ? createClient<Database>(supabaseUrl, supabaseAnonKey)
   : null;
 
-export const supabaseAdmin = isSupabaseConfigured
-  ? createClient<Database>(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
+export const supabaseAdmin = isSupabaseConfigured && supabaseServiceKey
+  ? createClient<Database>(supabaseUrl, supabaseServiceKey)
   : null;
 
-export async function createServerSupabaseClient() {
-  if (!isSupabaseConfigured || !supabaseUrl || !supabaseAnonKey) {
+export async function getGitHubToken(userId: string): Promise<string | null> {
+  if (!supabaseAdmin || !userId) return null;
+  
+  try {
+    const { data, error } = await (supabaseAdmin as any)
+      .from('accounts')
+      .select('access_token')
+      .eq('user_id', userId)
+      .eq('provider', 'github')
+      .single();
+    
+    if (error) {
+      console.error('[supabase] getGitHubToken error:', error.message);
+      return null;
+    }
+    
+    return data?.access_token ?? null;
+  } catch (error) {
+    console.error('[supabase] getGitHubToken failed:', error);
     return null;
   }
-  
-  const cookieStore = await cookies();
-  
-  return createServerClient<Database>(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          } catch {
-            // Ignore - called from Server Component
-          }
-        },
-      },
-    }
-  );
-}
-
-export async function getGitHubToken(userId: string): Promise<string | null> {
-  if (!supabaseAdmin) return null;
-  
-  const { data } = await (supabaseAdmin as any)
-    .from('accounts')
-    .select('access_token')
-    .eq('user_id', userId)
-    .eq('provider', 'github')
-    .single();
-  
-  return data?.access_token || null;
 }
