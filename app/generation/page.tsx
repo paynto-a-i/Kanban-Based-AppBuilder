@@ -1687,6 +1687,50 @@ Requirements:
       addChatMessage('No blueprint found; skipping scaffold step.', 'system');
     }
 
+    // If the plan already has stored Supabase credentials, apply them to this sandbox up-front.
+    // This ensures the preview can switch to Supabase mode even if the Supabase tickets were
+    // completed in a previous run (or if the user adds follow-up tickets later).
+    const supabaseInputsFromPlan = (kanban.tickets || [])
+      .map(t => t.userInputs)
+      .find(
+        (inputs: any) =>
+          inputs &&
+          typeof inputs.supabase_url === 'string' &&
+          inputs.supabase_url.trim().length > 0 &&
+          typeof inputs.supabase_anon_key === 'string' &&
+          inputs.supabase_anon_key.trim().length > 0
+      ) as Record<string, string> | undefined;
+
+    if (supabaseInputsFromPlan) {
+      const applyKey = `${activeSandbox.sandboxId}:${effectiveTemplate}`;
+      if (supabaseEnvAppliedRef.current !== applyKey) {
+        try {
+          addChatMessage('Applying Supabase env vars to sandbox...', 'system');
+          const envRes = await fetch('/api/apply-sandbox-env', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sandboxId: activeSandbox.sandboxId,
+              template: effectiveTemplate,
+              userInputs: supabaseInputsFromPlan,
+            }),
+          });
+          const envData = await envRes.json().catch(() => ({}));
+          if (!envRes.ok || !envData?.success) {
+            throw new Error(envData?.error || `Failed to apply env (HTTP ${envRes.status})`);
+          }
+          supabaseEnvAppliedRef.current = applyKey;
+          addChatMessage('Supabase env vars applied to sandbox.', 'system');
+        } catch (e: any) {
+          console.warn('[generation] Failed to apply Supabase env vars (preflight):', e);
+          addChatMessage(
+            `Warning: could not apply Supabase env vars automatically (${e?.message || 'unknown error'}).`,
+            'system'
+          );
+        }
+      }
+    }
+
     setGenerationProgress(prev => ({
       ...prev,
       isGenerating: true,
