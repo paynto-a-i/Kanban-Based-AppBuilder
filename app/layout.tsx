@@ -5,7 +5,7 @@ import "./globals.css";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SessionProvider } from "@/components/auth/SessionProvider";
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter"
 });
@@ -30,6 +30,10 @@ const robotoMono = Roboto_Mono({
 export const metadata: Metadata = {
   title: "Paynto A.I.",
   description: "Re-imagine any website in seconds with AI-powered website builder.",
+  icons: {
+    icon: "/paynto-icon.svg",
+    apple: "/paynto-logo.svg",
+  },
 };
 
 export default function RootLayout({

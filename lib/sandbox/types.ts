@@ -7,7 +7,7 @@ export interface SandboxFile {
 export interface SandboxInfo {
   sandboxId: string;
   url: string;
-  provider: 'vercel';
+  provider: 'modal';
   createdAt: Date;
   persistent?: boolean;
   persistentUrl?: string;
@@ -22,11 +22,9 @@ export interface CommandResult {
 }
 
 export interface SandboxProviderConfig {
-  vercel?: {
-    teamId?: string;
-    projectId?: string;
-    token?: string;
-    authMethod?: 'oidc' | 'pat';
+  modal?: {
+    tokenId?: string;
+    tokenSecret?: string;
   };
 }
 

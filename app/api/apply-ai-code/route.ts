@@ -181,25 +181,20 @@ export async function POST(request: NextRequest) {
     // Verify sandbox is ready before applying code
     console.log('[apply-ai-code] Verifying sandbox is ready...');
     
-    // For Vercel sandboxes, check if Vite is running
-    if (sandbox.constructor?.name === 'VercelProvider' || sandbox.getSandboxInfo?.()?.provider === 'vercel') {
-      console.log('[apply-ai-code] Detected Vercel sandbox, checking Vite status...');
-      try {
-        // Check if Vite process is running
-        const checkResult = await sandbox.runCommand('pgrep -f vite');
-        if (!checkResult || !checkResult.stdout) {
-          console.log('[apply-ai-code] Vite not running, starting it...');
-          // Start Vite if not running
-          await sandbox.runCommand('sh -c "cd /vercel/sandbox && nohup npm run dev > /tmp/vite.log 2>&1 &"');
-          // Wait for Vite to start
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          console.log('[apply-ai-code] Vite started, proceeding with code application');
-        } else {
-          console.log('[apply-ai-code] Vite is already running');
-        }
-      } catch (e) {
-        console.log('[apply-ai-code] Could not check Vite status, proceeding anyway:', e);
+    // Check if Vite is running
+    console.log('[apply-ai-code] Checking Vite status...');
+    try {
+      const checkResult = await sandbox.runCommand('pgrep -f vite');
+      if (!checkResult || !checkResult.stdout) {
+        console.log('[apply-ai-code] Vite not running, starting it...');
+        await sandbox.runCommand('sh -c "cd /app && nohup npm run dev > /tmp/vite.log 2>&1 &"');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        console.log('[apply-ai-code] Vite started, proceeding with code application');
+      } else {
+        console.log('[apply-ai-code] Vite is already running');
       }
+    } catch (e) {
+      console.log('[apply-ai-code] Could not check Vite status, proceeding anyway:', e);
     }
     
     // Apply to active sandbox

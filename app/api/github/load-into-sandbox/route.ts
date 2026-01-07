@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
           send({ type: 'start', repoFullName, branch });
 
           await run('stop_vite', 'Stopping dev server', 'pkill -f vite', { allowFailure: true });
-          await run('clear_sandbox', 'Clearing sandbox files', 'find /vercel/sandbox -mindepth 1 -maxdepth 1 -exec rm -rf {} +');
+          await run('clear_sandbox', 'Clearing sandbox files', 'find /app -mindepth 1 -maxdepth 1 -exec rm -rf {} +');
 
           const tarRef = encodeURIComponent(branch);
           const tarUrl = `https://codeload.github.com/${repoFullName}/tar.gz/${tarRef}`;
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
             await run('download', 'Downloading repository archive', `wget -O /tmp/repo.tgz ${tarUrl}`);
           }
 
-          await run('extract', 'Extracting repository', 'tar -xzf /tmp/repo.tgz --strip-components=1 -C /vercel/sandbox');
+          await run('extract', 'Extracting repository', 'tar -xzf /tmp/repo.tgz --strip-components=1 -C /app');
           await run('cleanup', 'Cleaning up temporary files', 'rm -f /tmp/repo.tgz', { allowFailure: true });
 
           // Vite 6+ blocks unknown hosts by default. Patch config to allow the sandbox host.

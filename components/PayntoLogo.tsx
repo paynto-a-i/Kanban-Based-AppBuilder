@@ -1,20 +1,37 @@
-export default function PayntoLogo() {
+interface PayntoLogoProps {
+  className?: string;
+  size?: number;
+  showText?: boolean;
+}
+
+export default function PayntoLogo({
+  className = "",
+  size = 32,
+  showText = true
+}: PayntoLogoProps) {
   return (
-    <svg
-      fill="none"
-      height="24"
-      viewBox="0 0 24 24"
-      width="24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect width="24" height="24" rx="6" fill="url(#paynto-gradient)" />
-      <text x="12" y="16" textAnchor="middle" fill="#000" fontWeight="bold" fontSize="12">P</text>
-      <defs>
-        <linearGradient id="paynto-gradient" x1="0" y1="0" x2="24" y2="24">
-          <stop stopColor="#fbbf24" />
-          <stop offset="1" stopColor="#f97316" />
-        </linearGradient>
-      </defs>
-    </svg>
+    <div className={`flex items-center gap-2 ${className}`}>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 32 32"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect width="32" height="32" rx="8" fill="#1A1A1A" />
+        <path
+          d="M10 8V24M10 8H18C20.2091 8 22 9.79086 22 12V12C22 14.2091 20.2091 16 18 16H10"
+          stroke="#FAFAFA"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {showText && (
+        <span className="text-lg font-medium text-foreground tracking-tight">
+          Paynto
+        </span>
+      )}
+    </div>
   );
 }

@@ -150,7 +150,7 @@ async function getAffectedFileContent(error: ErrorDetails): Promise<FileContent 
   
   let normalizedPath = error.file
     .replace('/home/user/app/', '')
-    .replace('/vercel/sandbox/', '')
+    .replace('/app/', '')
     .replace(/^\//, '');
   
   if (!normalizedPath.startsWith('src/')) {

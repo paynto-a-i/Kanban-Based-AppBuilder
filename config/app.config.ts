@@ -31,16 +31,22 @@ export const appConfig = {
   // AI Model Configuration
   ai: {
     // Default AI model
-    defaultModel: 'openai/gpt-5.2',
+    defaultModel: 'openai/gpt-4o-mini',
 
     // Available models
     availableModels: [
-      'openai/gpt-5.2'
+      'openai/gpt-4o-mini',
+      'openai/gpt-4.1-nano',
+      'openai/gpt-4o',
+      'openai/o4-mini'
     ],
 
     // Model display names
     modelDisplayNames: {
-      'openai/gpt-5.2': 'GPT-5.2'
+      'openai/gpt-4o-mini': 'GPT-4o Mini (Fast)',
+      'openai/gpt-4.1-nano': 'GPT-4.1 Nano (Fastest)',
+      'openai/gpt-4o': 'GPT-4o',
+      'openai/o4-mini': 'o4-mini (Reasoning)'
     } as Record<string, string>,
 
     // Model API configuration

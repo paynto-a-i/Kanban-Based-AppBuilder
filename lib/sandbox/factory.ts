@@ -1,40 +1,29 @@
 import { SandboxProvider, SandboxProviderConfig } from './types';
-import { VercelProvider } from './providers/vercel-provider';
+import { ModalProvider } from './providers/modal-provider';
 
 export class SandboxFactory {
-  static create(provider?: string, config?: SandboxProviderConfig): SandboxProvider {
-    const selectedProvider = provider || process.env.SANDBOX_PROVIDER || 'vercel';
-    
-    console.log(`[SandboxFactory] Creating provider: ${selectedProvider}`);
-    
-    if (selectedProvider.toLowerCase() !== 'vercel') {
-      throw new Error(`Unknown sandbox provider: ${selectedProvider}. Supported provider: vercel`);
-    }
-    
-    return new VercelProvider(config || {});
+  static create(config?: SandboxProviderConfig): SandboxProvider {
+    console.log(`[SandboxFactory] Creating Modal sandbox`);
+    return new ModalProvider(config || {});
   }
   
   static async createWithFallback(config?: SandboxProviderConfig): Promise<SandboxProvider> {
-    if (!this.isProviderAvailable('vercel')) {
-      throw new Error('Vercel sandbox provider not configured');
+    if (!this.isProviderAvailable()) {
+      throw new Error('Modal sandbox not configured. Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET environment variables.');
     }
     
-    console.log(`[SandboxFactory] Creating Vercel sandbox`);
-    const provider = this.create('vercel', config);
+    console.log(`[SandboxFactory] Creating Modal sandbox`);
+    const provider = this.create(config);
     await provider.createSandbox();
-    console.log(`[SandboxFactory] Successfully created sandbox with Vercel`);
+    console.log(`[SandboxFactory] Successfully created Modal sandbox`);
     return provider;
   }
   
   static getAvailableProviders(): string[] {
-    return ['vercel'];
+    return this.isProviderAvailable() ? ['modal'] : [];
   }
   
-  static isProviderAvailable(provider: string): boolean {
-    if (provider.toLowerCase() !== 'vercel') {
-      return false;
-    }
-    return !!process.env.VERCEL_OIDC_TOKEN || 
-           (!!process.env.VERCEL_TOKEN && !!process.env.VERCEL_TEAM_ID && !!process.env.VERCEL_PROJECT_ID);
+  static isProviderAvailable(): boolean {
+    return !!(process.env.MODAL_TOKEN_ID && process.env.MODAL_TOKEN_SECRET);
   }
 }
