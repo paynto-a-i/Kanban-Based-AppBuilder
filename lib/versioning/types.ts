@@ -62,6 +62,8 @@ export interface ProjectVersion {
     // Git info (if pushed to GitHub)
     gitCommitSha?: string;
     gitCommitUrl?: string;
+    gitPushFailed?: boolean;
+    gitPushError?: string;
 
     // Navigation (for future branching)
     parentVersionId?: string;

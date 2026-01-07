@@ -20,7 +20,7 @@ interface FixAttempt {
 type AgentStatus = 'idle' | 'detecting' | 'fixing' | 'success' | 'failed';
 
 interface ErrorCorrectionAgentProps {
-  iframeRef: React.RefObject<HTMLIFrameElement>;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
   sandboxId?: string;
   enabled?: boolean;
   maxRetries?: number;

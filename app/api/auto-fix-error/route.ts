@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGroq } from '@ai-sdk/groq';
 import { streamText } from 'ai';
+import '@/types/sandbox';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,17 +31,6 @@ interface ErrorDetails {
 interface FileContent {
   path: string;
   content: string;
-}
-
-declare global {
-  var sandboxState: {
-    fileCache?: {
-      files: Record<string, { content: string; lastModified: number }>;
-      manifest?: any;
-      lastSync: number;
-      sandboxId: string;
-    };
-  };
 }
 
 export async function POST(request: NextRequest) {
@@ -101,7 +91,7 @@ export async function POST(request: NextRequest) {
         }
       ],
       temperature: 0.3,
-      maxTokens: 4096
+      maxOutputTokens: 4096
     });
     
     let fixedCode = '';

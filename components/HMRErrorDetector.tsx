@@ -11,7 +11,7 @@ export interface DetectedError {
 }
 
 interface HMRErrorDetectorProps {
-  iframeRef: React.RefObject<HTMLIFrameElement>;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
   onErrorDetected: (errors: DetectedError[]) => void;
   enableAutoFix?: boolean;
 }
