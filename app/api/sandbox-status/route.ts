@@ -12,6 +12,17 @@ export async function GET() {
     const provider = sandboxManager.getActiveProvider() || global.activeSandboxProvider;
     const sandboxExists = !!provider;
 
+    // Opportunistic lifecycle cleanup (idle sandboxes + stale prewarmed pool entries).
+    // This runs on a hot path (polled by the UI), so it is debounced in the manager.
+    try {
+      const envIdle = Number(process.env.SANDBOX_IDLE_TTL_MS);
+      const idleTtlMs =
+        Number.isFinite(envIdle) && envIdle > 0 ? envIdle : 30 * 60 * 1000; // default 30m
+      await sandboxManager.cleanup(idleTtlMs);
+    } catch (e) {
+      console.warn('[sandbox-status] Cleanup failed (non-fatal):', e);
+    }
+
     let sandboxHealthy = false;
     let sandboxInfo = null;
     let sandboxStopped = false;
