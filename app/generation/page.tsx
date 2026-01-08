@@ -32,6 +32,7 @@ import { saveGitHubConnection } from '@/lib/versioning/github';
 import { useBuildTracker } from '@/hooks/useBuildTracker';
 import { useGitSync } from '@/hooks/useGitSync';
 import { UserMenu, LoginButton } from '@/components/auth';
+import { UsagePill } from '@/components/usage/UsagePill';
 import UIOptionsSelector, { UIOption } from '@/components/ui-options/UIOptionsSelector';
 import { useBugbot, ReviewResult } from '@/hooks/useBugbot';
 import { CodeReviewPanel, RegressionWarningModal } from '@/components/kanban';
@@ -5552,6 +5553,7 @@ Focus on the key sections and content, making it clean and modern.`;
             />
             <LoginButton className="text-sm" />
             <UserMenu />
+            <UsagePill className="mr-1" />
             {versioning.saveStatus.local !== 'idle' && (
               <SaveStatusIndicator status={versioning.saveStatus} />
             )}

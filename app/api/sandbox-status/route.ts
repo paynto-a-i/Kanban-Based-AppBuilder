@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
+import { getUsageActor } from '@/lib/usage/identity';
+import { recordSandboxPing, type UsageSnapshot } from '@/lib/usage/usage-manager';
 
 declare global {
   var activeSandboxProvider: any;
@@ -7,8 +9,11 @@ declare global {
   var existingFiles: Set<string>;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Best-effort usage tracking identity (user or IP)
+    const actor = await getUsageActor(request);
+
     const provider = sandboxManager.getActiveProvider() || global.activeSandboxProvider;
     const sandboxExists = !!provider;
 
@@ -26,6 +31,7 @@ export async function GET() {
     let sandboxHealthy = false;
     let sandboxInfo = null;
     let sandboxStopped = false;
+    let usageSnapshot: UsageSnapshot | null = null;
 
     if (sandboxExists && provider) {
       try {
@@ -94,6 +100,16 @@ export async function GET() {
             healthStatusCode,
             healthError,
           };
+
+          // Track sandbox time based on pings (best-effort; in-memory counters)
+          if (sandboxInfo.sandboxId) {
+            try {
+              const tracked = recordSandboxPing(actor.key, actor.tier, sandboxInfo.sandboxId);
+              usageSnapshot = tracked.snapshot;
+            } catch (e) {
+              console.warn('[sandbox-status] Usage tracking ping failed (non-fatal):', e);
+            }
+          }
         }
       } catch (error: any) {
         console.error('[sandbox-status] Health check failed:', error);
@@ -113,6 +129,7 @@ export async function GET() {
       healthy: sandboxHealthy,
       sandboxStopped,
       sandboxData: sandboxInfo,
+      usage: usageSnapshot,
       message: sandboxStopped
         ? 'Sandbox has stopped - please create a new one'
         : sandboxHealthy 

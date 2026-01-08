@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
+import { getUsageActor } from '@/lib/usage/identity';
+import { stopSandboxSession, type UsageSnapshot } from '@/lib/usage/usage-manager';
 
 declare global {
   var activeSandboxProvider: any;
@@ -11,8 +13,11 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[kill-sandbox] Stopping active sandbox...');
 
+    const actor = await getUsageActor(request);
+
     let sandboxKilled = false;
     const killedSandboxIds: string[] = [];
+    let usageSnapshot: UsageSnapshot | null = null;
 
     // Optional: allow callers to target a specific sandboxId (best-effort).
     let requestedSandboxId: string | null = null;
@@ -72,6 +77,15 @@ export async function POST(request: NextRequest) {
 
     // Ensure sandbox-manager active reference is cleared (in case globals were used)
     sandboxManager.clearActiveProvider();
+
+    // Finalize sandbox time accounting (best-effort)
+    for (const id of killedSandboxIds) {
+      try {
+        usageSnapshot = stopSandboxSession(actor.key, actor.tier, id).snapshot;
+      } catch (e) {
+        console.warn('[kill-sandbox] Failed to finalize usage session (non-fatal):', e);
+      }
+    }
     
     // Clear existing files tracking
     if (global.existingFiles) {
@@ -82,6 +96,7 @@ export async function POST(request: NextRequest) {
       success: true,
       sandboxKilled,
       killedSandboxIds,
+      usage: usageSnapshot,
       reason,
       message: 'Sandbox cleaned up successfully'
     });

@@ -4,6 +4,9 @@ import { generateText } from 'ai';
 import { validateAIProvider } from '@/lib/api-validation';
 import { appConfig } from '@/config/app.config';
 import type { BuildBlueprint, DataMode, TemplateTarget } from '@/types/build-blueprint';
+import { aiGenerationLimiter } from '@/lib/rateLimit';
+import { getUsageActor } from '@/lib/usage/identity';
+import { checkAndConsumeAiGeneration } from '@/lib/usage/usage-manager';
 
 export const dynamic = 'force-dynamic';
 
@@ -447,6 +450,24 @@ export async function POST(request: NextRequest) {
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
+    }
+
+    // Rate-limit + monthly usage limit gate (best-effort; in-memory counters by user/ip)
+    const actor = await getUsageActor(request);
+    const rl = await aiGenerationLimiter(request, actor.userId || actor.key);
+    if (rl instanceof NextResponse) return rl;
+
+    const usage = checkAndConsumeAiGeneration(actor.key, actor.tier, 1);
+    if (!usage.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Usage limit reached for this month. Upgrade to continue.',
+          code: 'USAGE_LIMIT_REACHED',
+          usage: usage.snapshot,
+          upgradeUrl: '/pricing',
+        },
+        { status: 402 }
+      );
     }
 
     const encoder = new TextEncoder();
