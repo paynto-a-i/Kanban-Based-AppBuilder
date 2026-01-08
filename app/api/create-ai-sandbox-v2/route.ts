@@ -5,7 +5,7 @@ import type { SandboxState } from '@/types/sandbox';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { sandboxCreationLimiter } from '@/lib/rateLimit';
 import { getUsageActor } from '@/lib/usage/identity';
-import { getUsageSnapshot, startSandboxSession } from '@/lib/usage/usage-manager';
+import { getUsageSnapshotForActor, startSandboxSessionForActor } from '@/lib/usage/persistence';
 
 // Store active sandbox globally
 declare global {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const rl = await sandboxCreationLimiter(request, actor.userId || actor.key);
     if (rl instanceof NextResponse) return rl;
 
-    const usage = getUsageSnapshot(actor.key, actor.tier);
+    const usage = await getUsageSnapshotForActor(actor);
     if (usage.exceeded.sandboxMinutes) {
       return NextResponse.json(
         {
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // Start tracking sandbox time for this user/ip (best-effort)
     try {
-      startSandboxSession(actor.key, sandboxInfo.sandboxId);
+      await startSandboxSessionForActor(actor, sandboxInfo.sandboxId);
     } catch (e) {
       console.warn('[create-ai-sandbox-v2] Failed to start usage tracking session:', e);
     }

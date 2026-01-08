@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUsageActor } from '@/lib/usage/identity';
-import { getUsageSnapshot } from '@/lib/usage/usage-manager';
+import { getUsageSnapshotForActor } from '@/lib/usage/persistence';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const actor = await getUsageActor(request);
-    const snapshot = getUsageSnapshot(actor.key, actor.tier);
+    const snapshot = await getUsageSnapshotForActor(actor);
 
     return NextResponse.json({
       success: true,

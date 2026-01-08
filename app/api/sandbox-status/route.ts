@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { getUsageActor } from '@/lib/usage/identity';
-import { recordSandboxPing, type UsageSnapshot } from '@/lib/usage/usage-manager';
+import { recordSandboxPingForActor } from '@/lib/usage/persistence';
+import type { UsageSnapshot } from '@/lib/usage/usage-manager';
 
 declare global {
   var activeSandboxProvider: any;
@@ -104,8 +105,7 @@ export async function GET(request: NextRequest) {
           // Track sandbox time based on pings (best-effort; in-memory counters)
           if (sandboxInfo.sandboxId) {
             try {
-              const tracked = recordSandboxPing(actor.key, actor.tier, sandboxInfo.sandboxId);
-              usageSnapshot = tracked.snapshot;
+              usageSnapshot = await recordSandboxPingForActor(actor, sandboxInfo.sandboxId);
             } catch (e) {
               console.warn('[sandbox-status] Usage tracking ping failed (non-fatal):', e);
             }

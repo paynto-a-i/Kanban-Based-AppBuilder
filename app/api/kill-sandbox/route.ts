@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { getUsageActor } from '@/lib/usage/identity';
-import { stopSandboxSession, type UsageSnapshot } from '@/lib/usage/usage-manager';
+import { stopSandboxSessionForActor } from '@/lib/usage/persistence';
+import type { UsageSnapshot } from '@/lib/usage/usage-manager';
 
 declare global {
   var activeSandboxProvider: any;
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
     // Finalize sandbox time accounting (best-effort)
     for (const id of killedSandboxIds) {
       try {
-        usageSnapshot = stopSandboxSession(actor.key, actor.tier, id).snapshot;
+        usageSnapshot = await stopSandboxSessionForActor(actor, id);
       } catch (e) {
         console.warn('[kill-sandbox] Failed to finalize usage session (non-fatal):', e);
       }

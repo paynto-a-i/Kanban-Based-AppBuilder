@@ -12,7 +12,7 @@ import type { ConversationState, ConversationMessage, ConversationEdit } from '@
 import { appConfig } from '@/config/app.config';
 import { aiGenerationLimiter } from '@/lib/rateLimit';
 import { getUsageActor } from '@/lib/usage/identity';
-import { checkAndConsumeAiGeneration } from '@/lib/usage/usage-manager';
+import { consumeAiGenerationForActor } from '@/lib/usage/persistence';
 import { getCorsHeaders } from '@/lib/cors';
 import { PROMPT_INJECTION_GUARDRAILS, sanitizeUntrustedTextForPrompt } from '@/lib/prompt-security';
 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const rl = await aiGenerationLimiter(request, actor.userId || actor.key);
     if (rl instanceof NextResponse) return rl;
 
-    const usage = checkAndConsumeAiGeneration(actor.key, actor.tier, 1);
+    const usage = await consumeAiGenerationForActor(actor, 1);
     if (!usage.allowed) {
       return NextResponse.json(
         {
