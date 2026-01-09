@@ -43,6 +43,11 @@ interface ScaffoldRequest {
   templateTarget?: TemplateTarget;
   blueprint: BuildBlueprint;
   uiStyle?: UIStyle;
+  /**
+   * Dev-only: if true, do not write to a sandbox. Instead return the generated file list
+   * and required packages so we can preview/test scaffold output locally.
+   */
+  dryRun?: boolean;
 }
 
 function toPascalCase(input: string): string {
@@ -2030,9 +2035,11 @@ export async function POST(request: NextRequest) {
     const template = body.template ?? body.templateTarget;
     const blueprint = body.blueprint;
 
-    if (!sandboxId) {
-      return NextResponse.json({ success: false, error: 'sandboxId is required' }, { status: 400 });
-    }
+    const dryRunRequested = Boolean((body as any).dryRun);
+    // Only allow dry-run scaffolding in development by default (or when explicitly enabled).
+    const dryRun =
+      dryRunRequested && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_SCAFFOLD_DRY_RUN === 'true');
+
     if (!template || (template !== 'vite' && template !== 'next')) {
       return NextResponse.json({ success: false, error: 'template must be vite or next' }, { status: 400 });
     }
@@ -2040,29 +2047,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'blueprint is required' }, { status: 400 });
     }
 
-    // Prefer an already-registered provider for this sandboxId. If not present,
-    // fall back to the legacy global provider *only if it matches the sandboxId*.
-    // Note: `getOrCreateProvider` may return a fresh (unconnected) provider for some
-    // providers (e.g., Vercel), so it must be the last resort.
-    const legacyProvider = (global as any).activeSandboxProvider;
-    const legacyMatches =
-      legacyProvider &&
-      typeof legacyProvider.getSandboxInfo === 'function' &&
-      legacyProvider.getSandboxInfo()?.sandboxId === sandboxId;
-
-    const provider =
-      sandboxManager.getProvider(sandboxId) ||
-      (legacyMatches ? legacyProvider : null) ||
-      (await sandboxManager.getOrCreateProvider(sandboxId));
-
-    if (!provider) {
-      return NextResponse.json({ success: false, error: 'No sandbox provider available' }, { status: 400 });
-    }
-    if (typeof provider.getSandboxInfo === 'function' && !provider.getSandboxInfo()) {
-      return NextResponse.json(
-        { success: false, error: 'Sandbox is not active. Create a sandbox before scaffolding.' },
-        { status: 400 }
-      );
+    if (!dryRun && !sandboxId) {
+      return NextResponse.json({ success: false, error: 'sandboxId is required' }, { status: 400 });
     }
 
     const files: Array<{ filePath: string; content: string }> = [];
@@ -2096,6 +2082,43 @@ export async function POST(request: NextRequest) {
 
     // Install required packages (e.g., router for multi-page Vite builds)
     const uniquePackages = [...new Set(packagesToInstall)];
+
+    if (dryRun) {
+      return NextResponse.json({
+        success: true,
+        template,
+        sandboxId: sandboxId || 'dry-run',
+        dryRun: true,
+        files,
+        packagesToInstall: uniquePackages,
+      });
+    }
+
+    // Prefer an already-registered provider for this sandboxId. If not present,
+    // fall back to the legacy global provider *only if it matches the sandboxId*.
+    // Note: `getOrCreateProvider` may return a fresh (unconnected) provider for some
+    // providers (e.g., Vercel), so it must be the last resort.
+    const legacyProvider = (global as any).activeSandboxProvider;
+    const legacyMatches =
+      legacyProvider &&
+      typeof legacyProvider.getSandboxInfo === 'function' &&
+      legacyProvider.getSandboxInfo()?.sandboxId === sandboxId;
+
+    const provider =
+      sandboxManager.getProvider(sandboxId) ||
+      (legacyMatches ? legacyProvider : null) ||
+      (await sandboxManager.getOrCreateProvider(sandboxId));
+
+    if (!provider) {
+      return NextResponse.json({ success: false, error: 'No sandbox provider available' }, { status: 400 });
+    }
+    if (typeof provider.getSandboxInfo === 'function' && !provider.getSandboxInfo()) {
+      return NextResponse.json(
+        { success: false, error: 'Sandbox is not active. Create a sandbox before scaffolding.' },
+        { status: 400 }
+      );
+    }
+
     let packagesInstalled: string[] = [];
     if (uniquePackages.length > 0 && typeof provider.installPackages === 'function') {
       const result = await provider.installPackages(uniquePackages);
