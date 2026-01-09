@@ -283,7 +283,7 @@ export default function KanbanBoard({
                         onMoveDown={(id) => onReorderTicket(id, 'down')}
                         onProvideInput={(id) => setInputTicketId(id)}
                         onDropTicket={onMoveTicket}
-                        onBuildNow={buildMode === 'manual' ? onBuildSingleTicket : undefined}
+                        onBuildNow={onBuildSingleTicket}
                         minimalHeader={true}
                       />
                     </div>
@@ -334,7 +334,7 @@ export default function KanbanBoard({
                         onMoveDown={(id) => onReorderTicket(id, 'down')}
                         onProvideInput={(id) => setInputTicketId(id)}
                         onDropTicket={onMoveTicket}
-                        onBuildNow={buildMode === 'manual' ? onBuildSingleTicket : undefined}
+                        onBuildNow={onBuildSingleTicket}
                         minimalHeader={true}
                       />
                     </div>

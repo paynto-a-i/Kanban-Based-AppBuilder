@@ -1,4 +1,5 @@
 import type { BuildBlueprint, DataMode, TemplateTarget } from '@/types/build-blueprint';
+import type { UIStyle } from '@/types/ui-style';
 
 export type TicketStatus =
   | 'planning'
@@ -92,6 +93,11 @@ export interface BuildPlan {
   id: string;
   prompt: string;
   description?: string;
+  /**
+   * Optional UI style chosen during planning (e.g., via the 3-option UI picker).
+   * Stored so all subsequent ticket prompts + scaffolding can stay visually consistent.
+   */
+  uiStyle?: UIStyle;
   tickets: KanbanTicket[];
   totalEstimatedTime: string;
   totalFiles: number;

@@ -17,6 +17,7 @@ export function useKanbanBoard(initialPlan?: BuildPlan) {
   const ticketsRef = useRef(tickets);
   const isPausedRef = useRef(isPaused);
   const manualQueueRef = useRef(manualQueue);
+  const reconciledPlanIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     ticketsRef.current = tickets;
@@ -83,6 +84,51 @@ export function useKanbanBoard(initialPlan?: BuildPlan) {
       console.error('Failed to save plan:', e);
     }
   };
+
+  const reconcileTicketStatuses = useCallback((planId?: string | null) => {
+    setTickets(prev => prev.map(t => {
+      const hasEvidence =
+        Boolean((t as any).generatedCode) ||
+        (Array.isArray(t.actualFiles) && t.actualFiles.length > 0) ||
+        Boolean((t as any).completedAt) ||
+        (typeof t.progress === 'number' && t.progress >= 100);
+
+      if (!hasEvidence) return t;
+      if (t.status === 'done') return t;
+
+      // Only auto-promote tickets that are clearly "complete" but still sitting in early states.
+      if (t.status === 'backlog' || t.status === 'awaiting_input') {
+        const startedAt = (t as any).startedAt ? new Date((t as any).startedAt) : undefined;
+        const completedAt = (t as any).completedAt ? new Date((t as any).completedAt) : new Date();
+        const duration =
+          t.duration != null
+            ? t.duration
+            : (startedAt ? Date.now() - startedAt.getTime() : undefined);
+
+        return {
+          ...t,
+          status: 'done',
+          progress: 100,
+          completedAt,
+          duration,
+          previewAvailable: true,
+        };
+      }
+
+      return t;
+    }));
+  }, []);
+
+  // Best-effort: if a plan is loaded with tickets that already have generated code/files,
+  // reconcile their status so Done reflects reality (e.g. after restore/refresh).
+  useEffect(() => {
+    const planId = plan?.id || null;
+    if (!planId) return;
+    if (tickets.length === 0) return;
+    if (reconciledPlanIdRef.current === planId) return;
+    reconciledPlanIdRef.current = planId;
+    reconcileTicketStatuses(planId);
+  }, [plan?.id, tickets.length, reconcileTicketStatuses]);
 
   const loadPlansFromStorage = useCallback((): BuildPlan[] => {
     try {
@@ -362,6 +408,7 @@ export function useKanbanBoard(initialPlan?: BuildPlan) {
     getTicketsByColumn,
     loadPlansFromStorage,
     savePlanToStorage,
+    reconcileTicketStatuses,
     submitTicketInput,
     getAwaitingInputTickets,
     queueTicketForManualBuild,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import type { BuildBlueprint } from '@/types/build-blueprint';
+import type { UIStyle } from '@/types/ui-style';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,7 @@ interface ScaffoldRequest {
   template?: TemplateTarget;
   templateTarget?: TemplateTarget;
   blueprint: BuildBlueprint;
+  uiStyle?: UIStyle;
 }
 
 function toPascalCase(input: string): string {
@@ -66,7 +68,53 @@ function getDir(filePath: string): string {
   return path.posix.dirname(filePath);
 }
 
-function resolveTheme(blueprint: BuildBlueprint, template: TemplateTarget): UiTheme {
+function normalizeHex(input: unknown): string | null {
+  const raw = typeof input === 'string' ? input.trim() : '';
+  if (!raw) return null;
+
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+    const expanded = hex
+      .split('')
+      .map((c) => c + c)
+      .join('');
+    return `#${expanded.toLowerCase()}`;
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return `#${hex.toLowerCase()}`;
+  }
+  return null;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const norm = normalizeHex(hex);
+  if (!norm) return null;
+  const h = norm.slice(1);
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return null;
+  return { r, g, b };
+}
+
+function relativeLuminance(rgb: { r: number; g: number; b: number }): number {
+  const toLinear = (v: number) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  const R = toLinear(rgb.r);
+  const G = toLinear(rgb.g);
+  const B = toLinear(rgb.b);
+  return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+}
+
+function isHexLight(hex: string): boolean {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return false;
+  return relativeLuminance(rgb) > 0.6;
+}
+
+function resolveTheme(blueprint: BuildBlueprint, template: TemplateTarget, uiStyle?: UIStyle): UiTheme {
   const allowedPresets: ThemePreset[] = ['modern_light', 'modern_dark', 'fintech_dark', 'playful_light', 'editorial_light'];
   const allowedAccents: ThemeAccent[] = ['indigo', 'blue', 'emerald', 'rose', 'amber', 'cyan', 'violet'];
 
@@ -113,12 +161,40 @@ function resolveTheme(blueprint: BuildBlueprint, template: TemplateTarget): UiTh
     violet: 'text-violet-700',
   };
 
+  const cs = uiStyle?.colorScheme;
+  const customPrimary = normalizeHex(cs?.primary ?? cs?.accent);
+  const customAccent = normalizeHex(cs?.accent ?? cs?.primary);
+  const customBackground = normalizeHex(cs?.background);
+  const customText = normalizeHex(cs?.text);
+
+  const baseAppBg = isDark
+    ? 'bg-gradient-to-b from-gray-950 via-gray-950 to-black'
+    : 'bg-gradient-to-b from-gray-50 to-white';
+  const baseText = isDark ? 'text-gray-100' : 'text-gray-900';
+
+  const accentSolid = customPrimary
+    ? [
+        `bg-[${customPrimary}]`,
+        'hover:opacity-90',
+        `focus-visible:ring-[${customPrimary}]`,
+        isHexLight(customPrimary) ? 'text-gray-900' : 'text-white',
+        'focus-visible:outline-none',
+        'focus-visible:ring-2',
+        'focus-visible:ring-offset-0',
+        'transition-opacity',
+      ].join(' ')
+    : `${accentSolidMap[accent]} text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0`;
+
+  const accentText = customAccent
+    ? `text-[${customAccent}]`
+    : (isDark ? accentTextMapDark[accent] : accentTextMapLight[accent]);
+
   return {
     preset,
     accent,
     isDark,
-    appBg: isDark ? 'bg-gradient-to-b from-gray-950 via-gray-950 to-black' : 'bg-gradient-to-b from-gray-50 to-white',
-    text: isDark ? 'text-gray-100' : 'text-gray-900',
+    appBg: customBackground ? `bg-[${customBackground}]` : baseAppBg,
+    text: customText ? `text-[${customText}]` : baseText,
     mutedText: isDark ? 'text-gray-400' : 'text-gray-600',
     border: isDark ? 'border-gray-800' : 'border-gray-200',
     cardBg: isDark ? 'bg-gray-900/40' : 'bg-white',
@@ -133,8 +209,8 @@ function resolveTheme(blueprint: BuildBlueprint, template: TemplateTarget): UiTh
     codeBg: isDark ? 'bg-black/40' : 'bg-white',
     codeBorder: isDark ? 'border-gray-800' : 'border-gray-200',
     codeText: isDark ? 'text-gray-200' : 'text-gray-700',
-    accentSolid: `${accentSolidMap[accent]} text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0`,
-    accentText: isDark ? accentTextMapDark[accent] : accentTextMapLight[accent],
+    accentSolid,
+    accentText,
   };
 }
 
@@ -313,6 +389,68 @@ function buildDataModeBanner(template: TemplateTarget, ui: UiTheme): { filePath:
   };
 }
 
+function buildBackdropComponent(template: TemplateTarget, ui: UiTheme, uiStyle?: UIStyle): { filePath: string; content: string } {
+  const cs = uiStyle?.colorScheme;
+  const primary = normalizeHex(cs?.primary ?? cs?.accent);
+  const secondary = normalizeHex(cs?.secondary);
+  const accent = normalizeHex(cs?.accent ?? cs?.primary);
+
+  const fallbackGradients: Record<ThemeAccent, { g1: string; g2: string }> = {
+    indigo: {
+      g1: 'from-indigo-500 via-violet-500 to-cyan-400',
+      g2: 'from-indigo-600 via-blue-500 to-emerald-400',
+    },
+    blue: {
+      g1: 'from-blue-500 via-cyan-400 to-indigo-500',
+      g2: 'from-sky-500 via-blue-500 to-violet-500',
+    },
+    emerald: {
+      g1: 'from-emerald-500 via-cyan-400 to-blue-500',
+      g2: 'from-emerald-600 via-teal-500 to-blue-500',
+    },
+    rose: {
+      g1: 'from-rose-500 via-fuchsia-500 to-indigo-500',
+      g2: 'from-rose-600 via-amber-400 to-violet-500',
+    },
+    amber: {
+      g1: 'from-amber-400 via-rose-500 to-violet-500',
+      g2: 'from-amber-500 via-orange-500 to-rose-500',
+    },
+    cyan: {
+      g1: 'from-cyan-400 via-blue-500 to-violet-500',
+      g2: 'from-cyan-500 via-emerald-400 to-blue-500',
+    },
+    violet: {
+      g1: 'from-violet-500 via-fuchsia-500 to-cyan-400',
+      g2: 'from-violet-600 via-indigo-500 to-cyan-400',
+    },
+  };
+
+  const g1 = primary && secondary
+    ? `from-[${primary}] via-[${secondary}] to-transparent`
+    : (primary && accent ? `from-[${primary}] via-[${accent}] to-transparent` : fallbackGradients[ui.accent].g1);
+
+  const g2 = accent && primary
+    ? `from-[${accent}] via-[${primary}] to-transparent`
+    : fallbackGradients[ui.accent].g2;
+
+  const blob1Opacity = ui.isDark ? 'opacity-30' : 'opacity-20';
+  const blob2Opacity = ui.isDark ? 'opacity-25' : 'opacity-15';
+  const overlay = ui.isDark ? 'bg-gradient-to-b from-black/0 via-black/0 to-black/35' : 'bg-gradient-to-b from-white/0 via-white/0 to-white/60';
+
+  if (template === 'next') {
+    return {
+      filePath: 'components/Backdrop.tsx',
+      content: `export function Backdrop() {\n  return (\n    <div aria-hidden className=\"pointer-events-none absolute inset-0 overflow-hidden\">\n      <div className=\"absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} bg-gradient-to-tr ${g1}\" />\n      <div className=\"absolute -bottom-40 -right-32 h-[36rem] w-[36rem] rounded-full blur-3xl ${blob2Opacity} bg-gradient-to-tr ${g2}\" />\n      <div className=\"absolute inset-0 ${overlay}\" />\n    </div>\n  );\n}\n`,
+    };
+  }
+
+  return {
+    filePath: 'src/components/Backdrop.jsx',
+    content: `export function Backdrop() {\n  return (\n    <div aria-hidden className=\"pointer-events-none absolute inset-0 overflow-hidden\">\n      <div className=\"absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} bg-gradient-to-tr ${g1}\" />\n      <div className=\"absolute -bottom-40 -right-32 h-[36rem] w-[36rem] rounded-full blur-3xl ${blob2Opacity} bg-gradient-to-tr ${g2}\" />\n      <div className=\"absolute inset-0 ${overlay}\" />\n    </div>\n  );\n}\n`,
+  };
+}
+
 function buildNextNav(blueprint: BuildBlueprint, ui: UiTheme): { filePath: string; content: string } {
   const items = blueprint.navigation?.items || [];
   const navLinks = items.map(i => {
@@ -448,7 +586,7 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     `      <div className="mx-auto w-full max-w-6xl px-4 py-10">\n` +
     `        <div className="flex flex-col gap-2">\n` +
     `          <h1 className="text-3xl font-semibold ${headingClass}">Home</h1>\n` +
-    `          <p className="text-sm ${ui.mutedText}">Scaffolded from blueprint routes and navigation — this is the starting point before the build fills in real features.</p>\n` +
+    `          <p className="text-sm ${ui.mutedText}">Your app shell is ready. Use the navigation to explore pages, and connect Supabase anytime to switch from demo data to a real database.</p>\n` +
     `        </div>\n\n` +
     `        <div className="mt-6">\n` +
     `          <DataModeBanner />\n` +
@@ -457,7 +595,7 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     `          <Card title="Blueprint">\n` +
     `            <div className="text-sm ${bodyTextClass}">Routes: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>${pageRoutes.length}</span></div>\n` +
     `            <div className="mt-1 text-sm ${bodyTextClass}">Entities: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>{entityNames.length || 0}</span></div>\n` +
-    `            <div className={"mt-3 text-xs " + ${JSON.stringify(ui.mutedText)}}>Tip: run the build to replace scaffolding with app-specific UI &amp; logic.</div>\n` +
+    `            <div className={"mt-3 text-xs " + ${JSON.stringify(ui.mutedText)}}>Tip: build tickets incrementally to add features, refine UI, and connect real data.</div>\n` +
     `          </Card>\n` +
     `          <Card title="Quick actions">\n` +
     `            <div className="flex flex-wrap gap-2">\n` +
@@ -519,9 +657,12 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
   for (const route of pageRoutes) {
     if (route.path === '/' || route.id === 'home') continue;
     const name = safeRouteIdToComponentName(route.id);
+    const otherRoute = pageRoutes.find(r => r.path !== route.path) || pageRoutes[0] || { path: '/', title: 'Home' };
+    const otherHref = otherRoute?.path || '/';
+    const otherLabel = otherRoute?.title || otherHref;
     pages.push({
       filePath: `src/pages/${name}.jsx`,
-      content: `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n\nexport default function ${name}() {\n  return (\n    <div className="mx-auto w-full max-w-5xl px-4 py-10">\n      <h1 className="text-3xl font-semibold ${headingClass}">${route.title}</h1>\n      <p className="mt-2 text-sm ${ui.mutedText}">${route.description || 'Page scaffolded from blueprint.'}</p>\n\n      <div className="mt-6">\n        <DataModeBanner />\n      </div>\n    </div>\n  );\n}\n`,
+      content: `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n\nfunction Card({ title, children }) {\n  return (\n    <div className="rounded-xl border ${ui.border} ${ui.cardBg} shadow-sm">\n      {title ? (\n        <div className="px-4 py-3 border-b ${cardDividerClass}">\n          <div className="text-sm font-semibold ${headingClass}">{title}</div>\n        </div>\n      ) : null}\n      <div className="p-4">{children}</div>\n    </div>\n  );\n}\n\nexport default function ${name}() {\n  return (\n    <div className="mx-auto w-full max-w-6xl px-4 py-10">\n      <div className="flex flex-col gap-2">\n        <h1 className="text-3xl font-semibold ${headingClass}">${route.title}</h1>\n        <p className="text-sm ${ui.mutedText}">${route.description || 'This page is ready to be filled with app-specific UI and logic.'}</p>\n      </div>\n\n      <div className="mt-6">\n        <DataModeBanner />\n      </div>\n\n      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">\n        <Card title="Overview">\n          <div className="text-sm ${bodyTextClass}">Start by defining the key actions and data for this page.</div>\n          <div className="mt-2 text-xs ${ui.mutedText}">Keep UI consistent with the selected theme and palette.</div>\n        </Card>\n        <Card title="Quick actions">\n          <div className="flex flex-wrap gap-2">\n            <a href="/" className=${JSON.stringify(actionButtonClass)}>Go to Home</a>\n            <a href="${otherHref}" className=${JSON.stringify(primaryButtonClass)}>Open ${otherLabel}</a>\n          </div>\n        </Card>\n        <Card title="Notes">\n          <div className="text-sm ${ui.mutedText}">This starter layout will be refined as tickets are implemented.</div>\n        </Card>\n      </div>\n    </div>\n  );\n}\n`,
     });
   }
 
@@ -542,7 +683,7 @@ function buildViteApp(blueprint: BuildBlueprint, ui: UiTheme): { filePath: strin
     return {
       filePath: 'src/App.jsx',
       packagesToInstall,
-      content: `import { NavBar } from './components/NavBar.jsx';\nimport Home from './pages/Home.jsx';\n\nexport default function App() {\n  return (\n    <div className=\"min-h-screen ${ui.appBg} ${ui.text}\">\n      <NavBar />\n      <Home />\n    </div>\n  );\n}\n`,
+      content: `import { NavBar } from './components/NavBar.jsx';\nimport { Backdrop } from './components/Backdrop.jsx';\nimport Home from './pages/Home.jsx';\n\nexport default function App() {\n  return (\n    <div className=\"min-h-screen ${ui.appBg} ${ui.text} relative\">\n      <Backdrop />\n      <div className=\"relative\">\n        <NavBar />\n        <Home />\n      </div>\n    </div>\n  );\n}\n`,
     };
   }
 
@@ -559,7 +700,7 @@ function buildViteApp(blueprint: BuildBlueprint, ui: UiTheme): { filePath: strin
   return {
     filePath: 'src/App.jsx',
     packagesToInstall,
-    content: `import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';\nimport { NavBar } from './components/NavBar.jsx';\n${routeImports.join('\n')}\n\nexport default function App() {\n  return (\n    <BrowserRouter>\n      <div className=\"min-h-screen ${ui.appBg} ${ui.text}\">\n        <NavBar />\n        <main>\n          <Routes>\n            ${routeElements.join('\n            ')}\n            <Route path=\"*\" element={<Navigate to=\"/\" replace />} />\n          </Routes>\n        </main>\n      </div>\n    </BrowserRouter>\n  );\n}\n`,
+    content: `import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';\nimport { NavBar } from './components/NavBar.jsx';\nimport { Backdrop } from './components/Backdrop.jsx';\n${routeImports.join('\n')}\n\nexport default function App() {\n  return (\n    <BrowserRouter>\n      <div className=\"min-h-screen ${ui.appBg} ${ui.text} relative\">\n        <Backdrop />\n        <div className=\"relative\">\n          <NavBar />\n          <main>\n            <Routes>\n              ${routeElements.join('\n              ')}\n              <Route path=\"*\" element={<Navigate to=\"/\" replace />} />\n            </Routes>\n          </main>\n        </div>\n      </div>\n    </BrowserRouter>\n  );\n}\n`,
   };
 }
 
@@ -567,6 +708,12 @@ function buildNextPages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
   const pageRoutes = blueprint.routes.filter(r => r.kind === 'page');
   const pages: Array<{ filePath: string; content: string }> = [];
   const headingClass = ui.isDark ? 'text-white' : 'text-gray-900';
+  const bodyTextClass = ui.isDark ? 'text-gray-300' : 'text-gray-700';
+  const cardDividerClass = ui.isDark ? 'border-gray-800' : 'border-gray-100';
+  const actionButtonClass = ui.isDark
+    ? `inline-flex items-center rounded-lg border ${ui.border} bg-black/20 px-3 py-2 text-sm font-medium text-white hover:bg-black/30 transition-colors`
+    : `inline-flex items-center rounded-lg border ${ui.border} ${ui.cardBg} px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors`;
+  const primaryButtonClass = `inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium ${ui.accentSolid} shadow-sm`;
 
   for (const route of pageRoutes) {
     const folder = route.path === '/' ? '' : stripLeadingSlash(route.path);
@@ -580,7 +727,7 @@ function buildNextPages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     const filePath = route.path === '/' ? 'app/page.tsx' : `app/${safeFolder}/page.tsx`;
     pages.push({
       filePath,
-      content: `import { DataModeBanner } from '@/components/DataModeBanner';\n\nexport default function Page() {\n  return (\n    <main className=\"mx-auto w-full max-w-5xl px-4 py-10\">\n      <h1 className=\"text-3xl font-semibold ${headingClass}\">${route.title}</h1>\n      <p className=\"mt-2 text-sm ${ui.mutedText}\">${route.description || 'Page scaffolded from blueprint.'}</p>\n      <div className=\"mt-6\">\n        <DataModeBanner />\n      </div>\n    </main>\n  );\n}\n`,
+      content: `import { DataModeBanner } from '@/components/DataModeBanner';\n\nfunction Card({ title, children }: { title?: string; children: React.ReactNode }) {\n  return (\n    <div className=\"rounded-xl border ${ui.border} ${ui.cardBg} shadow-sm\">\n      {title ? (\n        <div className=\"px-4 py-3 border-b ${cardDividerClass}\">\n          <div className=\"text-sm font-semibold ${headingClass}\">{title}</div>\n        </div>\n      ) : null}\n      <div className=\"p-4\">{children}</div>\n    </div>\n  );\n}\n\nexport default function Page() {\n  return (\n    <main className=\"mx-auto w-full max-w-6xl px-4 py-10\">\n      <div className=\"flex flex-col gap-2\">\n        <h1 className=\"text-3xl font-semibold ${headingClass}\">${route.title}</h1>\n        <p className=\"text-sm ${ui.mutedText}\">${route.description || 'This page is ready to be filled with app-specific UI and logic.'}</p>\n      </div>\n\n      <div className=\"mt-6\">\n        <DataModeBanner />\n      </div>\n\n      <div className=\"mt-8 grid grid-cols-1 md:grid-cols-3 gap-4\">\n        <Card title=\"Overview\">\n          <div className=\"text-sm ${bodyTextClass}\">Start by defining the key actions and data for this page.</div>\n          <div className=\"mt-2 text-xs ${ui.mutedText}\">Keep UI consistent with the selected theme and palette.</div>\n        </Card>\n        <Card title=\"Quick actions\">\n          <div className=\"flex flex-wrap gap-2\">\n            <a href=\"/\" className=${JSON.stringify(actionButtonClass)}>Go to Home</a>\n            <a href=\"/help\" className=${JSON.stringify(primaryButtonClass)}>Open Help</a>\n          </div>\n        </Card>\n        <Card title=\"Notes\">\n          <div className=\"text-sm ${ui.mutedText}\">This starter layout will be refined as tickets are implemented.</div>\n        </Card>\n      </div>\n    </main>\n  );\n}\n`,
     });
   }
 
@@ -590,7 +737,7 @@ function buildNextPages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
 function buildNextLayoutOverride(ui: UiTheme): { filePath: string; content: string } {
   return {
     filePath: 'app/layout.tsx',
-    content: `import './globals.css';\nimport { NavBar } from '@/components/NavBar';\n\nexport default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang=\"en\">\n      <body className=\"min-h-screen ${ui.appBg} ${ui.text}\">\n        <NavBar />\n        {children}\n      </body>\n    </html>\n  );\n}\n`,
+    content: `import './globals.css';\nimport { NavBar } from '@/components/NavBar';\nimport { Backdrop } from '@/components/Backdrop';\n\nexport default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang=\"en\">\n      <body className=\"min-h-screen ${ui.appBg} ${ui.text} relative\">\n        <Backdrop />\n        <div className=\"relative\">\n          <NavBar />\n          {children}\n        </div>\n      </body>\n    </html>\n  );\n}\n`,
   };
 }
 
@@ -669,12 +816,13 @@ export async function POST(request: NextRequest) {
 
     const files: Array<{ filePath: string; content: string }> = [];
     const packagesToInstall: string[] = [];
-    const ui = resolveTheme(blueprint, template);
+    const ui = resolveTheme(blueprint, template, body.uiStyle);
 
     // Shared: mock-first data adapter + seed data + data mode banner
     files.push(buildMockSeedFile(blueprint, template));
     files.push(...buildMockClientFiles(template));
     files.push(buildDataModeBanner(template, ui));
+    files.push(buildBackdropComponent(template, ui, body.uiStyle));
     files.push(buildSupabaseSchemaFile(blueprint, template));
 
     if (template === 'next') {

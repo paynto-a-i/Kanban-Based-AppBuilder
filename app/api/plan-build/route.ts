@@ -4,6 +4,7 @@ import { generateText } from 'ai';
 import { validateAIProvider } from '@/lib/api-validation';
 import { appConfig } from '@/config/app.config';
 import type { BuildBlueprint, BlueprintRoute, DataMode, RouteKind, TemplateTarget, ThemeAccent, ThemePreset } from '@/types/build-blueprint';
+import type { UIStyle } from '@/types/ui-style';
 import { aiGenerationLimiter } from '@/lib/rateLimit';
 import { getUsageActor } from '@/lib/usage/identity';
 import { consumeAiGenerationForActor } from '@/lib/usage/persistence';
@@ -83,6 +84,44 @@ const SUPABASE_INPUT_REQUESTS: InputRequest[] = [
     sensitive: true,
   },
 ];
+
+function normalizeUiStyle(raw: any): UIStyle | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : '';
+  if (!name) return undefined;
+
+  const description = typeof raw.description === 'string' ? raw.description.trim().slice(0, 300) : undefined;
+  const style = typeof raw.style === 'string' ? raw.style.trim().slice(0, 40) : undefined;
+  const layout = typeof raw.layout === 'string' ? raw.layout.trim().slice(0, 140) : undefined;
+
+  const cs = raw.colorScheme && typeof raw.colorScheme === 'object' ? raw.colorScheme : undefined;
+  const colorScheme = cs
+    ? {
+        primary: typeof cs.primary === 'string' ? cs.primary.trim().slice(0, 16) : undefined,
+        secondary: typeof cs.secondary === 'string' ? cs.secondary.trim().slice(0, 16) : undefined,
+        accent: typeof cs.accent === 'string' ? cs.accent.trim().slice(0, 16) : undefined,
+        background: typeof cs.background === 'string' ? cs.background.trim().slice(0, 16) : undefined,
+        text: typeof cs.text === 'string' ? cs.text.trim().slice(0, 16) : undefined,
+      }
+    : undefined;
+
+  const features = Array.isArray(raw.features)
+    ? raw.features
+        .filter((f: any) => typeof f === 'string' && f.trim().length > 0)
+        .map((f: string) => f.trim().slice(0, 80))
+        .slice(0, 10)
+    : undefined;
+
+  return {
+    name,
+    description,
+    style,
+    colorScheme,
+    layout,
+    features,
+  };
+}
 
 function ensureSupabaseInputs(ticket: PlanTicket): PlanTicket {
   const text = `${ticket.title}\n${ticket.description ?? ''}`.toLowerCase();
@@ -503,6 +542,45 @@ function ensureMockFirstDataTickets(tickets: PlanTicket[], blueprint: BuildBluep
   });
 }
 
+function ensureUiFoundationTickets(tickets: PlanTicket[], opts: { uiStyle?: UIStyle } = {}): PlanTicket[] {
+  const base: PlanTicket[] = [...tickets];
+
+  const hasFoundation = base.some(t => /\b(design system|ui kit|app shell|visual foundation)\b/i.test(t.title || ''));
+  if (!hasFoundation) {
+    base.unshift({
+      title: 'Design system + app shell',
+      description: `Establish a cohesive visual system and a polished app shell (layout, typography, spacing, reusable UI primitives, and consistent interactive states).${
+        opts.uiStyle?.name ? ` Apply the selected style: "${opts.uiStyle.name}".` : ''
+      }`,
+      type: 'styling',
+      priority: 'critical',
+      complexity: 'M',
+      estimatedFiles: 4,
+      dependencies: [],
+      requiresInput: false,
+      inputRequests: [],
+    });
+  }
+
+  const hasPolish = base.some(t => /\b(ui polish|polish pass|final polish|responsive pass)\b/i.test(t.title || ''));
+  if (!hasPolish) {
+    base.push({
+      title: 'UI polish pass',
+      description:
+        'Polish visual consistency across pages: spacing, typography, colors, responsive layout, and empty/loading states. Improve perceived quality with tasteful animations and micro-interactions.',
+      type: 'styling',
+      priority: 'medium',
+      complexity: 'S',
+      estimatedFiles: 2,
+      dependencies: [],
+      requiresInput: false,
+      inputRequests: [],
+    });
+  }
+
+  return base;
+}
+
 export async function POST(request: NextRequest) {
   const validation = validateAIProvider();
   if (!validation.valid) {
@@ -510,7 +588,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { prompt, context } = await request.json();
+    const { prompt, context, uiStyle: rawUiStyle } = await request.json();
+    const uiStyle = normalizeUiStyle(rawUiStyle);
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
@@ -547,7 +626,9 @@ export async function POST(request: NextRequest) {
               { role: 'system', content: PLANNING_PROMPT },
               { 
                 role: 'user', 
-                content: `Build request: ${prompt}${context?.existingFiles ? `\n\nExisting files: ${context.existingFiles.join(', ')}` : ''}` 
+                content: `Build request: ${prompt}${
+                  uiStyle ? `\n\nSelected UI style (apply consistently):\n${JSON.stringify(uiStyle, null, 2)}` : ''
+                }${context?.existingFiles ? `\n\nExisting files: ${context.existingFiles.join(', ')}` : ''}` 
               }
             ],
             temperature: 0.3,
@@ -575,11 +656,12 @@ export async function POST(request: NextRequest) {
           const blueprint = normalizeBlueprint(parsed.blueprint, prompt);
           const rawTickets = Array.isArray(parsed.tickets) ? parsed.tickets : [];
           const ticketsWithData = ensureMockFirstDataTickets(rawTickets, blueprint, prompt);
+          const ticketsWithFoundation = ensureUiFoundationTickets(ticketsWithData, { uiStyle });
 
           // Emit blueprint early so the client can show coverage immediately (optional)
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'blueprint', blueprint })}\n\n`));
 
-          const tickets = ticketsWithData
+          const tickets = ticketsWithFoundation
             .map((ticket: PlanTicket) => ensureSupabaseInputs(ticket))
             .map((ticket: PlanTicket, index: number) => {
               const requiresInput =
@@ -601,7 +683,7 @@ export async function POST(request: NextRequest) {
               inputRequests: ticket.inputRequests || [],
               userInputs: {},
               dependencies: ticket.dependencies.map((depTitle: string) => {
-                const depIndex = ticketsWithData.findIndex((t: PlanTicket) => t.title === depTitle);
+                const depIndex = ticketsWithFoundation.findIndex((t: PlanTicket) => t.title === depTitle);
                 return depIndex >= 0 ? `ticket-${baseTime}-${depIndex}` : null;
               }).filter(Boolean),
               blueprintRefs: ticket.blueprintRefs,
@@ -621,6 +703,7 @@ export async function POST(request: NextRequest) {
             plan: {
               id: `plan-${baseTime}`,
               prompt,
+              uiStyle: uiStyle || undefined,
               blueprint,
               templateTarget: blueprint.templateTarget,
               dataMode: blueprint.dataMode,

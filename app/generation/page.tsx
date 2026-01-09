@@ -929,6 +929,7 @@ Visual Features: ${uiOption.features.join(', ')}`;
           sandboxId: activeSandbox.sandboxId,
           template,
           blueprint: plan.blueprint,
+          uiStyle: (plan as any).uiStyle,
         }),
       });
       const scaffoldData = await scaffoldRes.json().catch(() => ({}));
@@ -1221,6 +1222,7 @@ Apply these design specifications consistently across all components.`;
           context,
           uiStyle: uiStyle ? {
             name: uiStyle.name,
+            description: uiStyle.description,
             style: uiStyle.style,
             colorScheme: uiStyle.colorScheme,
             layout: uiStyle.layout,
@@ -1250,7 +1252,22 @@ Apply these design specifications consistently across all components.`;
               if (data.type === 'ticket') {
                 kanban.setTickets(prev => [...prev, data.ticket]);
               } else if (data.type === 'plan_complete') {
-                kanban.setPlan(data.plan);
+                const serverPlan = data.plan;
+                kanban.setPlan({
+                  ...serverPlan,
+                  uiStyle:
+                    serverPlan?.uiStyle ||
+                    (uiStyle
+                      ? {
+                          name: uiStyle.name,
+                          description: uiStyle.description,
+                          style: uiStyle.style,
+                          colorScheme: uiStyle.colorScheme,
+                          layout: uiStyle.layout,
+                          features: uiStyle.features,
+                        }
+                      : undefined),
+                });
                 // Snapshot the initial plan (for plan versioning)
                 if (data.plan?.tickets && Array.isArray(data.plan.tickets) && data.plan.tickets.length > 0) {
                   void planVersions.createSnapshot({
@@ -1518,7 +1535,7 @@ Requirements:
     }
   };
 
-  const handleStartKanbanBuild = async () => {
+  const handleStartKanbanBuild = async (opts?: { onlyTicketId?: string }) => {
     const backlogTickets = kanban.tickets.filter(t => t.status === 'backlog');
     const awaitingInputTickets = kanban.tickets.filter(t => t.status === 'awaiting_input');
 
@@ -1664,6 +1681,7 @@ Requirements:
               sandboxId: activeSandbox.sandboxId,
               template: effectiveTemplate,
               blueprint: planBlueprint,
+              uiStyle: (kanban.plan as any)?.uiStyle,
             }),
           });
           const scaffoldData = await scaffoldRes.json().catch(() => ({}));
@@ -1807,7 +1825,18 @@ Requirements:
           break;
         }
 
-        const nextTicket = kanban.getNextBuildableTicket();
+        const nextTicket = opts?.onlyTicketId
+          ? (() => {
+              const res = kanban.buildSingleTicket(opts.onlyTicketId);
+              if (!res) return null;
+              if (typeof (res as any).error === 'string') {
+                addChatMessage(`❌ Can't build that ticket yet: ${(res as any).error}`, 'error');
+                return null;
+              }
+              return res as any;
+            })()
+          : kanban.getNextBuildableTicket();
+
         if (!nextTicket) break;
 
         kanban.setCurrentTicketId(nextTicket.id);
@@ -1879,7 +1908,12 @@ Requirements:
                 .join('\n')}`
             : '';
 
-        const ticketPrompt = `Implement the following ticket in the existing application.\n\nTemplate: ${desiredTemplate}\n\nBlueprint (high-level contract):\n${planBlueprint ? JSON.stringify(planBlueprint, null, 2) : '(none)'}\n\nTicket:\n- Title: ${nextTicket.title}\n- Description: ${nextTicket.description}${credentialText}\n\nRules:\n- Implement the ticket completely.\n- Preserve existing routes/navigation and the mock-first data layer.\n- Create new files if required by this ticket.\n- Output ONLY <file path=\"...\"> blocks for files you changed/created.`;
+        const uiStyleForPrompt = (kanban.plan as any)?.uiStyle;
+        const uiStyleBlock = uiStyleForPrompt
+          ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(uiStyleForPrompt, null, 2)}\n\nUI RULES:\n- Keep the UI visually rich (layered sections, modern spacing/typography, hover+focus states, and polished empty/loading states).\n- Do NOT drift to a generic default look; follow the selected style + blueprint theme.\n`
+          : '';
+
+        const ticketPrompt = `Implement the following ticket in the existing application.\n\nTemplate: ${desiredTemplate}\n${uiStyleBlock}\nBlueprint (high-level contract):\n${planBlueprint ? JSON.stringify(planBlueprint, null, 2) : '(none)'}\n\nTicket:\n- Title: ${nextTicket.title}\n- Description: ${nextTicket.description}${credentialText}\n\nRules:\n- Implement the ticket completely.\n- Preserve existing routes/navigation and the mock-first data layer.\n- Create new files if required by this ticket.\n- Output ONLY <file path=\"...\"> blocks for files you changed/created.`;
 
         const response = await fetch('/api/generate-ai-code-stream', {
           method: 'POST',
@@ -2084,6 +2118,11 @@ Requirements:
             fileContents
           );
         }
+
+        // In single-ticket mode, stop after completing one ticket.
+        if (opts?.onlyTicketId) {
+          break;
+        }
       }
 
       setKanbanBuildActive(false);
@@ -2098,6 +2137,14 @@ Requirements:
       setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${message}` }));
       addChatMessage(`Build failed: ${message}`, 'error');
     }
+  };
+
+  const handleBuildSingleTicket = async (ticketId: string) => {
+    if (kanbanBuildActive) {
+      addChatMessage('A build is already running. Please wait for it to finish.', 'system');
+      return;
+    }
+    await handleStartKanbanBuild({ onlyTicketId: ticketId });
   };
 
   // Auto-resume the build after a review approval (so users don't have to hit ▶ Start repeatedly).
@@ -3603,7 +3650,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
           onReorderTicket={kanban.reorderTicket}
           onAddTicket={kanban.addTicket}
           onSubmitInput={kanban.submitTicketInput}
-          onBuildSingleTicket={kanban.buildSingleTicket}
+          onBuildSingleTicket={handleBuildSingleTicket}
           onSetBuildMode={kanban.setBuildMode}
           buildMode={kanban.buildMode}
           tickets={kanban.tickets}
@@ -3642,7 +3689,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               onReorderTicket={kanban.reorderTicket}
               onAddTicket={kanban.addTicket}
               onSubmitInput={kanban.submitTicketInput}
-              onBuildSingleTicket={kanban.buildSingleTicket}
+              onBuildSingleTicket={handleBuildSingleTicket}
               onSetBuildMode={kanban.setBuildMode}
               buildMode={kanban.buildMode}
               tickets={kanban.tickets}
@@ -5645,7 +5692,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
                       {!isPlanning && kanban.tickets.length > 0 && !kanbanBuildActive && (
                         <button
-                          onClick={handleStartKanbanBuild}
+                          onClick={() => handleStartKanbanBuild()}
                           className="px-2 py-1 text-[10px] font-medium rounded bg-orange-500 text-white hover:bg-orange-600 transition-colors"
                         >
                           Start Build
