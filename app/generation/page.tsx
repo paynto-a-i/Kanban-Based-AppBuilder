@@ -907,7 +907,8 @@ Visual Features: ${uiOption.features.join(', ')}`;
       return;
     }
 
-    const template: 'vite' | 'next' = plan.templateTarget === 'nextjs' ? 'next' : 'vite';
+    const planTemplate = (plan as any).templateTarget;
+    const template: 'vite' | 'next' = planTemplate === 'next' || planTemplate === 'nextjs' ? 'next' : 'vite';
 
     restoringSandboxRef.current = true;
     setIsRestoringSandbox(true);

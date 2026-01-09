@@ -46,6 +46,14 @@ export async function POST(request: NextRequest) {
     } catch {
       // No body provided; default to vite
     }
+
+    // Modal sandboxes currently support the Vite template only.
+    if (templateTarget === 'next') {
+      console.warn(
+        '[create-ai-sandbox-v2] Next template requested, but current sandbox provider only supports Vite. Falling back to Vite.'
+      );
+      templateTarget = 'vite';
+    }
     
     // Clean up all existing sandboxes
     console.log('[create-ai-sandbox-v2] Cleaning up existing sandboxes...');
@@ -69,16 +77,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new sandbox using factory
-    const provider = SandboxFactory.create(undefined, { templateTarget });
+    const provider = SandboxFactory.create();
     const sandboxInfo = await provider.createSandbox();
     
-    if (templateTarget === 'next') {
-      console.log('[create-ai-sandbox-v2] Setting up Next.js app...');
-      await provider.setupNextApp();
-    } else {
-      console.log('[create-ai-sandbox-v2] Setting up Vite React app...');
-      await provider.setupViteApp();
-    }
+    console.log('[create-ai-sandbox-v2] Setting up Vite React app...');
+    await provider.setupViteApp();
+
+    // Annotate info for the UI (provider may not set these fields)
+    (sandboxInfo as any).templateTarget = templateTarget;
+    if (!(sandboxInfo as any).devPort) (sandboxInfo as any).devPort = 5173;
     
     // Register with sandbox manager
     sandboxManager.registerSandbox(sandboxInfo.sandboxId, provider);
@@ -125,9 +132,7 @@ export async function POST(request: NextRequest) {
       provider: sandboxInfo.provider,
       templateTarget,
       devPort: sandboxInfo.devPort,
-      message: templateTarget === 'next'
-        ? 'Sandbox created and Next.js app initialized'
-        : 'Sandbox created and Vite React app initialized'
+      message: 'Sandbox created and Vite React app initialized'
     });
 
   } catch (error) {

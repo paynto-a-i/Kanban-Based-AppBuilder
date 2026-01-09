@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { validateAIProvider } from '@/lib/api-validation';
 import { appConfig } from '@/config/app.config';
-import type { BuildBlueprint, DataMode, TemplateTarget } from '@/types/build-blueprint';
+import type { BuildBlueprint, BlueprintRoute, DataMode, RouteKind, TemplateTarget } from '@/types/build-blueprint';
 import { aiGenerationLimiter } from '@/lib/rateLimit';
 import { getUsageActor } from '@/lib/usage/identity';
 import { consumeAiGenerationForActor } from '@/lib/usage/persistence';
@@ -255,16 +255,22 @@ function normalizeBlueprint(raw: PlanningResponse['blueprint'] | undefined, prom
       : 'real_optional';
 
   const routes = Array.isArray(raw?.routes) ? raw!.routes as any[] : [];
-  const normalizedRoutes = routes
+  const normalizedRoutes: BlueprintRoute[] = routes
     .filter(r => r && typeof r === 'object')
-    .map((r, idx) => {
-      const id = typeof r.id === 'string' && r.id.trim().length > 0 ? r.id : `route_${idx}`;
-      const kind = r.kind === 'section' ? 'section' : 'page';
-      let path = typeof r.path === 'string' && r.path.trim().length > 0 ? r.path : (kind === 'section' ? '#home' : '/');
+    .map((r, idx): BlueprintRoute => {
+      const id =
+        typeof r.id === 'string' && r.id.trim().length > 0 ? r.id.trim() : `route_${idx}`;
+      const kind: RouteKind = r.kind === 'section' ? 'section' : 'page';
+      let path =
+        typeof r.path === 'string' && r.path.trim().length > 0
+          ? r.path.trim()
+          : (kind === 'section' ? '#home' : '/');
       // Normalize placeholder section anchors.
       if (kind === 'section' && path.trim() === '#') path = '#home';
-      const title = typeof r.title === 'string' && r.title.trim().length > 0 ? r.title : id;
-      const navLabel = typeof r.navLabel === 'string' && r.navLabel.trim().length > 0 ? r.navLabel : title;
+      const title =
+        typeof r.title === 'string' && r.title.trim().length > 0 ? r.title.trim() : id;
+      const navLabel =
+        typeof r.navLabel === 'string' && r.navLabel.trim().length > 0 ? r.navLabel.trim() : title;
       return {
         id,
         kind,
@@ -276,13 +282,15 @@ function normalizeBlueprint(raw: PlanningResponse['blueprint'] | undefined, prom
       };
     });
 
-  const safeRoutes = normalizedRoutes.length > 0 ? normalizedRoutes : [{
-    id: 'home',
-    kind: 'page' as const,
-    path: '/',
-    title: 'Home',
-    navLabel: 'Home',
-  }];
+  const safeRoutes: BlueprintRoute[] = normalizedRoutes.length > 0 ? normalizedRoutes : [
+    {
+      id: 'home',
+      kind: 'page',
+      path: '/',
+      title: 'Home',
+      navLabel: 'Home',
+    }
+  ];
 
   // If the prompt is clearly an admin/dashboard request but the model returned only a single page route,
   // enforce a minimal end-to-end set of common dashboard pages so nav clicks can work.
@@ -313,10 +321,13 @@ function normalizeBlueprint(raw: PlanningResponse['blueprint'] | undefined, prom
   const navItems = Array.isArray(rawNavItems)
     ? rawNavItems
         .filter((i: any) => i && typeof i === 'object')
-        .map((i: any) => ({
-          label: typeof i.label === 'string' ? i.label : 'Home',
-          routeId: typeof i.routeId === 'string' ? i.routeId : 'home',
-        }))
+        .map((i: any) => {
+          const label =
+            typeof i.label === 'string' && i.label.trim().length > 0 ? i.label.trim() : 'Home';
+          const routeId =
+            typeof i.routeId === 'string' && i.routeId.trim().length > 0 ? i.routeId.trim() : 'home';
+          return { label, routeId };
+        })
     : [];
 
   // Ensure nav covers all routes (by id).
