@@ -551,7 +551,7 @@ function ensureUiFoundationTickets(tickets: PlanTicket[], opts: { uiStyle?: UISt
       title: 'Design system + app shell',
       description: `Establish a cohesive visual system and a polished app shell (layout, typography, spacing, reusable UI primitives, and consistent interactive states).${
         opts.uiStyle?.name ? ` Apply the selected style: "${opts.uiStyle.name}".` : ''
-      }`,
+      } Reuse and extend the existing UI primitives (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) instead of creating a new UI kit.`,
       type: 'styling',
       priority: 'critical',
       complexity: 'M',

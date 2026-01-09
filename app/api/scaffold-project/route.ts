@@ -472,6 +472,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
     const cardDividerClass = ui.isDark ? 'border-white/10' : 'border-black/10';
     const inputBgClass = ui.isDark ? 'bg-black/30' : 'bg-white/70';
     const placeholderClass = ui.isDark ? 'placeholder:text-gray-400' : 'placeholder:text-gray-500';
+    const skeletonBgClass = ui.isDark ? 'bg-white/10' : 'bg-black/10';
 
     return [
       {
@@ -571,6 +572,278 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `  );\n` +
           `}\n`,
       },
+      {
+        filePath: 'components/ui/Skeleton.tsx',
+        content:
+          `import type * as React from 'react';\n` +
+          `import { cn } from '@/lib/cn';\n\n` +
+          `export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {\n` +
+          `  return <div className={cn('animate-pulse rounded-md ${skeletonBgClass}', className)} {...props} />;\n` +
+          `}\n`,
+      },
+      {
+        filePath: 'components/ui/EmptyState.tsx',
+        content:
+          `import type * as React from 'react';\n` +
+          `import { cn } from '@/lib/cn';\n` +
+          `import { Badge } from '@/components/ui/Badge';\n\n` +
+          `export function EmptyState({\n` +
+          `  title,\n` +
+          `  description,\n` +
+          `  hint,\n` +
+          `  action,\n` +
+          `  className,\n` +
+          `}: {\n` +
+          `  title: string;\n` +
+          `  description?: string;\n` +
+          `  hint?: string;\n` +
+          `  action?: React.ReactNode;\n` +
+          `  className?: string;\n` +
+          `}) {\n` +
+          `  return (\n` +
+          `    <div className={cn('w-full rounded-2xl border ${ui.border} ${ui.cardBg} p-6', className)}>\n` +
+          `      <div className="flex items-start gap-4">\n` +
+          `        <div className="flex h-11 w-11 items-center justify-center rounded-xl border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'}">\n` +
+          `          <div className="h-5 w-5 rounded-md ${skeletonBgClass}" />\n` +
+          `        </div>\n` +
+          `        <div className="flex-1">\n` +
+          `          <div className={cn('text-sm font-semibold ${headingTextClass}')}>{title}</div>\n` +
+          `          {description ? <div className={cn('mt-1 text-sm ${ui.mutedText}')}>{description}</div> : null}\n` +
+          `          {hint ? (\n` +
+          `            <div className="mt-3">\n` +
+          `              <Badge>{hint}</Badge>\n` +
+          `            </div>\n` +
+          `          ) : null}\n` +
+          `          {action ? <div className="mt-4">{action}</div> : null}\n` +
+          `        </div>\n` +
+          `      </div>\n` +
+          `    </div>\n` +
+          `  );\n` +
+          `}\n`,
+      },
+      {
+        filePath: 'components/ui/DataTable.tsx',
+        content:
+          `import type * as React from 'react';\n` +
+          `import { cn } from '@/lib/cn';\n` +
+          `import { EmptyState } from '@/components/ui/EmptyState';\n` +
+          `import { Skeleton } from '@/components/ui/Skeleton';\n\n` +
+          `export type DataTableColumn<Row> = {\n` +
+          `  key: string;\n` +
+          `  header: string;\n` +
+          `  className?: string;\n` +
+          `  render?: (row: Row) => React.ReactNode;\n` +
+          `};\n\n` +
+          `export function DataTable<Row extends Record<string, any>>({\n` +
+          `  columns,\n` +
+          `  rows,\n` +
+          `  isLoading,\n` +
+          `  emptyTitle = 'Nothing here yet',\n` +
+          `  emptyDescription = 'Once data exists, it will show up in this table.',\n` +
+          `  className,\n` +
+          `}: {\n` +
+          `  columns: Array<DataTableColumn<Row>>;\n` +
+          `  rows: Row[];\n` +
+          `  isLoading?: boolean;\n` +
+          `  emptyTitle?: string;\n` +
+          `  emptyDescription?: string;\n` +
+          `  className?: string;\n` +
+          `}) {\n` +
+          `  if (isLoading) {\n` +
+          `    return (\n` +
+          `      <div className={cn('w-full overflow-hidden rounded-2xl border ${ui.border} ${ui.cardBg}', className)}>\n` +
+          `        <div className="p-4 space-y-3">\n` +
+          `          <Skeleton className="h-5 w-48" />\n` +
+          `          <div className="space-y-2">\n` +
+          `            {Array.from({ length: 6 }).map((_, i) => (\n` +
+          `              <Skeleton key={i} className="h-10 w-full" />\n` +
+          `            ))}\n` +
+          `          </div>\n` +
+          `        </div>\n` +
+          `      </div>\n` +
+          `    );\n` +
+          `  }\n\n` +
+          `  if (!rows || rows.length === 0) {\n` +
+          `    return <EmptyState title={emptyTitle} description={emptyDescription} hint="Tip: connect Supabase to see real data" />;\n` +
+          `  }\n\n` +
+          `  return (\n` +
+          `    <div className={cn('w-full overflow-x-auto rounded-2xl border ${ui.border} ${ui.cardBg}', className)}>\n` +
+          `      <table className="min-w-full text-sm">\n` +
+          `        <thead>\n` +
+          `          <tr className="${ui.isDark ? 'text-gray-300' : 'text-gray-600'}">\n` +
+          `            {columns.map((col) => (\n` +
+          `              <th key={col.key} className={cn('px-4 py-3 text-left font-medium', col.className)}>\n` +
+          `                {col.header}\n` +
+          `              </th>\n` +
+          `            ))}\n` +
+          `          </tr>\n` +
+          `        </thead>\n` +
+          `        <tbody className="${ui.isDark ? 'divide-y divide-white/10' : 'divide-y divide-black/10'}">\n` +
+          `          {rows.map((row, idx) => (\n` +
+          `            <tr key={String((row as any).id ?? idx)} className="${ui.isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'} transition-colors">\n` +
+          `              {columns.map((col) => (\n` +
+          `                <td key={col.key} className={cn('px-4 py-3 align-top ${bodyTextClass}', col.className)}>\n` +
+          `                  {col.render ? col.render(row) : String((row as any)[col.key] ?? '')}\n` +
+          `                </td>\n` +
+          `              ))}\n` +
+          `            </tr>\n` +
+          `          ))}\n` +
+          `        </tbody>\n` +
+          `      </table>\n` +
+          `    </div>\n` +
+          `  );\n` +
+          `}\n`,
+      },
+      {
+        filePath: 'components/ui/Tabs.tsx',
+        content:
+          `'use client';\n\n` +
+          `import * as React from 'react';\n` +
+          `import { cn } from '@/lib/cn';\n\n` +
+          `type TabsContextValue = {\n` +
+          `  value: string;\n` +
+          `  setValue: (v: string) => void;\n` +
+          `};\n\n` +
+          `const TabsContext = React.createContext<TabsContextValue | null>(null);\n\n` +
+          `export function Tabs({\n` +
+          `  value: controlled,\n` +
+          `  defaultValue,\n` +
+          `  onValueChange,\n` +
+          `  className,\n` +
+          `  children,\n` +
+          `}: {\n` +
+          `  value?: string;\n` +
+          `  defaultValue?: string;\n` +
+          `  onValueChange?: (v: string) => void;\n` +
+          `  className?: string;\n` +
+          `  children: React.ReactNode;\n` +
+          `}) {\n` +
+          `  const [uncontrolled, setUncontrolled] = React.useState(defaultValue || '');\n` +
+          `  const value = controlled ?? uncontrolled;\n` +
+          `  const setValue = React.useCallback(\n` +
+          `    (v: string) => {\n` +
+          `      if (controlled == null) setUncontrolled(v);\n` +
+          `      onValueChange?.(v);\n` +
+          `    },\n` +
+          `    [controlled, onValueChange]\n` +
+          `  );\n\n` +
+          `  return (\n` +
+          `    <TabsContext.Provider value={{ value, setValue }}>\n` +
+          `      <div className={cn('w-full', className)}>{children}</div>\n` +
+          `    </TabsContext.Provider>\n` +
+          `  );\n` +
+          `}\n\n` +
+          `export function TabsList({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {\n` +
+          `  return (\n` +
+          `    <div\n` +
+          `      className={cn(\n` +
+          `        'inline-flex items-center gap-1 rounded-xl border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'} p-1',\n` +
+          `        className\n` +
+          `      )}\n` +
+          `      {...props}\n` +
+          `    />\n` +
+          `  );\n` +
+          `}\n\n` +
+          `export function TabsTrigger({ value, className, children }: { value: string; className?: string; children: React.ReactNode }) {\n` +
+          `  const ctx = React.useContext(TabsContext);\n` +
+          `  if (!ctx) throw new Error('TabsTrigger must be used within Tabs');\n` +
+          `  const active = ctx.value === value;\n` +
+          `  return (\n` +
+          `    <button\n` +
+          `      type="button"\n` +
+          `      onClick={() => ctx.setValue(value)}\n` +
+          `      className={cn(\n` +
+          `        'h-9 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 ${ui.accentRing}',\n` +
+          `        active\n` +
+          `          ? '${ui.isDark ? 'bg-black/40 text-white' : 'bg-white text-gray-900'} shadow-sm'\n` +
+          `          : '${ui.isDark ? 'text-gray-300 hover:bg-white/5 hover:text-white' : 'text-gray-700 hover:bg-black/5 hover:text-gray-900'}',\n` +
+          `        className\n` +
+          `      )}\n` +
+          `    >\n` +
+          `      {children}\n` +
+          `    </button>\n` +
+          `  );\n` +
+          `}\n\n` +
+          `export function TabsContent({ value, className, children }: { value: string; className?: string; children: React.ReactNode }) {\n` +
+          `  const ctx = React.useContext(TabsContext);\n` +
+          `  if (!ctx) throw new Error('TabsContent must be used within Tabs');\n` +
+          `  if (ctx.value !== value) return null;\n` +
+          `  return <div className={cn('mt-4', className)}>{children}</div>;\n` +
+          `}\n`,
+      },
+      {
+        filePath: 'components/ui/Modal.tsx',
+        content:
+          `'use client';\n\n` +
+          `import * as React from 'react';\n` +
+          `import { createPortal } from 'react-dom';\n` +
+          `import { cn } from '@/lib/cn';\n` +
+          `import { buttonClasses } from '@/components/ui/Button';\n\n` +
+          `export function Modal({\n` +
+          `  open,\n` +
+          `  onOpenChange,\n` +
+          `  title,\n` +
+          `  description,\n` +
+          `  children,\n` +
+          `  footer,\n` +
+          `  className,\n` +
+          `}: {\n` +
+          `  open: boolean;\n` +
+          `  onOpenChange: (v: boolean) => void;\n` +
+          `  title: string;\n` +
+          `  description?: string;\n` +
+          `  children: React.ReactNode;\n` +
+          `  footer?: React.ReactNode;\n` +
+          `  className?: string;\n` +
+          `}) {\n` +
+          `  React.useEffect(() => {\n` +
+          `    if (!open) return;\n` +
+          `    const onKeyDown = (e: KeyboardEvent) => {\n` +
+          `      if (e.key === 'Escape') onOpenChange(false);\n` +
+          `    };\n` +
+          `    document.addEventListener('keydown', onKeyDown);\n` +
+          `    const prevOverflow = document.body.style.overflow;\n` +
+          `    document.body.style.overflow = 'hidden';\n` +
+          `    return () => {\n` +
+          `      document.removeEventListener('keydown', onKeyDown);\n` +
+          `      document.body.style.overflow = prevOverflow;\n` +
+          `    };\n` +
+          `  }, [open, onOpenChange]);\n\n` +
+          `  if (!open) return null;\n` +
+          `  return createPortal(\n` +
+          `    <div className=\"fixed inset-0 z-50 flex items-center justify-center p-4\">\n` +
+          `      <div className=\"absolute inset-0 bg-black/50 backdrop-blur-sm\" onClick={() => onOpenChange(false)} />\n` +
+          `      <div\n` +
+          `        role=\"dialog\"\n` +
+          `        aria-modal=\"true\"\n` +
+          `        className={cn('relative w-full max-w-lg rounded-2xl border ${ui.border} ${ui.cardBg} shadow-2xl', className)}\n` +
+          `      >\n` +
+          `        <div className=\"p-4 border-b ${ui.isDark ? 'border-white/10' : 'border-black/10'}\">\n` +
+          `          <div className=\"flex items-start justify-between gap-3\">\n` +
+          `            <div>\n` +
+          `              <div className=\"text-sm font-semibold ${headingTextClass}\">{title}</div>\n` +
+          `              {description ? <div className=\"mt-1 text-sm ${ui.mutedText}\">{description}</div> : null}\n` +
+          `            </div>\n` +
+          `            <button\n` +
+          `              type=\"button\"\n` +
+          `              className={buttonClasses({ variant: 'ghost', size: 'sm' })}\n` +
+          `              onClick={() => onOpenChange(false)}\n` +
+          `              aria-label=\"Close\"\n` +
+          `            >\n` +
+          `              Close\n` +
+          `            </button>\n` +
+          `          </div>\n` +
+          `        </div>\n` +
+          `        <div className=\"p-4\">{children}</div>\n` +
+          `        {footer ? (\n` +
+          `          <div className=\"p-4 border-t ${ui.isDark ? 'border-white/10' : 'border-black/10'}\">{footer}</div>\n` +
+          `        ) : null}\n` +
+          `      </div>\n` +
+          `    </div>,\n` +
+          `    document.body\n` +
+          `  );\n` +
+          `}\n`,
+      },
     ];
   }
 
@@ -578,6 +851,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
   const cardDividerClass = ui.isDark ? 'border-white/10' : 'border-black/10';
   const inputBgClass = ui.isDark ? 'bg-black/30' : 'bg-white/70';
   const placeholderClass = ui.isDark ? 'placeholder:text-gray-400' : 'placeholder:text-gray-500';
+  const skeletonBgClass = ui.isDark ? 'bg-white/10' : 'bg-black/10';
 
   return [
     {
@@ -665,6 +939,198 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `  );\n` +
         `}\n`,
     },
+    {
+      filePath: 'src/components/ui/Skeleton.jsx',
+      content:
+        `import { cn } from '../../lib/cn.js';\n\n` +
+        `export function Skeleton({ className, ...props }) {\n` +
+        `  return <div className={cn('animate-pulse rounded-md ${skeletonBgClass}', className)} {...props} />;\n` +
+        `}\n`,
+    },
+    {
+      filePath: 'src/components/ui/EmptyState.jsx',
+      content:
+        `import { cn } from '../../lib/cn.js';\n` +
+        `import { Badge } from './Badge.jsx';\n\n` +
+        `export function EmptyState({ title, description, hint, action, className }) {\n` +
+        `  return (\n` +
+        `    <div className={cn('w-full rounded-2xl border ${ui.border} ${ui.cardBg} p-6', className)}>\n` +
+        `      <div className="flex items-start gap-4">\n` +
+        `        <div className="flex h-11 w-11 items-center justify-center rounded-xl border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'}">\n` +
+        `          <div className="h-5 w-5 rounded-md ${skeletonBgClass}" />\n` +
+        `        </div>\n` +
+        `        <div className="flex-1">\n` +
+        `          <div className={cn('text-sm font-semibold ${headingTextClass}')}>{title}</div>\n` +
+        `          {description ? <div className={cn('mt-1 text-sm ${ui.mutedText}')}>{description}</div> : null}\n` +
+        `          {hint ? (\n` +
+        `            <div className="mt-3">\n` +
+        `              <Badge>{hint}</Badge>\n` +
+        `            </div>\n` +
+        `          ) : null}\n` +
+        `          {action ? <div className="mt-4">{action}</div> : null}\n` +
+        `        </div>\n` +
+        `      </div>\n` +
+        `    </div>\n` +
+        `  );\n` +
+        `}\n`,
+    },
+    {
+      filePath: 'src/components/ui/DataTable.jsx',
+      content:
+        `import { cn } from '../../lib/cn.js';\n` +
+        `import { EmptyState } from './EmptyState.jsx';\n` +
+        `import { Skeleton } from './Skeleton.jsx';\n\n` +
+        `export function DataTable({ columns, rows, isLoading, emptyTitle = 'Nothing here yet', emptyDescription = 'Once data exists, it will show up in this table.', className }) {\n` +
+        `  if (isLoading) {\n` +
+        `    return (\n` +
+        `      <div className={cn('w-full overflow-hidden rounded-2xl border ${ui.border} ${ui.cardBg}', className)}>\n` +
+        `        <div className="p-4 space-y-3">\n` +
+        `          <Skeleton className="h-5 w-48" />\n` +
+        `          <div className="space-y-2">\n` +
+        `            {Array.from({ length: 6 }).map((_, i) => (\n` +
+        `              <Skeleton key={i} className="h-10 w-full" />\n` +
+        `            ))}\n` +
+        `          </div>\n` +
+        `        </div>\n` +
+        `      </div>\n` +
+        `    );\n` +
+        `  }\n\n` +
+        `  if (!rows || rows.length === 0) {\n` +
+        `    return <EmptyState title={emptyTitle} description={emptyDescription} hint="Tip: connect Supabase to see real data" />;\n` +
+        `  }\n\n` +
+        `  return (\n` +
+        `    <div className={cn('w-full overflow-x-auto rounded-2xl border ${ui.border} ${ui.cardBg}', className)}>\n` +
+        `      <table className="min-w-full text-sm">\n` +
+        `        <thead>\n` +
+        `          <tr className="${ui.isDark ? 'text-gray-300' : 'text-gray-600'}">\n` +
+        `            {columns.map((col) => (\n` +
+        `              <th key={col.key} className={cn('px-4 py-3 text-left font-medium', col.className)}>\n` +
+        `                {col.header}\n` +
+        `              </th>\n` +
+        `            ))}\n` +
+        `          </tr>\n` +
+        `        </thead>\n` +
+        `        <tbody className="${ui.isDark ? 'divide-y divide-white/10' : 'divide-y divide-black/10'}">\n` +
+        `          {rows.map((row, idx) => (\n` +
+        `            <tr key={String(row?.id ?? idx)} className="${ui.isDark ? 'hover:bg-white/5' : 'hover:bg-black/5'} transition-colors">\n` +
+        `              {columns.map((col) => (\n` +
+        `                <td key={col.key} className={cn('px-4 py-3 align-top ${ui.isDark ? 'text-gray-200' : 'text-gray-700'}', col.className)}>\n` +
+        `                  {col.render ? col.render(row) : String(row?.[col.key] ?? '')}\n` +
+        `                </td>\n` +
+        `              ))}\n` +
+        `            </tr>\n` +
+        `          ))}\n` +
+        `        </tbody>\n` +
+        `      </table>\n` +
+        `    </div>\n` +
+        `  );\n` +
+        `}\n`,
+    },
+    {
+      filePath: 'src/components/ui/Tabs.jsx',
+      content:
+        `import React from 'react';\n` +
+        `import { cn } from '../../lib/cn.js';\n\n` +
+        `const TabsContext = React.createContext(null);\n\n` +
+        `export function Tabs({ value: controlled, defaultValue = '', onValueChange, className, children }) {\n` +
+        `  const [uncontrolled, setUncontrolled] = React.useState(defaultValue);\n` +
+        `  const value = controlled ?? uncontrolled;\n` +
+        `  const setValue = React.useCallback(\n` +
+        `    (v) => {\n` +
+        `      if (controlled == null) setUncontrolled(v);\n` +
+        `      onValueChange?.(v);\n` +
+        `    },\n` +
+        `    [controlled, onValueChange]\n` +
+        `  );\n` +
+        `  return (\n` +
+        `    <TabsContext.Provider value={{ value, setValue }}>\n` +
+        `      <div className={cn('w-full', className)}>{children}</div>\n` +
+        `    </TabsContext.Provider>\n` +
+        `  );\n` +
+        `}\n\n` +
+        `export function TabsList({ className, ...props }) {\n` +
+        `  return (\n` +
+        `    <div\n` +
+        `      className={cn(\n` +
+        `        'inline-flex items-center gap-1 rounded-xl border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'} p-1',\n` +
+        `        className\n` +
+        `      )}\n` +
+        `      {...props}\n` +
+        `    />\n` +
+        `  );\n` +
+        `}\n\n` +
+        `export function TabsTrigger({ value, className, children }) {\n` +
+        `  const ctx = React.useContext(TabsContext);\n` +
+        `  if (!ctx) throw new Error('TabsTrigger must be used within Tabs');\n` +
+        `  const active = ctx.value === value;\n` +
+        `  return (\n` +
+        `    <button\n` +
+        `      type="button"\n` +
+        `      onClick={() => ctx.setValue(value)}\n` +
+        `      className={cn(\n` +
+        `        'h-9 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 ${ui.accentRing}',\n` +
+        `        active\n` +
+        `          ? '${ui.isDark ? 'bg-black/40 text-white' : 'bg-white text-gray-900'} shadow-sm'\n` +
+        `          : '${ui.isDark ? 'text-gray-300 hover:bg-white/5 hover:text-white' : 'text-gray-700 hover:bg-black/5 hover:text-gray-900'}',\n` +
+        `        className\n` +
+        `      )}\n` +
+        `    >\n` +
+        `      {children}\n` +
+        `    </button>\n` +
+        `  );\n` +
+        `}\n\n` +
+        `export function TabsContent({ value, className, children }) {\n` +
+        `  const ctx = React.useContext(TabsContext);\n` +
+        `  if (!ctx) throw new Error('TabsContent must be used within Tabs');\n` +
+        `  if (ctx.value !== value) return null;\n` +
+        `  return <div className={cn('mt-4', className)}>{children}</div>;\n` +
+        `}\n`,
+    },
+    {
+      filePath: 'src/components/ui/Modal.jsx',
+      content:
+        `import React from 'react';\n` +
+        `import { createPortal } from 'react-dom';\n` +
+        `import { cn } from '../../lib/cn.js';\n` +
+        `import { buttonClasses } from './Button.jsx';\n\n` +
+        `export function Modal({ open, onOpenChange, title, description, children, footer, className }) {\n` +
+        `  React.useEffect(() => {\n` +
+        `    if (!open) return;\n` +
+        `    const onKeyDown = (e) => {\n` +
+        `      if (e.key === 'Escape') onOpenChange(false);\n` +
+        `    };\n` +
+        `    document.addEventListener('keydown', onKeyDown);\n` +
+        `    const prevOverflow = document.body.style.overflow;\n` +
+        `    document.body.style.overflow = 'hidden';\n` +
+        `    return () => {\n` +
+        `      document.removeEventListener('keydown', onKeyDown);\n` +
+        `      document.body.style.overflow = prevOverflow;\n` +
+        `    };\n` +
+        `  }, [open, onOpenChange]);\n\n` +
+        `  if (!open) return null;\n` +
+        `  return createPortal(\n` +
+        `    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">\n` +
+        `      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => onOpenChange(false)} />\n` +
+        `      <div role="dialog" aria-modal="true" className={cn('relative w-full max-w-lg rounded-2xl border ${ui.border} ${ui.cardBg} shadow-2xl', className)}>\n` +
+        `        <div className="p-4 border-b ${ui.isDark ? 'border-white/10' : 'border-black/10'}">\n` +
+        `          <div className="flex items-start justify-between gap-3">\n` +
+        `            <div>\n` +
+        `              <div className="text-sm font-semibold ${headingTextClass}">{title}</div>\n` +
+        `              {description ? <div className="mt-1 text-sm ${ui.mutedText}">{description}</div> : null}\n` +
+        `            </div>\n` +
+        `            <button type="button" className={buttonClasses({ variant: 'ghost', size: 'sm' })} onClick={() => onOpenChange(false)} aria-label="Close">\n` +
+        `              Close\n` +
+        `            </button>\n` +
+        `          </div>\n` +
+        `        </div>\n` +
+        `        <div className="p-4">{children}</div>\n` +
+        `        {footer ? <div className="p-4 border-t ${ui.isDark ? 'border-white/10' : 'border-black/10'}">{footer}</div> : null}\n` +
+        `      </div>\n` +
+        `    </div>,\n` +
+        `    document.body\n` +
+        `  );\n` +
+        `}\n`,
+    },
   ];
 }
 
@@ -745,9 +1211,7 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
 
   const headingClass = ui.isDark ? 'text-white' : 'text-gray-900';
   const bodyTextClass = ui.isDark ? 'text-gray-300' : 'text-gray-700';
-  const tableHeadClass = ui.isDark ? 'text-gray-400' : 'text-gray-500';
-  const rowTextClass = ui.isDark ? 'text-gray-200' : 'text-gray-700';
-  const rowDividerClass = ui.isDark ? 'divide-gray-800' : 'divide-gray-100';
+  // Table styling is handled by the shared DataTable primitive.
 
   const settingsAction = useRouter
     ? `<Link to="/settings" className={buttonClasses({ variant: 'primary' })}>Open Settings</Link>`
@@ -762,6 +1226,7 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n` +
     `import { Card } from '../components/ui/Card.jsx';\n` +
     `import { buttonClasses } from '../components/ui/Button.jsx';\n` +
+    `import { DataTable } from '../components/ui/DataTable.jsx';\n` +
     `import { seedData } from '../lib/data/seed.js';\n` +
     `import { createDataClient } from '../lib/data/index.js';\n\n` +
     `export default function Home() {\n` +
@@ -826,28 +1291,17 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     `            ) : loading ? (\n` +
     `              <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>Loading...</div>\n` +
     `            ) : rows.length === 0 ? (\n` +
-    `              <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>No rows returned yet.</div>\n` +
+    `              <DataTable\n` +
+    `                columns={[]}\n` +
+    `                rows={[]}\n` +
+    `                emptyTitle="No rows yet"\n` +
+    `                emptyDescription="Connect Supabase and create tables to see real data, or rely on seeded demo data."\n` +
+    `              />\n` +
     `            ) : (\n` +
-    `              <div className="overflow-x-auto">\n` +
-    `                <table className="min-w-full text-sm">\n` +
-    `                  <thead>\n` +
-    `                    <tr className={"text-left " + ${JSON.stringify(tableHeadClass)}}>\n` +
-    `                      {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n` +
-    `                        <th key={k} className="py-2 pr-4 font-medium">{k}</th>\n` +
-    `                      ))}\n` +
-    `                    </tr>\n` +
-    `                  </thead>\n` +
-    `                  <tbody className={"divide-y " + ${JSON.stringify(rowDividerClass)}}>\n` +
-    `                    {rows.map((r, idx) => (\n` +
-    `                      <tr key={String(r?.id || idx)} className=${JSON.stringify(rowTextClass)}>\n` +
-    `                        {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n` +
-    `                          <td key={k} className="py-2 pr-4">{String(r?.[k] ?? '')}</td>\n` +
-    `                        ))}\n` +
-    `                      </tr>\n` +
-    `                    ))}\n` +
-    `                  </tbody>\n` +
-    `                </table>\n` +
-    `              </div>\n` +
+    `              <DataTable\n` +
+    `                columns={Object.keys(rows[0] || {}).slice(0, 4).map((k) => ({ key: k, header: k }))}\n` +
+    `                rows={rows}\n` +
+    `              />\n` +
     `            )}\n` +
     `            <div className={"mt-4 text-xs " + ${JSON.stringify(ui.mutedText)}}>\n` +
     `              If you enabled Supabase, create tables by running <code className="px-1 py-0.5 border rounded ${ui.codeBg} ${ui.codeBorder} ${ui.codeText}">supabase/schema.sql</code> in Supabase.\n` +
