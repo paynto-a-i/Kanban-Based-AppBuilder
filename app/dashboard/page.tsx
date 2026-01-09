@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserMenu } from '@/components/auth/UserMenu';
+import { UserMenu, TenantSwitcher } from '@/components/auth';
 
 const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
@@ -117,6 +117,7 @@ export default function DashboardPage() {
             <span className="text-black-alpha-72">My Projects</span>
           </div>
           <div className="flex items-center gap-4">
+            <TenantSwitcher />
             <span className="text-sm text-black-alpha-72">{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>
             <UserMenu />
           </div>

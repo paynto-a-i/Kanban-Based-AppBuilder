@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getTenantContext } from '@/lib/auth/tenant';
 import { supabaseAdmin, Database } from '@/lib/supabase';
 import { projectSchema, validateAndParse } from '@/lib/api-validation';
 
@@ -11,16 +11,17 @@ export async function GET() {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const { userId } = await auth();
-
-    if (!userId) {
+    const tenant = await getTenantContext();
+    if (!tenant) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Query by tenant_id (supports both personal and org workspaces)
+    // Falls back to user_id for backwards compatibility
     const { data: projects, error } = await (supabaseAdmin as any)
       .from('projects')
-      .select('id, name, description, sandbox_id, sandbox_url, mode, source_url, created_at, updated_at, github_repo, github_branch')
-      .eq('user_id', userId)
+      .select('id, name, description, sandbox_id, sandbox_url, mode, source_url, created_at, updated_at, github_repo, github_branch, user_id, org_id')
+      .or(`user_id.eq.${tenant.userId},org_id.eq.${tenant.orgId || 'null'}`)
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -28,7 +29,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
     }
 
-    const formattedProjects = (projects as Project[] | null)?.map(p => ({
+    // Filter based on current context
+    const filteredProjects = (projects as any[] | null)?.filter(p => {
+      if (tenant.tenantType === 'organization') {
+        return p.org_id === tenant.orgId;
+      }
+      return p.user_id === tenant.userId && !p.org_id;
+    });
+
+    const formattedProjects = filteredProjects?.map(p => ({
       id: p.id,
       name: p.name,
       description: p.description,
@@ -40,9 +49,16 @@ export async function GET() {
       updatedAt: p.updated_at,
       githubRepo: p.github_repo,
       githubBranch: p.github_branch,
+      orgId: p.org_id,
     }));
 
-    return NextResponse.json({ projects: formattedProjects });
+    return NextResponse.json({
+      projects: formattedProjects,
+      tenant: {
+        type: tenant.tenantType,
+        orgId: tenant.orgId,
+      }
+    });
   } catch (error: any) {
     console.error('[Projects API] Error:', error);
     return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
@@ -55,9 +71,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const { userId } = await auth();
-
-    if (!userId) {
+    const tenant = await getTenantContext();
+    if (!tenant) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -78,7 +93,8 @@ export async function POST(request: NextRequest) {
     const { data, error } = await (supabaseAdmin as any)
       .from('projects')
       .insert({
-        user_id: userId,
+        user_id: tenant.userId,
+        org_id: tenant.orgId || null, // Set org_id if in organization context
         name,
         description: description || null,
         sandbox_id: sandboxId || null,
@@ -99,7 +115,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create project' }, { status: 500 });
     }
 
-    const project = data as Project;
+    const project = data as Project & { org_id?: string };
 
     return NextResponse.json({
       project: {
@@ -112,6 +128,7 @@ export async function POST(request: NextRequest) {
         sourceUrl: project.source_url,
         createdAt: project.created_at,
         updatedAt: project.updated_at,
+        orgId: project.org_id,
       }
     }, { status: 201 });
   } catch (error: any) {
