@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
-import { authOptions } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 
 const listQuerySchema = z.object({
@@ -32,8 +31,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -47,7 +46,7 @@ export async function GET(request: NextRequest) {
       .from('projects')
       .select('id')
       .eq('id', projectId)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (projectError || !project) {
@@ -95,8 +94,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
       .from('projects')
       .select('id')
       .eq('id', projectId)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (projectError || !project) {
@@ -204,5 +203,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create plan version' }, { status: 500 });
   }
 }
-
-

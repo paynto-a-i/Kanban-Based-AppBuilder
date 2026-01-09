@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Project, ProjectVersion } from '@/lib/versioning/types';
 
 export async function POST(request: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session?.user?.id) {
+        const { userId } = await auth();
+        if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -15,7 +14,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
         }
 
-        const userId = session.user.id;
         const body = await request.json();
         const { action, ...data } = body;
 
@@ -245,7 +243,7 @@ async function handleGetStorageUsed(userId: string) {
     }
 
     const projectIds = projects.map((p: any) => p.id);
-    
+
     const { data: versions } = await (supabaseAdmin as any)
         .from('versions')
         .select('total_size')
@@ -267,7 +265,7 @@ async function handleClear(userId: string) {
                 .from('versions')
                 .delete()
                 .eq('project_id', project.id);
-            
+
             await (supabaseAdmin as any)
                 .from('projects')
                 .delete()

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
@@ -19,17 +20,8 @@ interface Project {
   updatedAt: string;
 }
 
-function useOptionalSession() {
-  try {
-    const session = useSession();
-    return session || { data: null, status: 'unauthenticated' as const };
-  } catch {
-    return { data: null, status: 'unauthenticated' as const };
-  }
-}
-
 export default function DashboardPage() {
-  const { data: session, status } = useOptionalSession();
+  const { user, isLoaded, isSignedIn } = useUser();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,12 +35,12 @@ export default function DashboardPage() {
       router.push('/generation');
       return;
     }
-    if (status === 'authenticated') {
+    if (isLoaded && isSignedIn) {
       loadProjects();
-    } else if (status === 'unauthenticated') {
-      router.push('/login?callbackUrl=/dashboard');
+    } else if (isLoaded && !isSignedIn) {
+      router.push('/sign-in?redirect_url=/dashboard');
     }
-  }, [status, router]);
+  }, [isLoaded, isSignedIn, router]);
 
   const loadProjects = async () => {
     try {
@@ -105,7 +97,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (status === 'loading' || isLoading) {
+  if (!isLoaded || isLoading) {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
@@ -125,14 +117,8 @@ export default function DashboardPage() {
             <span className="text-black-alpha-72">My Projects</span>
           </div>
           <div className="flex items-center gap-4">
-            {session?.user?.image && (
-              <img
-                src={session.user.image}
-                alt={session.user.name || 'User'}
-                className="w-8 h-8 rounded-full"
-              />
-            )}
-            <span className="text-sm text-black-alpha-72">{session?.user?.name}</span>
+            <span className="text-sm text-black-alpha-72">{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>
+            <UserMenu />
           </div>
         </div>
       </header>
@@ -196,8 +182,8 @@ export default function DashboardPage() {
                   )}
                   <div className="absolute top-2 right-2">
                     <span className={`px-2 py-1 text-xs rounded-full ${
-                      project.mode === 'clone' 
-                        ? 'bg-blue-100 text-blue-700' 
+                      project.mode === 'clone'
+                        ? 'bg-blue-100 text-blue-700'
                         : 'bg-purple-100 text-purple-700'
                     }`}>
                       {project.mode === 'clone' ? 'Clone' : 'Prompt'}

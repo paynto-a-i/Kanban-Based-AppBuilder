@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin, Database } from '@/lib/supabase';
 import { projectSchema, validateAndParse } from '@/lib/api-validation';
 
@@ -12,16 +11,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { data: projects, error } = await (supabaseAdmin as any)
       .from('projects')
       .select('id, name, description, sandbox_id, sandbox_url, mode, source_url, created_at, updated_at, github_repo, github_branch')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -56,9 +55,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
     }
 
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+
+    if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -79,7 +78,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await (supabaseAdmin as any)
       .from('projects')
       .insert({
-        user_id: session.user.id,
+        user_id: userId,
         name,
         description: description || null,
         sandbox_id: sandboxId || null,
@@ -92,17 +91,17 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[Projects API] Error creating project:', error);
-      
+
       if (error.code === '23505') {
         return NextResponse.json({ error: 'Project with this name already exists' }, { status: 409 });
       }
-      
+
       return NextResponse.json({ error: 'Failed to create project' }, { status: 500 });
     }
 
     const project = data as Project;
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       project: {
         id: project.id,
         name: project.name,

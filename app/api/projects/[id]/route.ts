@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin, Database } from '@/lib/supabase';
 
 type Project = Database['public']['Tables']['projects']['Row'];
@@ -14,9 +13,9 @@ export async function GET(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user?.id) {
+  const { userId } = await auth();
+
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -27,7 +26,7 @@ export async function GET(
       .from('projects')
       .select('*')
       .eq('id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (error || !data) {
@@ -43,7 +42,7 @@ export async function GET(
       .order('created_at', { ascending: false })
       .limit(10);
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       project: {
         id: project.id,
         name: project.name,
@@ -73,9 +72,9 @@ export async function PATCH(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user?.id) {
+  const { userId } = await auth();
+
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -89,7 +88,7 @@ export async function PATCH(
       .from('projects')
       .select('id')
       .eq('id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (!existing) {
@@ -120,7 +119,7 @@ export async function PATCH(
 
     const project = data as Project;
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       project: {
         id: project.id,
         name: project.name,
@@ -149,9 +148,9 @@ export async function DELETE(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user?.id) {
+  const { userId } = await auth();
+
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -162,7 +161,7 @@ export async function DELETE(
       .from('projects')
       .select('id')
       .eq('id', id)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (!existing) {

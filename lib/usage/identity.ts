@@ -1,6 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth } from '@clerk/nextjs/server';
 import type { UsageTier } from './limits';
 
 export interface UsageActor {
@@ -27,8 +26,8 @@ export async function getUsageActor(request: NextRequest): Promise<UsageActor> {
 
   let userId: string | null = null;
   try {
-    const session = await getServerSession(authOptions);
-    userId = (session as any)?.user?.id || null;
+    const { userId: clerkUserId } = await auth();
+    userId = clerkUserId;
   } catch {
     userId = null;
   }
@@ -48,4 +47,3 @@ export async function getUsageActor(request: NextRequest): Promise<UsageActor> {
     isAuthenticated: Boolean(userId),
   };
 }
-

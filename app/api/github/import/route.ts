@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions, getGitHubToken } from '@/lib/auth';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
 async function getToken(request: NextRequest): Promise<string | null> {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.id) {
-    const token = await getGitHubToken(session.user.id);
-    if (token) return token;
-  }
-
+  // Check Authorization header first
   const authHeader = request.headers.get('Authorization');
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.substring(7);
+  }
+
+  // Check cookie for GitHub token
+  const cookieStore = await cookies();
+  const tokenCookie = cookieStore.get('github_access_token');
+  if (tokenCookie?.value) {
+    return tokenCookie.value;
   }
 
   return null;

@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useUser } from '@clerk/nextjs';
 import {
     Project,
     ProjectVersion,
@@ -80,7 +80,7 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         enableAutoSave = true
     } = options;
 
-    const { data: session, status: sessionStatus } = useSession();
+    const { user, isLoaded, isSignedIn } = useUser();
 
     // State
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -105,16 +105,16 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
     // Enable Supabase storage when user is authenticated
     // Guest users continue with localStorage
     useEffect(() => {
-        if (sessionStatus === 'authenticated' && session?.user?.id) {
-            versionManager.enableSupabase(session.user.id);
-            console.log('[useVersioning] Supabase storage enabled for user:', session.user.id);
+        if (isLoaded && isSignedIn && user?.id) {
+            versionManager.enableSupabase(user.id);
+            console.log('[useVersioning] Supabase storage enabled for user:', user.id);
         } else {
             versionManager.disableSupabase();
-            if (sessionStatus === 'unauthenticated') {
+            if (isLoaded && !isSignedIn) {
                 console.log('[useVersioning] Using localStorage (guest mode)');
             }
         }
-    }, [session, sessionStatus]);
+    }, [user, isLoaded, isSignedIn]);
 
     // Initialize GitHub state
     useEffect(() => {
@@ -355,17 +355,17 @@ export function useVersioning(options: UseVersioningOptions = {}): UseVersioning
         };
     }, [enableAutoSave, autoSaveInterval, currentProject]);
 
-    const isAuthenticated = sessionStatus === 'authenticated';
-    const user = session?.user ? {
-        id: session.user.id as string,
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image
+    const isAuthenticated = isLoaded && isSignedIn;
+    const userData = user ? {
+        id: user.id,
+        name: user.fullName,
+        email: user.primaryEmailAddress?.emailAddress || null,
+        image: user.imageUrl
     } : null;
 
     return {
         isAuthenticated,
-        user,
+        user: userData,
         isUsingSupabase: versionManager.isSupabaseEnabled(),
         currentProject,
         versions,
