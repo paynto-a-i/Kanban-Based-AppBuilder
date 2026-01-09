@@ -31,7 +31,8 @@ export const appConfig = {
   // AI Model Configuration
   ai: {
     // Default AI model
-    defaultModel: 'openai/gpt-4o-mini',
+    // Higher default quality (users can still switch to faster models in the UI).
+    defaultModel: 'openai/gpt-4o',
 
     // Available models
     availableModels: [

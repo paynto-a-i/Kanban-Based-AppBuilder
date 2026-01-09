@@ -7,7 +7,7 @@ export interface SandboxFile {
 export interface SandboxInfo {
   sandboxId: string;
   url: string;
-  provider: 'modal';
+  provider: 'modal' | 'vercel';
   createdAt: Date;
   templateTarget?: TemplateTarget;
   devPort?: number;
@@ -27,6 +27,12 @@ export interface SandboxProviderConfig {
   modal?: {
     tokenId?: string;
     tokenSecret?: string;
+  };
+  vercel?: {
+    token?: string;
+    teamId?: string;
+    projectId?: string;
+    oidcToken?: string;
   };
 }
 

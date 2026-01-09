@@ -97,16 +97,89 @@ function buildMockSeedFile(blueprint: BuildBlueprint, template: TemplateTarget):
   };
 }
 
+function buildSupabaseSchemaFile(blueprint: BuildBlueprint, template: TemplateTarget): { filePath: string; content: string } {
+  const entities = blueprint.entities && blueprint.entities.length > 0
+    ? blueprint.entities
+    : [{
+      name: 'Item',
+      description: 'Fallback demo entity',
+      fields: [
+        { name: 'id', type: 'uuid', required: true },
+        { name: 'title', type: 'text', required: true },
+        { name: 'createdAt', type: 'timestamptz', required: true },
+      ],
+      seedCount: 5,
+    }];
+
+  const toSnake = (s: string) =>
+    String(s || 'items')
+      .trim()
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase() || 'items';
+
+  const mapType = (t: string) => {
+    const tt = String(t || '').toLowerCase();
+    if (tt.includes('uuid')) return 'uuid';
+    if (tt.includes('int')) return 'integer';
+    if (tt.includes('number') || tt.includes('float') || tt.includes('double') || tt.includes('numeric')) return 'numeric';
+    if (tt.includes('bool')) return 'boolean';
+    if (tt.includes('time') || tt.includes('date')) return 'timestamptz';
+    return 'text';
+  };
+
+  const blocks = entities.map((e) => {
+    const table = toSnake(e.name);
+    const fields = Array.isArray(e.fields) ? e.fields : [];
+
+    const cols: string[] = [];
+    const hasId = fields.some((f: any) => String(f?.name || '').toLowerCase() === 'id');
+    if (hasId) {
+      cols.push('  id uuid primary key default gen_random_uuid()');
+    } else {
+      cols.push('  id uuid primary key default gen_random_uuid()');
+    }
+
+    for (const f of fields) {
+      const rawName = String((f as any)?.name || '').trim();
+      if (!rawName) continue;
+      if (rawName.toLowerCase() === 'id') continue;
+      const col = toSnake(rawName);
+      const typ = mapType(String((f as any)?.type || 'text'));
+      const required = Boolean((f as any)?.required);
+      cols.push(`  ${col} ${typ}${required ? ' not null' : ''}`);
+    }
+
+    // Always include timestamps
+    cols.push('  created_at timestamptz not null default now()');
+    cols.push('  updated_at timestamptz not null default now()');
+
+    return `-- ${e.name}\ncreate table if not exists public.${table} (\n${cols.join(',\n')}\n);\n`;
+  });
+
+  const content = `-- Supabase schema for the scaffolded app\n-- Run in Supabase SQL editor.\n\n${blocks.join('\n')}\n`;
+
+  return {
+    filePath: template === 'next' ? 'supabase/schema.sql' : 'supabase/schema.sql',
+    content,
+  };
+}
+
 function buildMockClientFiles(template: TemplateTarget): Array<{ filePath: string; content: string }> {
   if (template === 'next') {
     return [
       {
         filePath: 'lib/data/mockClient.ts',
-        content: `import { seedData } from './seed';\n\nexport type EntityName = keyof typeof seedData;\n\nexport interface DataClient {\n  list<T extends EntityName>(entity: T): Array<(typeof seedData)[T][number]>;\n  create<T extends EntityName>(entity: T, record: Partial<(typeof seedData)[T][number]>): (typeof seedData)[T][number];\n  update<T extends EntityName>(entity: T, id: string, patch: Partial<(typeof seedData)[T][number]>): (typeof seedData)[T][number] | null;\n  remove<T extends EntityName>(entity: T, id: string): boolean;\n}\n\nexport function createMockDataClient(): DataClient {\n  const db: any = JSON.parse(JSON.stringify(seedData));\n\n  return {\n    list(entity) {\n      return Array.isArray(db[entity]) ? db[entity] : [];\n    },\n    create(entity, record) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : (db[entity] = []);\n      const id = String(Date.now());\n      const created = { id, ...record };\n      collection.push(created);\n      return created;\n    },\n    update(entity, id, patch) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex((r: any) => String(r.id) === String(id));\n      if (idx === -1) return null;\n      collection[idx] = { ...collection[idx], ...patch };\n      return collection[idx];\n    },\n    remove(entity, id) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex((r: any) => String(r.id) === String(id));\n      if (idx === -1) return false;\n      collection.splice(idx, 1);\n      return true;\n    },\n  };\n}\n`,
+        content: `import { seedData } from './seed';\n\nexport type EntityName = keyof typeof seedData;\n\ntype RowFor<T extends EntityName> = (typeof seedData)[T][number];\n\nexport interface DataClient {\n  list<T extends EntityName>(entity: T): Promise<Array<RowFor<T>>>;\n  create<T extends EntityName>(entity: T, record: Partial<RowFor<T>>): Promise<RowFor<T>>;\n  update<T extends EntityName>(entity: T, id: string, patch: Partial<RowFor<T>>): Promise<RowFor<T> | null>;\n  remove<T extends EntityName>(entity: T, id: string): Promise<boolean>;\n}\n\nexport function createMockDataClient(): DataClient {\n  const db: any = JSON.parse(JSON.stringify(seedData));\n\n  return {\n    async list(entity) {\n      return Array.isArray(db[entity]) ? db[entity] : [];\n    },\n    async create(entity, record) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : (db[entity] = []);\n      const id = String(Date.now());\n      const created = { id, ...record };\n      collection.push(created);\n      return created;\n    },\n    async update(entity, id, patch) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex((r: any) => String(r.id) === String(id));\n      if (idx === -1) return null;\n      collection[idx] = { ...collection[idx], ...patch };\n      return collection[idx];\n    },\n    async remove(entity, id) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex((r: any) => String(r.id) === String(id));\n      if (idx === -1) return false;\n      collection.splice(idx, 1);\n      return true;\n    },\n  };\n}\n`,
+      },
+      {
+        filePath: 'lib/data/supabaseAdapter.ts',
+        content: `import { createClient } from '@supabase/supabase-js';\nimport type { DataClient, EntityName } from './mockClient';\n\nfunction toSnake(s: string) {\n  return String(s || '')\n    .trim()\n    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')\n    .replace(/[^a-zA-Z0-9]+/g, '_')\n    .replace(/^_+|_+$/g, '')\n    .toLowerCase();\n}\n\nexport function createSupabaseDataClient(): DataClient {\n  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;\n  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;\n  if (!url || !anonKey) {\n    throw new Error('Supabase env vars missing');\n  }\n\n  const supabase = createClient(url, anonKey);\n\n  return {\n    async list(entity) {\n      const table = toSnake(String(entity));\n      const { data, error } = await supabase.from(table).select('*').limit(200);\n      if (error) throw error;\n      return (data as any[]) || [];\n    },\n    async create(entity, record) {\n      const table = toSnake(String(entity));\n      const { data, error } = await supabase.from(table).insert(record as any).select('*').single();\n      if (error) throw error;\n      return data as any;\n    },\n    async update(entity, id, patch) {\n      const table = toSnake(String(entity));\n      const { data, error } = await supabase.from(table).update(patch as any).eq('id', id).select('*').maybeSingle();\n      if (error) throw error;\n      return (data as any) || null;\n    },\n    async remove(entity, id) {\n      const table = toSnake(String(entity));\n      const { error } = await supabase.from(table).delete().eq('id', id);\n      if (error) throw error;\n      return true;\n    },\n  };\n}\n`,
       },
       {
         filePath: 'lib/data/index.ts',
-        content: `import { createMockDataClient } from './mockClient';\n\nexport type { DataClient } from './mockClient';\n\nexport function createDataClient() {\n  // Mock-first strategy: always works immediately.\n  // Optional real DB upgrade will swap this client when env vars/credentials are present.\n  return createMockDataClient();\n}\n`,
+        content: `import { createMockDataClient } from './mockClient';\nimport { createSupabaseDataClient } from './supabaseAdapter';\n\nexport type { DataClient, EntityName } from './mockClient';\n\nexport function createDataClient() {\n  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n  const mock = createMockDataClient();\n\n  if (!hasSupabase) return mock;\n\n  try {\n    const supa = createSupabaseDataClient();\n    // Wrap so a broken/missing schema doesn't crash the app in real_optional mode.\n    return {\n      async list(entity) {\n        try {\n          return await supa.list(entity);\n        } catch (e) {\n          console.warn('[data] Supabase list failed; falling back to mock', e);\n          return await mock.list(entity);\n        }\n      },\n      async create(entity, record) {\n        try {\n          return await supa.create(entity, record);\n        } catch (e) {\n          console.warn('[data] Supabase create failed; falling back to mock', e);\n          return await mock.create(entity, record);\n        }\n      },\n      async update(entity, id, patch) {\n        try {\n          return await supa.update(entity, id, patch);\n        } catch (e) {\n          console.warn('[data] Supabase update failed; falling back to mock', e);\n          return await mock.update(entity, id, patch);\n        }\n      },\n      async remove(entity, id) {\n        try {\n          return await supa.remove(entity, id);\n        } catch (e) {\n          console.warn('[data] Supabase remove failed; falling back to mock', e);\n          return await mock.remove(entity, id);\n        }\n      },\n    };\n  } catch (e) {\n    console.warn('[data] Supabase client failed; falling back to mock', e);\n    return mock;\n  }\n}\n`,
       },
     ];
   }
@@ -114,11 +187,15 @@ function buildMockClientFiles(template: TemplateTarget): Array<{ filePath: strin
   return [
     {
       filePath: 'src/lib/data/mockClient.js',
-      content: `import { seedData } from './seed.js';\n\nexport function createMockDataClient() {\n  const db = JSON.parse(JSON.stringify(seedData));\n\n  return {\n    list(entity) {\n      return Array.isArray(db[entity]) ? db[entity] : [];\n    },\n    create(entity, record) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : (db[entity] = []);\n      const id = String(Date.now());\n      const created = { id, ...record };\n      collection.push(created);\n      return created;\n    },\n    update(entity, id, patch) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex(r => String(r.id) === String(id));\n      if (idx === -1) return null;\n      collection[idx] = { ...collection[idx], ...patch };\n      return collection[idx];\n    },\n    remove(entity, id) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex(r => String(r.id) === String(id));\n      if (idx === -1) return false;\n      collection.splice(idx, 1);\n      return true;\n    }\n  };\n}\n`,
+      content: `import { seedData } from './seed.js';\n\nexport function createMockDataClient() {\n  const db = JSON.parse(JSON.stringify(seedData));\n\n  return {\n    async list(entity) {\n      return Array.isArray(db[entity]) ? db[entity] : [];\n    },\n    async create(entity, record) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : (db[entity] = []);\n      const id = String(Date.now());\n      const created = { id, ...record };\n      collection.push(created);\n      return created;\n    },\n    async update(entity, id, patch) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex(r => String(r.id) === String(id));\n      if (idx === -1) return null;\n      collection[idx] = { ...collection[idx], ...patch };\n      return collection[idx];\n    },\n    async remove(entity, id) {\n      const collection = Array.isArray(db[entity]) ? db[entity] : [];\n      const idx = collection.findIndex(r => String(r.id) === String(id));\n      if (idx === -1) return false;\n      collection.splice(idx, 1);\n      return true;\n    }\n  };\n}\n`,
+    },
+    {
+      filePath: 'src/lib/data/supabaseAdapter.js',
+      content: `import { createClient } from '@supabase/supabase-js';\n\nfunction toSnake(s) {\n  return String(s || '')\n    .trim()\n    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')\n    .replace(/[^a-zA-Z0-9]+/g, '_')\n    .replace(/^_+|_+$/g, '')\n    .toLowerCase();\n}\n\nexport function createSupabaseDataClient() {\n  const url = import.meta.env.VITE_SUPABASE_URL;\n  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;\n  if (!url || !anonKey) {\n    throw new Error('Supabase env vars missing');\n  }\n\n  const supabase = createClient(url, anonKey);\n\n  return {\n    async list(entity) {\n      const table = toSnake(entity);\n      const { data, error } = await supabase.from(table).select('*').limit(200);\n      if (error) throw error;\n      return data || [];\n    },\n    async create(entity, record) {\n      const table = toSnake(entity);\n      const { data, error } = await supabase.from(table).insert(record).select('*').single();\n      if (error) throw error;\n      return data;\n    },\n    async update(entity, id, patch) {\n      const table = toSnake(entity);\n      const { data, error } = await supabase.from(table).update(patch).eq('id', id).select('*').maybeSingle();\n      if (error) throw error;\n      return data || null;\n    },\n    async remove(entity, id) {\n      const table = toSnake(entity);\n      const { error } = await supabase.from(table).delete().eq('id', id);\n      if (error) throw error;\n      return true;\n    }\n  };\n}\n`,
     },
     {
       filePath: 'src/lib/data/index.js',
-      content: `import { createMockDataClient } from './mockClient.js';\n\nexport function createDataClient() {\n  // Mock-first strategy: always works immediately.\n  // Optional real DB upgrade will swap this client when credentials are provided.\n  return createMockDataClient();\n}\n`,
+      content: `import { createMockDataClient } from './mockClient.js';\nimport { createSupabaseDataClient } from './supabaseAdapter.js';\n\nexport function createDataClient() {\n  const hasSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);\n  const mock = createMockDataClient();\n\n  if (!hasSupabase) return mock;\n\n  try {\n    const supa = createSupabaseDataClient();\n    // Wrap so missing tables / RLS / schema issues don't hard-crash the UI in real_optional mode.\n    return {\n      async list(entity) {\n        try {\n          return await supa.list(entity);\n        } catch (e) {\n          console.warn('[data] Supabase list failed; falling back to mock', e);\n          return await mock.list(entity);\n        }\n      },\n      async create(entity, record) {\n        try {\n          return await supa.create(entity, record);\n        } catch (e) {\n          console.warn('[data] Supabase create failed; falling back to mock', e);\n          return await mock.create(entity, record);\n        }\n      },\n      async update(entity, id, patch) {\n        try {\n          return await supa.update(entity, id, patch);\n        } catch (e) {\n          console.warn('[data] Supabase update failed; falling back to mock', e);\n          return await mock.update(entity, id, patch);\n        }\n      },\n      async remove(entity, id) {\n        try {\n          return await supa.remove(entity, id);\n        } catch (e) {\n          console.warn('[data] Supabase remove failed; falling back to mock', e);\n          return await mock.remove(entity, id);\n        }\n      },\n    };\n  } catch (e) {\n    console.warn('[data] Supabase client failed; falling back to mock', e);\n    return mock;\n  }\n}\n`,
     },
   ];
 }
@@ -127,13 +204,13 @@ function buildDataModeBanner(template: TemplateTarget): { filePath: string; cont
   if (template === 'next') {
     return {
       filePath: 'components/DataModeBanner.tsx',
-      content: `export function DataModeBanner() {\n  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border border-gray-800 bg-gray-900/40 rounded-lg p-4\">\n      <div className=\"text-sm font-medium\">Data mode</div>\n      <div className=\"mt-1 text-sm text-gray-300\">\n        {hasSupabase ? 'Supabase env vars detected. The app will use Supabase when the real data adapter is enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs text-gray-400\">\n          To enable Supabase later, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.\n        </div>\n      ) : null}\n    </div>\n  );\n}\n`,
+      content: `export function DataModeBanner() {\n  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border border-gray-800 bg-gray-900/40 rounded-lg p-4\">\n      <div className=\"text-sm font-medium\">Data mode</div>\n      <div className=\"mt-1 text-sm text-gray-300\">\n        {hasSupabase ? 'Supabase env vars detected — real database mode enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs text-gray-400\">\n          To enable Supabase, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.\n        </div>\n      ) : (\n        <div className=\"mt-2 text-xs text-gray-400\">\n          If you haven’t created tables yet, see <code className=\"px-1 py-0.5 bg-black/40 rounded\">supabase/schema.sql</code>.\n        </div>\n      )}\n    </div>\n  );\n}\n`,
     };
   }
 
   return {
     filePath: 'src/components/DataModeBanner.jsx',
-    content: `export function DataModeBanner() {\n  const hasSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border border-gray-200 bg-gray-50 rounded-lg p-4\">\n      <div className=\"text-sm font-medium text-gray-900\">Data mode</div>\n      <div className=\"mt-1 text-sm text-gray-700\">\n        {hasSupabase ? 'Supabase env vars detected. The app will use Supabase when the real data adapter is enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs text-gray-600\">\n          To enable Supabase later, add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.\n        </div>\n      ) : null}\n    </div>\n  );\n}\n`,
+    content: `export function DataModeBanner() {\n  const hasSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border border-gray-200 bg-gray-50 rounded-lg p-4\">\n      <div className=\"text-sm font-medium text-gray-900\">Data mode</div>\n      <div className=\"mt-1 text-sm text-gray-700\">\n        {hasSupabase ? 'Supabase env vars detected — real database mode enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs text-gray-600\">\n          To enable Supabase, add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.\n        </div>\n      ) : (\n        <div className=\"mt-2 text-xs text-gray-600\">\n          If you haven’t created tables yet, see <code className=\"px-1 py-0.5 bg-white border border-gray-200 rounded\">supabase/schema.sql</code>.\n        </div>\n      )}\n    </div>\n  );\n}\n`,
   };
 }
 
@@ -202,9 +279,129 @@ function buildVitePages(blueprint: BuildBlueprint): Array<{ filePath: string; co
     return `      <section id="${id}" className="py-16 border-t border-gray-200">\n        <h2 className="text-2xl font-semibold text-gray-900">${r.title}</h2>\n        <p className="mt-2 text-sm text-gray-700">${r.description || 'Section content goes here.'}</p>\n      </section>`;
   }).join('\n\n');
 
+  /*
   pages.push({
     filePath: 'src/pages/Home.jsx',
-    content: `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n\nexport default function Home() {\n  return (\n    <div className="mx-auto w-full max-w-5xl px-4 py-10">\n      <h1 className="text-3xl font-semibold text-gray-900">Home</h1>\n      <p className="mt-2 text-sm text-gray-700">Scaffolded from blueprint routes and navigation.</p>\n\n      <div className="mt-6">\n        <DataModeBanner />\n      </div>\n\n${homeSections ? `\n${homeSections}\n` : ''}\n    </div>\n  );\n}\n`,
+    content: `import { useEffect, useMemo, useState } from 'react';\nimport { DataModeBanner } from '../components/DataModeBanner.jsx';\nimport { seedData } from '../lib/data/seed.js';\nimport { createDataClient } from '../lib/data/index.js';\n\nfunction Card({ title, children }) {\n  return (\n    <div className=\"rounded-xl border border-gray-200 bg-white shadow-sm\">\n      {title ? (\n        <div className=\"px-4 py-3 border-b border-gray-100\">\n          <div className=\"text-sm font-semibold text-gray-900\">{title}</div>\n        </div>\n      ) : null}\n      <div className=\"p-4\">{children}</div>\n    </div>\n  );\n}\n\nexport default function Home() {\n  const entityNames = Object.keys(seedData || {});\n  const primaryEntity = entityNames[0] || null;\n\n  const client = useMemo(() => createDataClient(), []);\n  const [rows, setRows] = useState([]);\n  const [loading, setLoading] = useState(true);\n\n  useEffect(() => {\n    let cancelled = false;\n    async function load() {\n      if (!primaryEntity) {\n        setLoading(false);\n        return;\n      }\n      try {\n        const data = await client.list(primaryEntity);\n        if (!cancelled) setRows(Array.isArray(data) ? data.slice(0, 8) : []);\n      } catch (e) {\n        console.warn('[home] Failed to load rows (using seed fallback):', e);\n        if (!cancelled) setRows(Array.isArray(seedData?.[primaryEntity]) ? seedData[primaryEntity].slice(0, 8) : []);\n      } finally {\n        if (!cancelled) setLoading(false);\n      }\n    }\n    load();\n    return () => {\n      cancelled = true;\n    };\n  }, [client, primaryEntity]);\n\n  return (\n    <div className=\"min-h-screen bg-gradient-to-b from-gray-50 to-white\">\n      <div className=\"mx-auto w-full max-w-6xl px-4 py-10\">\n        <div className=\"flex flex-col gap-2\">\n          <h1 className=\"text-3xl font-semibold text-gray-900\">Home</h1>\n          <p className=\"text-sm text-gray-600\">Scaffolded from blueprint routes and navigation — this is the starting point before the build fills in real features.</p>\n        </div>\n\n        <div className=\"mt-6\">\n          <DataModeBanner />\n        </div>\n\n        <div className=\"mt-8 grid grid-cols-1 md:grid-cols-3 gap-4\">\n          <Card title=\"Blueprint\">\n            <div className=\"text-sm text-gray-700\">Routes: <span className=\"font-medium text-gray-900\">${pageRoutes.length}</span></div>\n            <div className=\"mt-1 text-sm text-gray-700\">Entities: <span className=\"font-medium text-gray-900\">{entityNames.length || 0}</span></div>\n            <div className=\"mt-3 text-xs text-gray-500\">Tip: run the build to replace scaffolding with app-specific UI & logic.</div>\n          </Card>\n          <Card title=\"Quick actions\">\n            <div className=\"flex flex-wrap gap-2\">\n              <a href=\"/settings\" className=\"inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50\">Open Settings</a>\n              <a href=\"/help\" className=\"inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50\">Open Help</a>\n            </div>\n          </Card>\n          <Card title=\"Data preview\">\n            <div className=\"text-sm text-gray-700\">Entity: <span className=\"font-medium text-gray-900\">{primaryEntity || '—'}</span></div>\n            <div className=\"mt-1 text-xs text-gray-500\">Shows mock seed data by default, and Supabase data when configured.</div>\n          </Card>\n        </div>\n\n        <div className=\"mt-8\">\n          <Card title={primaryEntity ? `Sample ${primaryEntity} records` : 'Sample records'}>\n            {!primaryEntity ? (\n              <div className=\"text-sm text-gray-600\">No entities found in the blueprint seed.</div>\n            ) : loading ? (\n              <div className=\"text-sm text-gray-600\">Loading…</div>\n            ) : rows.length === 0 ? (\n              <div className=\"text-sm text-gray-600\">No rows returned yet.</div>\n            ) : (\n              <div className=\"overflow-x-auto\">\n                <table className=\"min-w-full text-sm\">\n                  <thead>\n                    <tr className=\"text-left text-gray-500\">\n                      {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n                        <th key={k} className=\"py-2 pr-4 font-medium\">{k}</th>\n                      ))}\n                    </tr>\n                  </thead>\n                  <tbody className=\"divide-y divide-gray-100\">\n                    {rows.map((r, idx) => (\n                      <tr key={String(r?.id || idx)} className=\"text-gray-700\">\n                        {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n                          <td key={k} className=\"py-2 pr-4\">{String(r?.[k] ?? '')}</td>\n                        ))}\n                      </tr>\n                    ))}\n                  </tbody>\n                </table>\n              </div>\n            )}\n            <div className=\"mt-4 text-xs text-gray-500\">\n              If you enabled Supabase, create tables by running <code className=\"px-1 py-0.5 bg-gray-50 border border-gray-200 rounded\">supabase/schema.sql</code> in Supabase.\n            </div>\n          </Card>\n        </div>\n\n${homeSections ? `\n${homeSections}\n` : ''}\n      </div>\n    </div>\n  );\n}\n`,
+  });
+  */
+
+  const homePageContent =
+    `import { useEffect, useMemo, useState } from 'react';\n` +
+    `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n` +
+    `import { seedData } from '../lib/data/seed.js';\n` +
+    `import { createDataClient } from '../lib/data/index.js';\n\n` +
+    `function Card({ title, children }) {\n` +
+    `  return (\n` +
+    `    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">\n` +
+    `      {title ? (\n` +
+    `        <div className="px-4 py-3 border-b border-gray-100">\n` +
+    `          <div className="text-sm font-semibold text-gray-900">{title}</div>\n` +
+    `        </div>\n` +
+    `      ) : null}\n` +
+    `      <div className="p-4">{children}</div>\n` +
+    `    </div>\n` +
+    `  );\n` +
+    `}\n\n` +
+    `export default function Home() {\n` +
+    `  const entityNames = Object.keys(seedData || {});\n` +
+    `  const primaryEntity = entityNames[0] || null;\n\n` +
+    `  const client = useMemo(() => createDataClient(), []);\n` +
+    `  const [rows, setRows] = useState([]);\n` +
+    `  const [loading, setLoading] = useState(true);\n\n` +
+    `  useEffect(() => {\n` +
+    `    let cancelled = false;\n` +
+    `    async function load() {\n` +
+    `      if (!primaryEntity) {\n` +
+    `        setLoading(false);\n` +
+    `        return;\n` +
+    `      }\n` +
+    `      try {\n` +
+    `        const data = await client.list(primaryEntity);\n` +
+    `        if (!cancelled) setRows(Array.isArray(data) ? data.slice(0, 8) : []);\n` +
+    `      } catch (e) {\n` +
+    `        console.warn('[home] Failed to load rows (using seed fallback):', e);\n` +
+    `        if (!cancelled) setRows(Array.isArray(seedData?.[primaryEntity]) ? seedData[primaryEntity].slice(0, 8) : []);\n` +
+    `      } finally {\n` +
+    `        if (!cancelled) setLoading(false);\n` +
+    `      }\n` +
+    `    }\n` +
+    `    load();\n` +
+    `    return () => {\n` +
+    `      cancelled = true;\n` +
+    `    };\n` +
+    `  }, [client, primaryEntity]);\n\n` +
+    `  return (\n` +
+    `    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">\n` +
+    `      <div className="mx-auto w-full max-w-6xl px-4 py-10">\n` +
+    `        <div className="flex flex-col gap-2">\n` +
+    `          <h1 className="text-3xl font-semibold text-gray-900">Home</h1>\n` +
+    `          <p className="text-sm text-gray-600">Scaffolded from blueprint routes and navigation — this is the starting point before the build fills in real features.</p>\n` +
+    `        </div>\n\n` +
+    `        <div className="mt-6">\n` +
+    `          <DataModeBanner />\n` +
+    `        </div>\n\n` +
+    `        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">\n` +
+    `          <Card title="Blueprint">\n` +
+    `            <div className="text-sm text-gray-700">Routes: <span className="font-medium text-gray-900">${pageRoutes.length}</span></div>\n` +
+    `            <div className="mt-1 text-sm text-gray-700">Entities: <span className="font-medium text-gray-900">{entityNames.length || 0}</span></div>\n` +
+    `            <div className="mt-3 text-xs text-gray-500">Tip: run the build to replace scaffolding with app-specific UI &amp; logic.</div>\n` +
+    `          </Card>\n` +
+    `          <Card title="Quick actions">\n` +
+    `            <div className="flex flex-wrap gap-2">\n` +
+    `              <a href="/settings" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50">Open Settings</a>\n` +
+    `              <a href="/help" className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50">Open Help</a>\n` +
+    `            </div>\n` +
+    `          </Card>\n` +
+    `          <Card title="Data preview">\n` +
+    `            <div className="text-sm text-gray-700">Entity: <span className="font-medium text-gray-900">{primaryEntity || '—'}</span></div>\n` +
+    `            <div className="mt-1 text-xs text-gray-500">Shows mock seed data by default, and Supabase data when configured.</div>\n` +
+    `          </Card>\n` +
+    `        </div>\n\n` +
+    `        <div className="mt-8">\n` +
+    `          <Card title={primaryEntity ? ('Sample ' + primaryEntity + ' records') : 'Sample records'}>\n` +
+    `            {!primaryEntity ? (\n` +
+    `              <div className="text-sm text-gray-600">No entities found in the blueprint seed.</div>\n` +
+    `            ) : loading ? (\n` +
+    `              <div className="text-sm text-gray-600">Loading...</div>\n` +
+    `            ) : rows.length === 0 ? (\n` +
+    `              <div className="text-sm text-gray-600">No rows returned yet.</div>\n` +
+    `            ) : (\n` +
+    `              <div className="overflow-x-auto">\n` +
+    `                <table className="min-w-full text-sm">\n` +
+    `                  <thead>\n` +
+    `                    <tr className="text-left text-gray-500">\n` +
+    `                      {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n` +
+    `                        <th key={k} className="py-2 pr-4 font-medium">{k}</th>\n` +
+    `                      ))}\n` +
+    `                    </tr>\n` +
+    `                  </thead>\n` +
+    `                  <tbody className="divide-y divide-gray-100">\n` +
+    `                    {rows.map((r, idx) => (\n` +
+    `                      <tr key={String(r?.id || idx)} className="text-gray-700">\n` +
+    `                        {Object.keys(rows[0] || {}).slice(0, 4).map((k) => (\n` +
+    `                          <td key={k} className="py-2 pr-4">{String(r?.[k] ?? '')}</td>\n` +
+    `                        ))}\n` +
+    `                      </tr>\n` +
+    `                    ))}\n` +
+    `                  </tbody>\n` +
+    `                </table>\n` +
+    `              </div>\n` +
+    `            )}\n` +
+    `            <div className="mt-4 text-xs text-gray-500">\n` +
+    `              If you enabled Supabase, create tables by running <code className="px-1 py-0.5 bg-gray-50 border border-gray-200 rounded">supabase/schema.sql</code> in Supabase.\n` +
+    `            </div>\n` +
+    `          </Card>\n` +
+    `        </div>\n\n` +
+    (homeSections ? `\n${homeSections}\n` : '') +
+    `      </div>\n` +
+    `    </div>\n` +
+    `  );\n` +
+    `}\n`;
+
+  pages.push({
+    filePath: 'src/pages/Home.jsx',
+    content: homePageContent,
   });
 
   for (const route of pageRoutes) {
@@ -223,7 +420,11 @@ function buildViteApp(blueprint: BuildBlueprint): { filePath: string; content: s
   const pageRoutes = blueprint.routes.filter(r => r.kind === 'page');
   const useRouter = pageRoutes.length > 1;
 
-  const packagesToInstall = useRouter ? ['react-router-dom'] : [];
+  const packagesToInstall = [
+    ...(useRouter ? ['react-router-dom'] : []),
+    // Used by the optional Supabase adapter; harmless if env vars are not set.
+    '@supabase/supabase-js',
+  ];
 
   if (!useRouter) {
     return {
@@ -360,11 +561,15 @@ export async function POST(request: NextRequest) {
     files.push(buildMockSeedFile(blueprint, template));
     files.push(...buildMockClientFiles(template));
     files.push(buildDataModeBanner(template));
+    files.push(buildSupabaseSchemaFile(blueprint, template));
 
     if (template === 'next') {
       files.push(buildNextNav(blueprint));
       files.push(buildNextLayoutOverride());
       files.push(...buildNextPages(blueprint));
+
+      // Next template also uses the Supabase adapter file; ensure dependency exists.
+      packagesToInstall.push('@supabase/supabase-js');
     } else {
       const pageRoutes = blueprint.routes.filter(r => r.kind === 'page');
       const useRouter = pageRoutes.length > 1;

@@ -663,7 +663,8 @@ ${isSurgicalEdit ? `5. **FILE COUNT LIMITS**:
    - New component = 2 files MAX (component + parent)
    - If >3 files, YOU'RE DOING TOO MUCH` : `5. **SCOPE**
    - You may edit/create multiple files when necessary to fully implement the requested feature/ticket
-   - Keep changes focused; do not refactor unrelated code`}
+   - Keep changes focused; do not refactor unrelated code
+   - QUALITY BAR: within the ticket scope, produce production-grade UI/UX (responsive layout, consistent spacing/typography, hover+focus states, loading/empty states, and clear copy). Avoid placeholders like "Scaffolded..." unless explicitly required by the user/ticket.`}
 6. **DO NOT CREATE SVGs FROM SCRATCH**:
    - NEVER generate custom SVG code unless explicitly asked
    - Use existing icon libraries (lucide-react, heroicons, etc.)

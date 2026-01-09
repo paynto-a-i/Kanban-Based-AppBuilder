@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Sandbox provider not configured. Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to enable sandboxes.',
+          error:
+            'Sandbox provider not configured. Set MODAL_TOKEN_ID/MODAL_TOKEN_SECRET (Modal) or VERCEL_OIDC_TOKEN (or VERCEL_TOKEN + VERCEL_TEAM_ID + VERCEL_PROJECT_ID).',
           code: 'SANDBOX_PROVIDER_NOT_CONFIGURED',
         },
         { status: 503 }
