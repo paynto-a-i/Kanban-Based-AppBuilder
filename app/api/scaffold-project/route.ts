@@ -393,7 +393,7 @@ function buildDataModeBanner(template: TemplateTarget, ui: UiTheme): { filePath:
   if (template === 'next') {
     return {
       filePath: 'components/DataModeBanner.tsx',
-      content: `export function DataModeBanner() {\n  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border rounded-lg p-4 ${ui.bannerBorder} ${ui.bannerBg}\">\n      <div className=\"text-sm font-medium ${ui.isDark ? 'text-white' : 'text-gray-900'}\">Data mode</div>\n      <div className=\"mt-1 text-sm ${ui.bannerText}\">\n        {hasSupabase ? 'Supabase env vars detected — real database mode enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs ${ui.bannerMuted}\">\n          To enable Supabase, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.\n        </div>\n      ) : (\n        <div className=\"mt-2 text-xs ${ui.bannerMuted}\">\n          If you haven’t created tables yet, see <code className=\"px-1 py-0.5 border rounded ${ui.codeBg} ${ui.codeBorder} ${ui.codeText}\">supabase/schema.sql</code>.\n        </div>\n      )}\n    </div>\n  );\n}\n`,
+      content: `'use client';\n\nexport function DataModeBanner() {\n  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n\n  return (\n    <div className=\"w-full border rounded-lg p-4 ${ui.bannerBorder} ${ui.bannerBg}\">\n      <div className=\"text-sm font-medium ${ui.isDark ? 'text-white' : 'text-gray-900'}\">Data mode</div>\n      <div className=\"mt-1 text-sm ${ui.bannerText}\">\n        {hasSupabase ? 'Supabase env vars detected — real database mode enabled.' : 'Using seeded demo data (mock-first).'}\n      </div>\n      {!hasSupabase ? (\n        <div className=\"mt-2 text-xs ${ui.bannerMuted}\">\n          To enable Supabase, add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.\n        </div>\n      ) : (\n        <div className=\"mt-2 text-xs ${ui.bannerMuted}\">\n          If you haven’t created tables yet, see <code className=\"px-1 py-0.5 border rounded ${ui.codeBg} ${ui.codeBorder} ${ui.codeText}\">supabase/schema.sql</code>.\n        </div>\n      )}\n    </div>\n  );\n}\n`,
     };
   }
 
@@ -482,6 +482,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/Button.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n\n` +
           `export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';\n` +
@@ -522,6 +523,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/Card.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Card({ title, subtitle, children, className }: { title?: string; subtitle?: string; children: React.ReactNode; className?: string }) {\n` +
@@ -541,6 +543,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/Input.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {\n` +
@@ -558,6 +561,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/Badge.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Badge({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {\n` +
@@ -575,6 +579,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/Skeleton.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {\n` +
@@ -584,6 +589,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/EmptyState.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n` +
           `import { Badge } from '@/components/ui/Badge';\n\n` +
@@ -624,6 +630,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
       {
         filePath: 'components/ui/DataTable.tsx',
         content:
+          `'use client';\n\n` +
           `import type * as React from 'react';\n` +
           `import { cn } from '@/lib/cn';\n` +
           `import { EmptyState } from '@/components/ui/EmptyState';\n` +
@@ -1211,43 +1218,92 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
 
   const headingClass = ui.isDark ? 'text-white' : 'text-gray-900';
   const bodyTextClass = ui.isDark ? 'text-gray-300' : 'text-gray-700';
-  // Table styling is handled by the shared DataTable primitive.
+  // Premium Home shell: quick links come from real routes (pages, else sections).
+  const otherPages = pageRoutes.filter(r => r.path !== '/' && r.id !== 'home');
+  const sectionHrefs = sectionRoutes.map(r => {
+    const anchor = r.path.startsWith('#') ? r.path : `#${r.path}`;
+    return useRouter ? `/${anchor}` : anchor;
+  });
 
-  const settingsAction = useRouter
-    ? `<Link to="/settings" className={buttonClasses({ variant: 'primary' })}>Open Settings</Link>`
-    : `<a href="/settings" className={buttonClasses({ variant: 'primary' })}>Open Settings</a>`;
-  const helpAction = useRouter
-    ? `<Link to="/help" className={buttonClasses({ variant: 'secondary' })}>Open Help</Link>`
-    : `<a href="/help" className={buttonClasses({ variant: 'secondary' })}>Open Help</a>`;
+  const quickLinks = (otherPages.length > 0
+    ? otherPages.slice(0, 2).map(p => ({ label: p.title || p.path, href: p.path, kind: 'page' as const }))
+    : sectionRoutes.slice(0, 2).map((s, idx) => ({ label: s.title || `Section ${idx + 1}`, href: sectionHrefs[idx] || '#', kind: 'section' as const }))
+  );
 
-  const homePageContent =
-    `import { useEffect, useMemo, useState } from 'react';\n` +
+  const quickLinksJson = JSON.stringify(quickLinks, null, 2);
+
+  const selectClass = `w-full rounded-lg border ${ui.border} ${ui.isDark ? 'bg-black/30 text-white' : 'bg-white/70 text-gray-900'} px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 ${ui.accentRing}`;
+
+  const homePageContent = `import { useEffect, useMemo, useState } from 'react';\n` +
     (useRouter ? `import { Link } from 'react-router-dom';\n` : '') +
     `import { DataModeBanner } from '../components/DataModeBanner.jsx';\n` +
     `import { Card } from '../components/ui/Card.jsx';\n` +
-    `import { buttonClasses } from '../components/ui/Button.jsx';\n` +
+    `import { Badge } from '../components/ui/Badge.jsx';\n` +
+    `import { Input } from '../components/ui/Input.jsx';\n` +
+    `import { Button, buttonClasses } from '../components/ui/Button.jsx';\n` +
     `import { DataTable } from '../components/ui/DataTable.jsx';\n` +
+    `import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs.jsx';\n` +
+    `import { Modal } from '../components/ui/Modal.jsx';\n` +
     `import { seedData } from '../lib/data/seed.js';\n` +
     `import { createDataClient } from '../lib/data/index.js';\n\n` +
+    `const HAS_ROUTER = ${useRouter ? 'true' : 'false'};\n` +
+    `const QUICK_LINKS = ${quickLinksJson};\n\n` +
+    `function formatTime(ts) {\n` +
+    `  try {\n` +
+    `    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });\n` +
+    `  } catch {\n` +
+    `    return '';\n` +
+    `  }\n` +
+    `}\n\n` +
     `export default function Home() {\n` +
-    `  const entityNames = Object.keys(seedData || {});\n` +
-    `  const primaryEntity = entityNames[0] || null;\n\n` +
+    `  const hasSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);\n` +
     `  const client = useMemo(() => createDataClient(), []);\n` +
+    `  const entityNames = Object.keys(seedData || {});\n` +
+    `  const defaultEntity = entityNames[0] || '';\n\n` +
+    `  const [tab, setTab] = useState('overview');\n` +
+    `  const [entity, setEntity] = useState(defaultEntity);\n` +
     `  const [rows, setRows] = useState([]);\n` +
-    `  const [loading, setLoading] = useState(true);\n\n` +
+    `  const [loading, setLoading] = useState(true);\n` +
+    `  const [error, setError] = useState('');\n` +
+    `  const [query, setQuery] = useState('');\n` +
+    `  const [sortKey, setSortKey] = useState('');\n` +
+    `  const [sortDir, setSortDir] = useState('desc');\n` +
+    `  const [createOpen, setCreateOpen] = useState(false);\n` +
+    `  const [draft, setDraft] = useState({});\n` +
+    `  const [activity, setActivity] = useState(() => [\n` +
+    `    { id: 'boot', ts: Date.now(), kind: 'system', text: 'App shell ready' }\n` +
+    `  ]);\n\n` +
+    `  const pushActivity = (kind, text) => {\n` +
+    `    setActivity(prev => [{ id: String(Date.now()), ts: Date.now(), kind, text }, ...prev].slice(0, 30));\n` +
+    `  };\n\n` +
+    `  useEffect(() => {\n` +
+    `    pushActivity('system', hasSupabase ? 'Supabase mode detected' : 'Demo data mode');\n` +
+    `    // eslint-disable-next-line react-hooks/exhaustive-deps\n` +
+    `  }, []);\n\n` +
     `  useEffect(() => {\n` +
     `    let cancelled = false;\n` +
     `    async function load() {\n` +
-    `      if (!primaryEntity) {\n` +
+    `      if (!entity) {\n` +
+    `        setRows([]);\n` +
     `        setLoading(false);\n` +
     `        return;\n` +
     `      }\n` +
+    `      setLoading(true);\n` +
+    `      setError('');\n` +
     `      try {\n` +
-    `        const data = await client.list(primaryEntity);\n` +
-    `        if (!cancelled) setRows(Array.isArray(data) ? data.slice(0, 8) : []);\n` +
+    `        const data = await client.list(entity);\n` +
+    `        const safe = Array.isArray(data) ? data : [];\n` +
+    `        if (!cancelled) {\n` +
+    `          setRows(safe);\n` +
+    `          pushActivity('data', 'Loaded ' + safe.length + ' row(s) for ' + entity);\n` +
+    `        }\n` +
     `      } catch (e) {\n` +
-    `        console.warn('[home] Failed to load rows (using seed fallback):', e);\n` +
-    `        if (!cancelled) setRows(Array.isArray(seedData?.[primaryEntity]) ? seedData[primaryEntity].slice(0, 8) : []);\n` +
+    `        const fallback = Array.isArray(seedData?.[entity]) ? seedData[entity] : [];\n` +
+    `        if (!cancelled) {\n` +
+    `          setRows(fallback);\n` +
+    `          setError('Failed to load from the data client; showing seed data instead.');\n` +
+    `          pushActivity('error', 'Load failed for ' + entity + '; fell back to seed data');\n` +
+    `        }\n` +
     `      } finally {\n` +
     `        if (!cancelled) setLoading(false);\n` +
     `      }\n` +
@@ -1256,59 +1312,212 @@ function buildVitePages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
     `    return () => {\n` +
     `      cancelled = true;\n` +
     `    };\n` +
-    `  }, [client, primaryEntity]);\n\n` +
+    `  }, [client, entity]);\n\n` +
+    `  const sample = rows[0] || (Array.isArray(seedData?.[entity]) ? seedData[entity][0] : null);\n` +
+    `  const allKeys = sample ? Object.keys(sample) : [];\n` +
+    `  const visibleKeys = allKeys.filter(k => k !== 'id').slice(0, 6);\n\n` +
+    `  useEffect(() => {\n` +
+    `    if (!sortKey && visibleKeys.length > 0) setSortKey(visibleKeys[0]);\n` +
+    `    // eslint-disable-next-line react-hooks/exhaustive-deps\n` +
+    `  }, [visibleKeys.join('|')]);\n\n` +
+    `  const filteredRows = rows.filter((r) => {\n` +
+    `    if (!query) return true;\n` +
+    `    const q = query.toLowerCase();\n` +
+    `    return visibleKeys.some((k) => String(r?.[k] ?? '').toLowerCase().includes(q));\n` +
+    `  });\n\n` +
+    `  const sortedRows = [...filteredRows].sort((a, b) => {\n` +
+    `    if (!sortKey) return 0;\n` +
+    `    const av = a?.[sortKey];\n` +
+    `    const bv = b?.[sortKey];\n` +
+    `    const an = Number(av);\n` +
+    `    const bn = Number(bv);\n` +
+    `    let cmp = 0;\n` +
+    `    if (!Number.isNaN(an) && !Number.isNaN(bn)) cmp = an - bn;\n` +
+    `    else cmp = String(av ?? '').localeCompare(String(bv ?? ''));\n` +
+    `    return sortDir === 'asc' ? cmp : -cmp;\n` +
+    `  });\n\n` +
+    `  const editableKeys = allKeys\n` +
+    `    .filter((k) => !['id','createdAt','created_at','updatedAt','updated_at'].includes(k))\n` +
+    `    .slice(0, 8);\n\n` +
+    `  const onCreate = async () => {\n` +
+    `    if (!entity) return;\n` +
+    `    const record = {};\n` +
+    `    for (const k of editableKeys) {\n` +
+    `      const raw = draft?.[k];\n` +
+    `      if (raw == null) continue;\n` +
+    `      const str = String(raw);\n` +
+    `      const asNum = Number(str);\n` +
+    `      record[k] = str.trim().length === 0 ? '' : (!Number.isNaN(asNum) && str.trim() !== '' ? asNum : str);\n` +
+    `    }\n` +
+    `    try {\n` +
+    `      const created = await client.create(entity, record);\n` +
+    `      setRows((prev) => [created, ...prev]);\n` +
+    `      setCreateOpen(false);\n` +
+    `      setDraft({});\n` +
+    `      setTab('data');\n` +
+    `      pushActivity('data', 'Created a new ' + entity + ' record');\n` +
+    `    } catch (e) {\n` +
+    `      pushActivity('error', 'Create failed for ' + entity);\n` +
+    `      setError('Create failed. Check console for details.');\n` +
+    `      console.warn('[home] create failed:', e);\n` +
+    `    }\n` +
+    `  };\n\n` +
+    `  const tableColumns = visibleKeys.map((k) => ({ key: k, header: k }));\n\n` +
     `  return (\n` +
     `    <div className="min-h-screen ${ui.appBg} ${ui.text}">\n` +
     `      <div className="mx-auto w-full max-w-6xl px-4 py-10">\n` +
     `        <div className="flex flex-col gap-2">\n` +
-    `          <h1 className="text-3xl font-semibold ${headingClass}">Home</h1>\n` +
-    `          <p className="text-sm ${ui.mutedText}">Your app shell is ready. Use the navigation to explore pages, and connect Supabase anytime to switch from demo data to a real database.</p>\n` +
+    `          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">\n` +
+    `            <div>\n` +
+    `              <h1 className="text-3xl font-semibold ${headingClass}">Dashboard</h1>\n` +
+    `              <p className="text-sm ${ui.mutedText}">Premium scaffold: tabs, table tools, and a create flow — ready for tickets to fill in real features.</p>\n` +
+    `            </div>\n` +
+    `            <div className="flex items-center gap-2">\n` +
+    `              <Badge>{hasSupabase ? 'Supabase' : 'Demo data'}</Badge>\n` +
+    `              {entity ? <Badge>{entity}</Badge> : null}\n` +
+    `              <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)} disabled={!entity}>New record</Button>\n` +
+    `            </div>\n` +
+    `          </div>\n` +
     `        </div>\n\n` +
     `        <div className="mt-6">\n` +
     `          <DataModeBanner />\n` +
     `        </div>\n\n` +
-    `        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">\n` +
-    `          <Card title="Blueprint">\n` +
-    `            <div className="text-sm ${bodyTextClass}">Routes: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>${pageRoutes.length}</span></div>\n` +
-    `            <div className="mt-1 text-sm ${bodyTextClass}">Entities: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>{entityNames.length || 0}</span></div>\n` +
-    `            <div className={"mt-3 text-xs " + ${JSON.stringify(ui.mutedText)}}>Tip: build tickets incrementally to add features, refine UI, and connect real data.</div>\n` +
-    `          </Card>\n` +
-    `          <Card title="Quick actions">\n` +
-    `            <div className="flex flex-wrap gap-2">\n` +
-    `              ${settingsAction}\n` +
-    `              ${helpAction}\n` +
-    `            </div>\n` +
-    `          </Card>\n` +
-    `          <Card title="Data preview">\n` +
-    `            <div className="text-sm ${bodyTextClass}">Entity: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>{primaryEntity || '—'}</span></div>\n` +
-    `            <div className={"mt-1 text-xs " + ${JSON.stringify(ui.mutedText)}}>Shows mock seed data by default, and Supabase data when configured.</div>\n` +
-    `          </Card>\n` +
-    `        </div>\n\n` +
     `        <div className="mt-8">\n` +
-    `          <Card title={primaryEntity ? ('Sample ' + primaryEntity + ' records') : 'Sample records'}>\n` +
-    `            {!primaryEntity ? (\n` +
-    `              <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>No entities found in the blueprint seed.</div>\n` +
-    `            ) : loading ? (\n` +
-    `              <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>Loading...</div>\n` +
-    `            ) : rows.length === 0 ? (\n` +
-    `              <DataTable\n` +
-    `                columns={[]}\n` +
-    `                rows={[]}\n` +
-    `                emptyTitle="No rows yet"\n` +
-    `                emptyDescription="Connect Supabase and create tables to see real data, or rely on seeded demo data."\n` +
-    `              />\n` +
-    `            ) : (\n` +
-    `              <DataTable\n` +
-    `                columns={Object.keys(rows[0] || {}).slice(0, 4).map((k) => ({ key: k, header: k }))}\n` +
-    `                rows={rows}\n` +
-    `              />\n` +
-    `            )}\n` +
-    `            <div className={"mt-4 text-xs " + ${JSON.stringify(ui.mutedText)}}>\n` +
-    `              If you enabled Supabase, create tables by running <code className="px-1 py-0.5 border rounded ${ui.codeBg} ${ui.codeBorder} ${ui.codeText}">supabase/schema.sql</code> in Supabase.\n` +
-    `            </div>\n` +
-    `          </Card>\n` +
+    `          <Tabs value={tab} onValueChange={setTab} className="w-full">\n` +
+    `            <TabsList>\n` +
+    `              <TabsTrigger value="overview">Overview</TabsTrigger>\n` +
+    `              <TabsTrigger value="data">Data</TabsTrigger>\n` +
+    `              <TabsTrigger value="activity">Activity</TabsTrigger>\n` +
+    `            </TabsList>\n\n` +
+    `            <TabsContent value="overview">\n` +
+    `              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">\n` +
+    `                <Card title="At a glance" subtitle="Blueprint + data status">\n` +
+    `                  <div className="text-sm ${bodyTextClass}">Routes: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>${pageRoutes.length}</span></div>\n` +
+    `                  <div className="mt-1 text-sm ${bodyTextClass}">Entities: <span className={"font-medium " + ${JSON.stringify(headingClass)}}>{entityNames.length || 0}</span></div>\n` +
+    `                  <div className={"mt-3 text-xs " + ${JSON.stringify(ui.mutedText)}}>Build tickets to expand UI primitives and wire real flows.</div>\n` +
+    `                </Card>\n` +
+    `                <Card title="Quick actions" subtitle="Navigate to real routes">\n` +
+    `                  <div className="flex flex-wrap gap-2">\n` +
+    `                    {QUICK_LINKS.length === 0 ? (\n` +
+    `                      <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>No routes available yet.</div>\n` +
+    `                    ) : (\n` +
+    `                      QUICK_LINKS.map((l) => {\n` +
+    `                        const cls = buttonClasses({ variant: l.kind === 'page' ? 'primary' : 'secondary', size: 'sm' });\n` +
+    `                        if (HAS_ROUTER && l.kind === 'page') {\n` +
+    `                          return <Link key={l.href} to={l.href} className={cls}>{l.label}</Link>;\n` +
+    `                        }\n` +
+    `                        return <a key={l.href} href={l.href} className={cls}>{l.label}</a>;\n` +
+    `                      })\n` +
+    `                    )}\n` +
+    `                  </div>\n` +
+    `                </Card>\n` +
+    `                <Card title="Recent activity" subtitle="What just happened">\n` +
+    `                  <div className="space-y-2">\n` +
+    `                    {activity.slice(0, 5).map((a) => (\n` +
+    `                      <div key={a.id} className="flex items-start justify-between gap-3 text-sm">\n` +
+    `                        <div className=${JSON.stringify(bodyTextClass)}>{a.text}</div>\n` +
+    `                        <div className={"text-xs " + ${JSON.stringify(ui.mutedText)}}>{formatTime(a.ts)}</div>\n` +
+    `                      </div>\n` +
+    `                    ))}\n` +
+    `                  </div>\n` +
+    `                </Card>\n` +
+    `              </div>\n` +
+    `            </TabsContent>\n\n` +
+    `            <TabsContent value="data">\n` +
+    `              <div className="space-y-4">\n` +
+    `                <Card title="Data explorer" subtitle="Filter, sort, and create records">\n` +
+    `                  <div className="flex flex-col gap-3">\n` +
+    `                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">\n` +
+    `                      <div>\n` +
+    `                        <div className={"text-xs font-medium " + ${JSON.stringify(ui.mutedText)}}>Entity</div>\n` +
+    `                        <select className=${JSON.stringify(selectClass)} value={entity} onChange={(e) => setEntity(e.target.value)}>\n` +
+    `                          {entityNames.length === 0 ? <option value="">No entities</option> : null}\n` +
+    `                          {entityNames.map((n) => (\n` +
+    `                            <option key={n} value={n}>{n}</option>\n` +
+    `                          ))}\n` +
+    `                        </select>\n` +
+    `                      </div>\n` +
+    `                      <div>\n` +
+    `                        <div className={"text-xs font-medium " + ${JSON.stringify(ui.mutedText)}}>Search</div>\n` +
+    `                        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter rows..." />\n` +
+    `                      </div>\n` +
+    `                      <div>\n` +
+    `                        <div className={"text-xs font-medium " + ${JSON.stringify(ui.mutedText)}}>Sort by</div>\n` +
+    `                        <select className=${JSON.stringify(selectClass)} value={sortKey} onChange={(e) => setSortKey(e.target.value)}>\n` +
+    `                          {visibleKeys.length === 0 ? <option value="">No columns</option> : null}\n` +
+    `                          {visibleKeys.map((k) => (\n` +
+    `                            <option key={k} value={k}>{k}</option>\n` +
+    `                          ))}\n` +
+    `                        </select>\n` +
+    `                      </div>\n` +
+    `                      <div className="flex items-end gap-2">\n` +
+    `                        <Button variant="outline" size="sm" onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}>\n` +
+    `                          {sortDir === 'asc' ? 'Asc' : 'Desc'}\n` +
+    `                        </Button>\n` +
+    `                        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)} disabled={!entity}>\n` +
+    `                          New\n` +
+    `                        </Button>\n` +
+    `                      </div>\n` +
+    `                    </div>\n` +
+    `                    {error ? <div className="text-sm text-rose-400">{error}</div> : null}\n` +
+    `                    <div className="flex items-center justify-between">\n` +
+    `                      <div className={"text-xs " + ${JSON.stringify(ui.mutedText)}}>{sortedRows.length} row(s)</div>\n` +
+    `                      <div className={"text-xs " + ${JSON.stringify(ui.mutedText)}}>Showing up to {visibleKeys.length} columns</div>\n` +
+    `                    </div>\n` +
+    `                    <DataTable columns={tableColumns} rows={sortedRows} isLoading={loading} />\n` +
+    `                  </div>\n` +
+    `                </Card>\n` +
+    `              </div>\n` +
+    `            </TabsContent>\n\n` +
+    `            <TabsContent value="activity">\n` +
+    `              <Card title="Activity feed" subtitle="Local build events">\n` +
+    `                <div className="space-y-3">\n` +
+    `                  {activity.length === 0 ? (\n` +
+    `                    <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>No activity yet.</div>\n` +
+    `                  ) : (\n` +
+    `                    activity.map((a) => (\n` +
+    `                      <div key={a.id} className="flex items-start justify-between gap-3">\n` +
+    `                        <div className="min-w-0">\n` +
+    `                          <div className="text-sm ${bodyTextClass}">{a.text}</div>\n` +
+    `                          <div className={"mt-1 text-xs " + ${JSON.stringify(ui.mutedText)}}>{formatTime(a.ts)}</div>\n` +
+    `                        </div>\n` +
+    `                        <Badge>{a.kind}</Badge>\n` +
+    `                      </div>\n` +
+    `                    ))\n` +
+    `                  )}\n` +
+    `                </div>\n` +
+    `              </Card>\n` +
+    `            </TabsContent>\n` +
+    `          </Tabs>\n` +
     `        </div>\n\n` +
-    (homeSections ? `\n${homeSections}\n` : '') +
+    `        <Modal\n` +
+    `          open={createOpen}\n` +
+    `          onOpenChange={(v) => {\n` +
+    `            setCreateOpen(v);\n` +
+    `            if (!v) setDraft({});\n` +
+    `          }}\n` +
+    `          title={entity ? ('Create ' + entity) : 'Create record'}\n` +
+    `          description="Creates a record via the data client (mock-first, Supabase when configured)."\n` +
+    `          footer={\n` +
+    `            <div className="flex items-center justify-end gap-2">\n` +
+    `              <Button variant="secondary" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>\n` +
+    `              <Button variant="primary" size="sm" onClick={onCreate} disabled={!entity}>Create</Button>\n` +
+    `            </div>\n` +
+    `          }\n` +
+    `        >\n` +
+    `          {editableKeys.length === 0 ? (\n` +
+    `            <div className={"text-sm " + ${JSON.stringify(ui.mutedText)}}>No editable fields detected for this entity yet.</div>\n` +
+    `          ) : (\n` +
+    `            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">\n` +
+    `              {editableKeys.map((k) => (\n` +
+    `                <div key={k}>\n` +
+    `                  <div className={"text-xs font-medium " + ${JSON.stringify(ui.mutedText)}}>{k}</div>\n` +
+    `                  <Input value={draft?.[k] ?? ''} onChange={(e) => setDraft((prev) => ({ ...prev, [k]: e.target.value }))} placeholder={'Enter ' + k} />\n` +
+    `                </div>\n` +
+    `              ))}\n` +
+    `            </div>\n` +
+    `          )}\n` +
+    `        </Modal>\n` +
     `      </div>\n` +
     `    </div>\n` +
     `  );\n` +
@@ -1429,6 +1638,312 @@ function buildNextPages(blueprint: BuildBlueprint, ui: UiTheme): Array<{ filePat
       .join('/');
 
     const filePath = route.path === '/' ? 'app/page.tsx' : `app/${safeFolder}/page.tsx`;
+    // Premium Home page: only the root page gets the full dashboard experience.
+    if (route.path === '/' || route.id === 'home') {
+      const otherPages = pageRoutes.filter(r => r.path !== '/' && r.id !== 'home');
+      const sectionRoutes = blueprint.routes.filter(r => r.kind === 'section');
+      const sectionHrefs = sectionRoutes.map(r => (r.path.startsWith('#') ? `/${r.path}` : `/#${r.path}`));
+
+      const quickLinks = (otherPages.length > 0
+        ? otherPages.slice(0, 2).map(p => ({ label: p.title || p.path, href: p.path, kind: 'page' as const }))
+        : sectionRoutes.slice(0, 2).map((s, idx) => ({ label: s.title || `Section ${idx + 1}`, href: sectionHrefs[idx] || '/#', kind: 'section' as const }))
+      );
+
+      const quickLinksJson = JSON.stringify(quickLinks, null, 2);
+      const selectClass = `w-full rounded-lg border ${ui.border} ${ui.isDark ? 'bg-black/30 text-white' : 'bg-white/70 text-gray-900'} px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 ${ui.accentRing}`;
+
+      pages.push({
+        filePath,
+        content:
+          `'use client';\n\n` +
+          `import { useEffect, useMemo, useState } from 'react';\n` +
+          `import Link from 'next/link';\n` +
+          `import { seedData } from '@/lib/data/seed';\n` +
+          `import { createDataClient } from '@/lib/data';\n` +
+          `import { DataModeBanner } from '@/components/DataModeBanner';\n` +
+          `import { Card } from '@/components/ui/Card';\n` +
+          `import { Badge } from '@/components/ui/Badge';\n` +
+          `import { Input } from '@/components/ui/Input';\n` +
+          `import { Button, buttonClasses } from '@/components/ui/Button';\n` +
+          `import { DataTable } from '@/components/ui/DataTable';\n` +
+          `import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';\n` +
+          `import { Modal } from '@/components/ui/Modal';\n\n` +
+          `const QUICK_LINKS = ${quickLinksJson};\n\n` +
+          `type ActivityItem = { id: string; ts: number; kind: 'system' | 'data' | 'error'; text: string };\n\n` +
+          `function formatTime(ts: number) {\n` +
+          `  try {\n` +
+          `    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });\n` +
+          `  } catch {\n` +
+          `    return '';\n` +
+          `  }\n` +
+          `}\n\n` +
+          `export default function Page() {\n` +
+          `  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);\n` +
+          `  const client = useMemo(() => createDataClient() as any, []);\n` +
+          `  const entityNames = Object.keys(seedData || {});\n` +
+          `  const defaultEntity = (entityNames[0] as string) || '';\n\n` +
+          `  const [tab, setTab] = useState('overview');\n` +
+          `  const [entity, setEntity] = useState(defaultEntity);\n` +
+          `  const [rows, setRows] = useState<any[]>([]);\n` +
+          `  const [loading, setLoading] = useState(true);\n` +
+          `  const [error, setError] = useState('');\n` +
+          `  const [query, setQuery] = useState('');\n` +
+          `  const [sortKey, setSortKey] = useState('');\n` +
+          `  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');\n` +
+          `  const [createOpen, setCreateOpen] = useState(false);\n` +
+          `  const [draft, setDraft] = useState<Record<string, string | number>>({});\n` +
+          `  const [activity, setActivity] = useState<ActivityItem[]>(() => [\n` +
+          `    { id: 'boot', ts: Date.now(), kind: 'system', text: 'App shell ready' },\n` +
+          `  ]);\n\n` +
+          `  const pushActivity = (kind: ActivityItem['kind'], text: string) => {\n` +
+          `    setActivity((prev) => [{ id: String(Date.now()), ts: Date.now(), kind, text }, ...prev].slice(0, 30));\n` +
+          `  };\n\n` +
+          `  useEffect(() => {\n` +
+          `    pushActivity('system', hasSupabase ? 'Supabase mode detected' : 'Demo data mode');\n` +
+          `    // eslint-disable-next-line react-hooks/exhaustive-deps\n` +
+          `  }, []);\n\n` +
+          `  useEffect(() => {\n` +
+          `    let cancelled = false;\n` +
+          `    async function load() {\n` +
+          `      if (!entity) {\n` +
+          `        setRows([]);\n` +
+          `        setLoading(false);\n` +
+          `        return;\n` +
+          `      }\n` +
+          `      setLoading(true);\n` +
+          `      setError('');\n` +
+          `      try {\n` +
+          `        const data = await client.list(entity);\n` +
+          `        const safe = Array.isArray(data) ? data : [];\n` +
+          `        if (!cancelled) {\n` +
+          `          setRows(safe);\n` +
+          `          pushActivity('data', 'Loaded ' + safe.length + ' row(s) for ' + entity);\n` +
+          `        }\n` +
+          `      } catch (e) {\n` +
+          `        const fallback = Array.isArray((seedData as any)?.[entity]) ? (seedData as any)[entity] : [];\n` +
+          `        if (!cancelled) {\n` +
+          `          setRows(fallback);\n` +
+          `          setError('Failed to load from the data client; showing seed data instead.');\n` +
+          `          pushActivity('error', 'Load failed for ' + entity + '; fell back to seed data');\n` +
+          `        }\n` +
+          `      } finally {\n` +
+          `        if (!cancelled) setLoading(false);\n` +
+          `      }\n` +
+          `    }\n` +
+          `    load();\n` +
+          `    return () => {\n` +
+          `      cancelled = true;\n` +
+          `    };\n` +
+          `  }, [client, entity]);\n\n` +
+          `  const sample = (rows[0] as any) || (Array.isArray((seedData as any)?.[entity]) ? (seedData as any)[entity][0] : null);\n` +
+          `  const allKeys = sample ? Object.keys(sample) : [];\n` +
+          `  const visibleKeys = allKeys.filter((k) => k !== 'id').slice(0, 6);\n\n` +
+          `  useEffect(() => {\n` +
+          `    if (!sortKey && visibleKeys.length > 0) setSortKey(visibleKeys[0]);\n` +
+          `    // eslint-disable-next-line react-hooks/exhaustive-deps\n` +
+          `  }, [visibleKeys.join('|')]);\n\n` +
+          `  const filteredRows = rows.filter((r: any) => {\n` +
+          `    if (!query) return true;\n` +
+          `    const q = query.toLowerCase();\n` +
+          `    return visibleKeys.some((k) => String(r?.[k] ?? '').toLowerCase().includes(q));\n` +
+          `  });\n\n` +
+          `  const sortedRows = [...filteredRows].sort((a: any, b: any) => {\n` +
+          `    if (!sortKey) return 0;\n` +
+          `    const av = a?.[sortKey];\n` +
+          `    const bv = b?.[sortKey];\n` +
+          `    const an = Number(av);\n` +
+          `    const bn = Number(bv);\n` +
+          `    let cmp = 0;\n` +
+          `    if (!Number.isNaN(an) && !Number.isNaN(bn)) cmp = an - bn;\n` +
+          `    else cmp = String(av ?? '').localeCompare(String(bv ?? ''));\n` +
+          `    return sortDir === 'asc' ? cmp : -cmp;\n` +
+          `  });\n\n` +
+          `  const editableKeys = allKeys\n` +
+          `    .filter((k) => !['id','createdAt','created_at','updatedAt','updated_at'].includes(k))\n` +
+          `    .slice(0, 8);\n\n` +
+          `  const onCreate = async () => {\n` +
+          `    if (!entity) return;\n` +
+          `    const record: any = {};\n` +
+          `    for (const k of editableKeys) {\n` +
+          `      const raw = (draft as any)[k];\n` +
+          `      if (raw == null) continue;\n` +
+          `      const str = String(raw);\n` +
+          `      const asNum = Number(str);\n` +
+          `      record[k] = str.trim().length === 0 ? '' : (!Number.isNaN(asNum) && str.trim() !== '' ? asNum : str);\n` +
+          `    }\n` +
+          `    try {\n` +
+          `      const created = await client.create(entity, record);\n` +
+          `      setRows((prev) => [created, ...prev]);\n` +
+          `      setCreateOpen(false);\n` +
+          `      setDraft({});\n` +
+          `      setTab('data');\n` +
+          `      pushActivity('data', 'Created a new ' + entity + ' record');\n` +
+          `    } catch (e) {\n` +
+          `      pushActivity('error', 'Create failed for ' + entity);\n` +
+          `      setError('Create failed. Check console for details.');\n` +
+          `      console.warn('[home] create failed:', e);\n` +
+          `    }\n` +
+          `  };\n\n` +
+          `  const tableColumns = visibleKeys.map((k) => ({ key: k, header: k }));\n\n` +
+          `  return (\n` +
+          `    <main className=\"mx-auto w-full max-w-6xl px-4 py-10\">\n` +
+          `      <div className=\"flex flex-col gap-2\">\n` +
+          `        <div className=\"flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3\">\n` +
+          `          <div>\n` +
+          `            <h1 className=\"text-3xl font-semibold ${headingClass}\">Dashboard</h1>\n` +
+          `            <p className=\"text-sm ${ui.mutedText}\">Premium scaffold: tabs, table tools, and a create flow — ready for tickets to fill in real features.</p>\n` +
+          `          </div>\n` +
+          `          <div className=\"flex items-center gap-2\">\n` +
+          `            <Badge>{hasSupabase ? 'Supabase' : 'Demo data'}</Badge>\n` +
+          `            {entity ? <Badge>{entity}</Badge> : null}\n` +
+          `            <Button variant=\"primary\" size=\"sm\" onClick={() => setCreateOpen(true)} disabled={!entity}>New record</Button>\n` +
+          `          </div>\n` +
+          `        </div>\n` +
+          `      </div>\n\n` +
+          `      <div className=\"mt-6\">\n` +
+          `        <DataModeBanner />\n` +
+          `      </div>\n\n` +
+          `      <div className=\"mt-8\">\n` +
+          `        <Tabs value={tab} onValueChange={setTab} className=\"w-full\">\n` +
+          `          <TabsList>\n` +
+          `            <TabsTrigger value=\"overview\">Overview</TabsTrigger>\n` +
+          `            <TabsTrigger value=\"data\">Data</TabsTrigger>\n` +
+          `            <TabsTrigger value=\"activity\">Activity</TabsTrigger>\n` +
+          `          </TabsList>\n\n` +
+          `          <TabsContent value=\"overview\">\n` +
+          `            <div className=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n` +
+          `              <Card title=\"At a glance\" subtitle=\"Blueprint + data status\">\n` +
+          `                <div className=\"text-sm ${bodyTextClass}\">Routes: <span className={\"font-medium ${headingClass}\"}>${pageRoutes.length}</span></div>\n` +
+          `                <div className=\"mt-1 text-sm ${bodyTextClass}\">Entities: <span className={\"font-medium ${headingClass}\"}>{entityNames.length || 0}</span></div>\n` +
+          `                <div className={\"mt-3 text-xs ${ui.mutedText}\"}>Build tickets to expand UI primitives and wire real flows.</div>\n` +
+          `              </Card>\n` +
+          `              <Card title=\"Quick actions\" subtitle=\"Navigate to real routes\">\n` +
+          `                <div className=\"flex flex-wrap gap-2\">\n` +
+          `                  {QUICK_LINKS.length === 0 ? (\n` +
+          `                    <div className=\"text-sm ${ui.mutedText}\">No routes available yet.</div>\n` +
+          `                  ) : (\n` +
+          `                    QUICK_LINKS.map((l) => (\n` +
+          `                      <Link key={l.href} href={l.href} className={buttonClasses({ variant: l.kind === 'page' ? 'primary' : 'secondary', size: 'sm' })}>\n` +
+          `                        {l.label}\n` +
+          `                      </Link>\n` +
+          `                    ))\n` +
+          `                  )}\n` +
+          `                </div>\n` +
+          `              </Card>\n` +
+          `              <Card title=\"Recent activity\" subtitle=\"What just happened\">\n` +
+          `                <div className=\"space-y-2\">\n` +
+          `                  {activity.slice(0, 5).map((a) => (\n` +
+          `                    <div key={a.id} className=\"flex items-start justify-between gap-3 text-sm\">\n` +
+          `                      <div className=\"${bodyTextClass}\">{a.text}</div>\n` +
+          `                      <div className={\"text-xs ${ui.mutedText}\"}>{formatTime(a.ts)}</div>\n` +
+          `                    </div>\n` +
+          `                  ))}\n` +
+          `                </div>\n` +
+          `              </Card>\n` +
+          `            </div>\n` +
+          `          </TabsContent>\n\n` +
+          `          <TabsContent value=\"data\">\n` +
+          `            <div className=\"space-y-4\">\n` +
+          `              <Card title=\"Data explorer\" subtitle=\"Filter, sort, and create records\">\n` +
+          `                <div className=\"flex flex-col gap-3\">\n` +
+          `                  <div className=\"grid grid-cols-1 md:grid-cols-4 gap-3\">\n` +
+          `                    <div>\n` +
+          `                      <div className={\"text-xs font-medium ${ui.mutedText}\"}>Entity</div>\n` +
+          `                      <select className=${JSON.stringify(selectClass)} value={entity} onChange={(e) => setEntity(e.target.value)}>\n` +
+          `                        {entityNames.length === 0 ? <option value=\"\">No entities</option> : null}\n` +
+          `                        {entityNames.map((n) => (\n` +
+          `                          <option key={n} value={n}>{n}</option>\n` +
+          `                        ))}\n` +
+          `                      </select>\n` +
+          `                    </div>\n` +
+          `                    <div>\n` +
+          `                      <div className={\"text-xs font-medium ${ui.mutedText}\"}>Search</div>\n` +
+          `                      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder=\"Filter rows...\" />\n` +
+          `                    </div>\n` +
+          `                    <div>\n` +
+          `                      <div className={\"text-xs font-medium ${ui.mutedText}\"}>Sort by</div>\n` +
+          `                      <select className=${JSON.stringify(selectClass)} value={sortKey} onChange={(e) => setSortKey(e.target.value)}>\n` +
+          `                        {visibleKeys.length === 0 ? <option value=\"\">No columns</option> : null}\n` +
+          `                        {visibleKeys.map((k) => (\n` +
+          `                          <option key={k} value={k}>{k}</option>\n` +
+          `                        ))}\n` +
+          `                      </select>\n` +
+          `                    </div>\n` +
+          `                    <div className=\"flex items-end gap-2\">\n` +
+          `                      <Button variant=\"outline\" size=\"sm\" onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}>\n` +
+          `                        {sortDir === 'asc' ? 'Asc' : 'Desc'}\n` +
+          `                      </Button>\n` +
+          `                      <Button variant=\"primary\" size=\"sm\" onClick={() => setCreateOpen(true)} disabled={!entity}>\n` +
+          `                        New\n` +
+          `                      </Button>\n` +
+          `                    </div>\n` +
+          `                  </div>\n` +
+          `                  {error ? <div className=\"text-sm text-rose-400\">{error}</div> : null}\n` +
+          `                  <div className=\"flex items-center justify-between\">\n` +
+          `                    <div className={\"text-xs ${ui.mutedText}\"}>{sortedRows.length} row(s)</div>\n` +
+          `                    <div className={\"text-xs ${ui.mutedText}\"}>Showing up to {visibleKeys.length} columns</div>\n` +
+          `                  </div>\n` +
+          `                  <DataTable columns={tableColumns as any} rows={sortedRows as any} isLoading={loading} />\n` +
+          `                </div>\n` +
+          `              </Card>\n` +
+          `            </div>\n` +
+          `          </TabsContent>\n\n` +
+          `          <TabsContent value=\"activity\">\n` +
+          `            <Card title=\"Activity feed\" subtitle=\"Local build events\">\n` +
+          `              <div className=\"space-y-3\">\n` +
+          `                {activity.length === 0 ? (\n` +
+          `                  <div className=\"text-sm ${ui.mutedText}\">No activity yet.</div>\n` +
+          `                ) : (\n` +
+          `                  activity.map((a) => (\n` +
+          `                    <div key={a.id} className=\"flex items-start justify-between gap-3\">\n` +
+          `                      <div className=\"min-w-0\">\n` +
+          `                        <div className=\"text-sm ${bodyTextClass}\">{a.text}</div>\n` +
+          `                        <div className={\"mt-1 text-xs ${ui.mutedText}\"}>{formatTime(a.ts)}</div>\n` +
+          `                      </div>\n` +
+          `                      <Badge>{a.kind}</Badge>\n` +
+          `                    </div>\n` +
+          `                  ))\n` +
+          `                )}\n` +
+          `              </div>\n` +
+          `            </Card>\n` +
+          `          </TabsContent>\n` +
+          `        </Tabs>\n` +
+          `      </div>\n\n` +
+          `      <Modal\n` +
+          `        open={createOpen}\n` +
+          `        onOpenChange={(v) => {\n` +
+          `          setCreateOpen(v);\n` +
+          `          if (!v) setDraft({});\n` +
+          `        }}\n` +
+          `        title={entity ? ('Create ' + entity) : 'Create record'}\n` +
+          `        description=\"Creates a record via the data client (mock-first, Supabase when configured).\"\n` +
+          `        footer={\n` +
+          `          <div className=\"flex items-center justify-end gap-2\">\n` +
+          `            <Button variant=\"secondary\" size=\"sm\" onClick={() => setCreateOpen(false)}>Cancel</Button>\n` +
+          `            <Button variant=\"primary\" size=\"sm\" onClick={onCreate} disabled={!entity}>Create</Button>\n` +
+          `          </div>\n` +
+          `        }\n` +
+          `      >\n` +
+          `        {editableKeys.length === 0 ? (\n` +
+          `          <div className=\"text-sm ${ui.mutedText}\">No editable fields detected for this entity yet.</div>\n` +
+          `        ) : (\n` +
+          `          <div className=\"grid grid-cols-1 sm:grid-cols-2 gap-3\">\n` +
+          `            {editableKeys.map((k) => (\n` +
+          `              <div key={k}>\n` +
+          `                <div className={\"text-xs font-medium ${ui.mutedText}\"}>{k}</div>\n` +
+          `                <Input value={(draft as any)[k] ?? ''} onChange={(e) => setDraft((prev) => ({ ...(prev as any), [k]: e.target.value }))} placeholder={'Enter ' + k} />\n` +
+          `              </div>\n` +
+          `            ))}\n` +
+          `          </div>\n` +
+          `        )}\n` +
+          `      </Modal>\n` +
+          `    </main>\n` +
+          `  );\n` +
+          `}\n`,
+      });
+      continue;
+    }
+
     pages.push({
       filePath,
       content:
