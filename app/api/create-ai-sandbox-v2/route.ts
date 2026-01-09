@@ -19,6 +19,19 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[create-ai-sandbox-v2] Creating sandbox...');
 
+    // Fail fast if the sandbox provider is not configured.
+    // This avoids consuming rate-limit / usage quota for a request that can never succeed.
+    if (!SandboxFactory.isProviderAvailable()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Sandbox provider not configured. Set MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to enable sandboxes.',
+          code: 'SANDBOX_PROVIDER_NOT_CONFIGURED',
+        },
+        { status: 503 }
+      );
+    }
+
     // Rate-limit + usage gate (best-effort; in-memory counters by user/ip)
     const actor = await getUsageActor(request);
     const rl = await sandboxCreationLimiter(request, actor.userId || actor.key);

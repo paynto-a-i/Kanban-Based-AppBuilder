@@ -2325,8 +2325,15 @@ Requirements:
         body: JSON.stringify({ template })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       console.log('[createSandbox] Response data:', data);
+
+      if (!response.ok) {
+        const e: any = new Error(data?.error || `Failed to create sandbox (HTTP ${response.status})`);
+        e.code = data?.code || (response.status === 429 ? 'RATE_LIMITED' : undefined);
+        e.retryAfter = data?.retryAfter;
+        throw e;
+      }
 
       if (data.success) {
         sandboxCreationRef.current = false; // Reset the ref on success
@@ -2376,14 +2383,23 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         // Return the sandbox data so it can be used immediately
         return data;
       } else {
-        throw new Error(data.error || 'Unknown error');
+        const e: any = new Error(data?.error || 'Unknown error');
+        e.code = data?.code;
+        throw e;
       }
     } catch (error: any) {
       console.error('[createSandbox] Error:', error);
       sandboxCreationRef.current = false; // Reset to allow retry
 
-      // Auto-retry on failure
-      if (retryCount < MAX_RETRIES) {
+      const code = error?.code as string | undefined;
+      const nonRetryable =
+        code === 'SANDBOX_PROVIDER_NOT_CONFIGURED' ||
+        code === 'USAGE_LIMIT_REACHED' ||
+        code === 'RATE_LIMITED' ||
+        /rate limit/i.test(error?.message || '');
+
+      // Auto-retry on transient failure only
+      if (!nonRetryable && retryCount < MAX_RETRIES) {
         console.log(`[createSandbox] Retrying (${retryCount + 1}/${MAX_RETRIES})...`);
         updateStatus(`Connection failed. Retrying (${retryCount + 1}/${MAX_RETRIES})...`, false);
         await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
