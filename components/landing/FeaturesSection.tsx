@@ -65,7 +65,7 @@ export default function FeaturesSection() {
   ]
 
   return (
-    <section id="features" className="py-12 md:py-16 bg-gray-50">
+    <section id="features" className="py-12 md:py-16 bg-comfort-beige-100">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -74,13 +74,13 @@ export default function FeaturesSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-10"
         >
-          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300">
+          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-comfort-sage-700 bg-comfort-sage-100 rounded-full border border-comfort-sage-300">
             Platform Features
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
             Built for Serious Building
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
             Everything you need to build production-ready applications
           </p>
         </motion.div>
@@ -93,24 +93,24 @@ export default function FeaturesSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className="bg-white dark:bg-gray-900/50 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-colors duration-300"
+              className="bg-comfort-beige-50 rounded-2xl overflow-hidden border border-comfort-beige-300 hover:border-comfort-sage-300 transition-colors duration-300"
             >
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-200"
+                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-comfort-beige-100 transition-colors duration-200"
               >
                 <div className="flex items-center gap-4">
-                  <div className="text-cyan-600 dark:text-cyan-400">
+                  <div className="text-comfort-sage-600">
                     {feature.icon}
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  <h3 className="text-xl font-semibold text-comfort-charcoal-800">
                     {feature.title}
                   </h3>
                 </div>
                 <motion.svg
                   animate={{ rotate: openIndex === index ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
-                  className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0"
+                  className="w-5 h-5 text-comfort-charcoal-400 flex-shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -129,7 +129,7 @@ export default function FeaturesSection() {
                 className="overflow-hidden"
               >
                 <div className="px-6 pb-5">
-                  <p className="text-gray-600 dark:text-gray-400 leading-relaxed pl-10">
+                  <p className="text-comfort-charcoal-500 leading-relaxed pl-10">
                     {feature.description}
                   </p>
                 </div>

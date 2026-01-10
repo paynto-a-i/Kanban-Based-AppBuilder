@@ -61,47 +61,47 @@ export default function HowItWorksSection() {
       title: "Create a Card",
       emoji: "✨",
       description: "Drop a mission onto the Kanban board. It can be as simple as \"Build a dashboard\" or as complex as a full SaaS application.",
-      color: "from-purple-500 to-pink-500",
+      color: "from-comfort-sage-500 to-comfort-sage-600",
       visual: (
         <motion.div
-          className="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700"
+          className="bg-white/80 rounded-xl p-4 border border-comfort-beige-200"
           whileHover={{ scale: 1.02 }}
         >
           <div className="flex items-center gap-2 mb-3">
             <motion.div
-              className="w-3 h-3 rounded-full bg-red-500"
+              className="w-3 h-3 rounded-full bg-comfort-terracotta-400"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ repeat: Infinity, duration: 2 }}
             />
             <motion.div
-              className="w-3 h-3 rounded-full bg-yellow-500"
+              className="w-3 h-3 rounded-full bg-comfort-beige-400"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ repeat: Infinity, duration: 2, delay: 0.2 }}
             />
             <motion.div
-              className="w-3 h-3 rounded-full bg-green-500"
+              className="w-3 h-3 rounded-full bg-comfort-sage-500"
               animate={{ scale: [1, 1.2, 1] }}
               transition={{ repeat: Infinity, duration: 2, delay: 0.4 }}
             />
           </div>
           <motion.div
-            className="bg-white dark:bg-gray-900 rounded-lg p-4 border-2 border-dashed border-purple-300 dark:border-purple-500/50"
+            className="bg-comfort-beige-50 rounded-lg p-4 border-2 border-dashed border-comfort-sage-300"
             animate={activeStep === 0 ? {
-              borderColor: ['#a855f7', '#ec4899', '#a855f7'],
-              boxShadow: ['0 0 0px #a855f7', '0 0 20px #a855f7', '0 0 0px #a855f7']
+              borderColor: ['#7c9a82', '#9bb5a0', '#7c9a82'],
+              boxShadow: ['0 0 0px #7c9a82', '0 0 20px #7c9a82', '0 0 0px #7c9a82']
             } : {}}
             transition={{ repeat: Infinity, duration: 2 }}
           >
-            <div className="text-sm text-purple-600 dark:text-purple-400 mb-1 flex items-center gap-2">
+            <div className="text-sm text-comfort-sage-600 mb-1 flex items-center gap-2">
               <span>🎯</span> New Mission
             </div>
-            <div className="text-gray-900 dark:text-white font-medium h-6">
+            <div className="text-comfort-charcoal-800 font-medium h-6">
               {activeStep === 0 ? typedText : fullText}
               {activeStep === 0 && typedText.length < fullText.length && (
                 <motion.span
                   animate={{ opacity: [1, 0] }}
                   transition={{ repeat: Infinity, duration: 0.5 }}
-                  className="inline-block w-0.5 h-5 bg-purple-500 ml-0.5"
+                  className="inline-block w-0.5 h-5 bg-comfort-sage-500 ml-0.5"
                 />
               )}
             </div>
@@ -113,19 +113,19 @@ export default function HowItWorksSection() {
             >
               <motion.span
                 whileHover={{ scale: 1.1 }}
-                className="text-xs px-2 py-1 bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-400 rounded cursor-pointer"
+                className="text-xs px-2 py-1 bg-comfort-sage-100 text-comfort-sage-700 rounded cursor-pointer"
               >
                 React
               </motion.span>
               <motion.span
                 whileHover={{ scale: 1.1 }}
-                className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-400 rounded cursor-pointer"
+                className="text-xs px-2 py-1 bg-comfort-beige-200 text-comfort-charcoal-600 rounded cursor-pointer"
               >
                 TypeScript
               </motion.span>
               <motion.span
                 whileHover={{ scale: 1.1 }}
-                className="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded cursor-pointer"
+                className="text-xs px-2 py-1 bg-comfort-sage-50 text-comfort-sage-600 rounded cursor-pointer"
               >
                 + Add tag
               </motion.span>
@@ -139,18 +139,18 @@ export default function HowItWorksSection() {
       title: "Agents Activate",
       emoji: "🤖",
       description: "Specialist agents automatically coordinate. Architect designs the system, Planner breaks it down, Coder implements, Tester validates.",
-      color: "from-cyan-500 to-blue-500",
+      color: "from-comfort-sage-400 to-comfort-sage-500",
       visual: (
-        <div className="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+        <div className="bg-white/80 rounded-xl p-4 border border-comfort-beige-200">
           <div className="space-y-3">
             {[
-              { name: "Architect", emoji: "🏗️", status: "Designing system...", color: "bg-purple-500", gradient: "from-purple-500 to-purple-600" },
-              { name: "Planner", emoji: "📋", status: "Breaking down tasks...", color: "bg-cyan-500", gradient: "from-cyan-500 to-cyan-600" },
-              { name: "Coder", emoji: "💻", status: "Writing components...", color: "bg-green-500", gradient: "from-green-500 to-green-600" }
+              { name: "Architect", emoji: "🏗️", status: "Designing system...", color: "bg-comfort-sage-500", gradient: "from-comfort-sage-500 to-comfort-sage-600" },
+              { name: "Planner", emoji: "📋", status: "Breaking down tasks...", color: "bg-comfort-sage-400", gradient: "from-comfort-sage-400 to-comfort-sage-500" },
+              { name: "Coder", emoji: "💻", status: "Writing components...", color: "bg-comfort-sage-600", gradient: "from-comfort-sage-600 to-comfort-sage-700" }
             ].map((agent, i) => (
               <motion.div
                 key={i}
-                className="bg-white dark:bg-gray-900 rounded-lg p-3 overflow-hidden relative"
+                className="bg-comfort-beige-50 rounded-lg p-3 overflow-hidden relative"
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: i * 0.2 }}
@@ -169,9 +169,9 @@ export default function HowItWorksSection() {
                   >
                     {agent.emoji}
                   </motion.span>
-                  <span className="text-gray-700 dark:text-gray-300 text-sm font-medium">{agent.name}</span>
+                  <span className="text-comfort-charcoal-700 text-sm font-medium">{agent.name}</span>
                   <div className="flex items-center gap-2 ml-auto">
-                    <span className="text-gray-500 text-xs">{agent.status}</span>
+                    <span className="text-comfort-charcoal-400 text-xs">{agent.status}</span>
                     <motion.div
                       className={`w-2 h-2 rounded-full ${agent.color}`}
                       animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
@@ -180,7 +180,7 @@ export default function HowItWorksSection() {
                   </div>
                 </div>
                 {activeStep === 1 && (
-                  <div className="mt-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="mt-2 h-1 bg-comfort-beige-200 rounded-full overflow-hidden">
                     <motion.div
                       className={`h-full bg-gradient-to-r ${agent.gradient}`}
                       initial={{ width: '0%' }}
@@ -192,7 +192,7 @@ export default function HowItWorksSection() {
             ))}
           </div>
           <motion.div
-            className="mt-3 text-center text-xs text-gray-500"
+            className="mt-3 text-center text-xs text-comfort-charcoal-400"
             animate={{ opacity: [0.5, 1, 0.5] }}
             transition={{ repeat: Infinity, duration: 2 }}
           >
@@ -206,12 +206,12 @@ export default function HowItWorksSection() {
       title: "Stay in Command",
       emoji: "🎮",
       description: "Review code in real-time, adjust requirements, or chat with the agents. You're the director — the agents do the heavy lifting.",
-      color: "from-green-500 to-emerald-500",
+      color: "from-comfort-sage-600 to-comfort-sage-700",
       visual: (
-        <div className="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+        <div className="bg-white/80 rounded-xl p-4 border border-comfort-beige-200">
           <div className="space-y-3">
             <motion.div
-              className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-lg p-3"
+              className="flex items-center justify-between bg-comfort-beige-50 rounded-lg p-3"
               whileHover={{ scale: 1.02 }}
             >
               <div className="flex items-center gap-2">
@@ -219,32 +219,32 @@ export default function HowItWorksSection() {
                   animate={{ rotate: 360 }}
                   transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
                 >
-                  <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-comfort-sage-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </motion.div>
-                <span className="text-gray-900 dark:text-white text-sm font-medium">Code Ready</span>
-                <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 rounded-full">+847 lines</span>
+                <span className="text-comfort-charcoal-800 text-sm font-medium">Code Ready</span>
+                <span className="text-xs px-2 py-0.5 bg-comfort-sage-100 text-comfort-sage-600 rounded-full">+847 lines</span>
               </div>
               <div className="flex gap-2">
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  className="text-xs px-3 py-1 bg-green-600 text-white rounded-full font-medium"
+                  className="text-xs px-3 py-1 bg-comfort-sage-600 text-white rounded-full font-medium"
                 >
                   ✓ Approve
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.95 }}
-                  className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full"
+                  className="text-xs px-3 py-1 bg-comfort-beige-200 text-comfort-charcoal-600 rounded-full"
                 >
                   Review
                 </motion.button>
               </div>
             </motion.div>
             <motion.div
-              className="bg-white dark:bg-gray-900 rounded-lg p-3"
+              className="bg-comfort-beige-50 rounded-lg p-3"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -252,9 +252,9 @@ export default function HowItWorksSection() {
               <div className="flex items-start gap-2 text-sm">
                 <span className="text-2xl">👤</span>
                 <div className="flex-1">
-                  <span className="text-cyan-600 dark:text-cyan-400 font-medium">You:</span>
+                  <span className="text-comfort-sage-600 font-medium">You:</span>
                   <motion.span
-                    className="text-gray-600 dark:text-gray-400 ml-2"
+                    className="text-comfort-charcoal-500 ml-2"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.5 }}
@@ -269,8 +269,8 @@ export default function HowItWorksSection() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 1 }}
               >
-                <span className="text-purple-600 dark:text-purple-400 font-medium">🤖 Coder:</span>
-                <span className="text-gray-600 dark:text-gray-400">On it! Adding theme toggle now...</span>
+                <span className="text-comfort-sage-600 font-medium">🤖 Coder:</span>
+                <span className="text-comfort-charcoal-500">On it! Adding theme toggle now...</span>
               </motion.div>
             </motion.div>
           </div>
@@ -282,9 +282,9 @@ export default function HowItWorksSection() {
       title: "Ship It",
       emoji: "🚀",
       description: "Working software lands in production. Preview your app in real-time, then deploy with one click.",
-      color: "from-orange-500 to-red-500",
+      color: "from-comfort-terracotta-400 to-comfort-terracotta-500",
       visual: (
-        <div className="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700 relative overflow-hidden">
+        <div className="bg-white/80 rounded-xl p-4 border border-comfort-beige-200 relative overflow-hidden">
           {showConfetti && (
             <div className="absolute inset-0 pointer-events-none">
               {[...Array(20)].map((_, i) => (
@@ -314,10 +314,10 @@ export default function HowItWorksSection() {
           )}
           <div className="text-center relative">
             <motion.div
-              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 mb-3"
+              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-comfort-sage-500 to-comfort-sage-600 mb-3"
               animate={activeStep === 3 ? {
                 scale: [1, 1.2, 1],
-                boxShadow: ['0 0 0px #10b981', '0 0 30px #10b981', '0 0 0px #10b981']
+                boxShadow: ['0 0 0px #7c9a82', '0 0 30px #7c9a82', '0 0 0px #7c9a82']
               } : {}}
               transition={{ repeat: Infinity, duration: 2 }}
             >
@@ -334,13 +334,13 @@ export default function HowItWorksSection() {
               </motion.svg>
             </motion.div>
             <motion.div
-              className="text-gray-900 dark:text-white font-bold text-xl mb-1"
+              className="text-comfort-charcoal-800 font-bold text-xl mb-1"
               animate={activeStep === 3 ? { scale: [1, 1.05, 1] } : {}}
               transition={{ repeat: Infinity, duration: 1 }}
             >
               🎉 App Complete!
             </motion.div>
-            <div className="text-gray-500 dark:text-gray-400 text-sm mb-3">Deployed to production</div>
+            <div className="text-comfort-charcoal-500 text-sm mb-3">Deployed to production</div>
             <div className="flex justify-center gap-4 text-xs">
               {[
                 { label: '23 components', icon: '📦' },
@@ -349,7 +349,7 @@ export default function HowItWorksSection() {
               ].map((stat, i) => (
                 <motion.span
                   key={i}
-                  className="flex items-center gap-1 px-2 py-1 bg-white dark:bg-gray-900 rounded-full text-gray-600 dark:text-gray-400"
+                  className="flex items-center gap-1 px-2 py-1 bg-comfort-beige-50 rounded-full text-comfort-charcoal-500"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.2 }}
@@ -367,7 +367,7 @@ export default function HowItWorksSection() {
   ]
 
   return (
-    <section id="how-it-works" className="py-12 md:py-16 bg-gradient-to-b from-gray-50 to-white">
+    <section id="how-it-works" className="py-12 md:py-16 bg-gradient-to-b from-comfort-beige-100 to-comfort-beige-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
@@ -376,13 +376,13 @@ export default function HowItWorksSection() {
           transition={{ duration: 0.8 }}
           className="text-center mb-12"
         >
-          <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium text-cyan-700 dark:text-cyan-300 bg-cyan-100 dark:bg-cyan-900/30 rounded-full border border-cyan-300 dark:border-cyan-700/50">
+          <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium text-comfort-sage-700 bg-comfort-sage-100 rounded-full border border-comfort-sage-300">
             ✨ How It Works
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-gray-900 dark:text-white tracking-tight">
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-comfort-charcoal-800 tracking-tight">
             From Idea to Production
           </h2>
-          <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+          <p className="text-xl md:text-2xl text-comfort-charcoal-500 max-w-3xl mx-auto">
             App development becomes visual. Cards are missions. Agents are your development team.
           </p>
         </motion.div>
@@ -399,7 +399,7 @@ export default function HowItWorksSection() {
               whileTap={{ scale: 0.95 }}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeStep === index
                 ? `bg-gradient-to-r ${step.color} text-white shadow-lg`
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                : 'bg-comfort-beige-200 text-comfort-charcoal-600 hover:bg-comfort-beige-300'
                 }`}
             >
               <span className="mr-1">{step.emoji}</span>
@@ -425,18 +425,18 @@ export default function HowItWorksSection() {
               >
                 {steps[activeStep].step}
               </motion.div>
-              <h3 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-3">
+              <h3 className="text-3xl md:text-4xl font-bold text-comfort-charcoal-800 mb-4 flex items-center gap-3">
                 <span>{steps[activeStep].emoji}</span>
                 {steps[activeStep].title}
               </h3>
-              <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">{steps[activeStep].description}</p>
+              <p className="text-lg text-comfort-charcoal-500 leading-relaxed">{steps[activeStep].description}</p>
 
               <div className="flex gap-4 mt-6">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setActiveStep(prev => (prev > 0 ? prev - 1 : steps.length - 1))}
-                  className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  className="px-4 py-2 bg-comfort-beige-100 text-comfort-charcoal-600 rounded-lg hover:bg-comfort-beige-200 transition-colors"
                 >
                   ← Previous
                 </motion.button>

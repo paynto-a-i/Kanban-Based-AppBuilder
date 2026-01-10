@@ -34,20 +34,20 @@ export default function ContactForm() {
 
   if (isSubmitted) {
     return (
-      <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-gray-50 to-white">
+      <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-comfort-beige-100 to-comfort-beige-50">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-12"
+            className="bg-white border border-comfort-beige-300 rounded-2xl p-12"
           >
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-cyan-500 mb-6">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-comfort-sage-500 to-comfort-sage-600 mb-6">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">You&apos;re on the list!</h2>
-            <p className="text-gray-600 dark:text-gray-400">We&apos;ll be in touch soon with early access to Paynto.AI.</p>
+            <h2 className="text-3xl font-bold text-comfort-charcoal-800 mb-4">You&apos;re on the list!</h2>
+            <p className="text-comfort-charcoal-500">We&apos;ll be in touch soon with early access to Paynto.AI.</p>
           </motion.div>
         </div>
       </section>
@@ -55,7 +55,7 @@ export default function ContactForm() {
   }
 
   return (
-    <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-gray-50 to-white">
+    <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-comfort-beige-100 to-comfort-beige-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -64,13 +64,13 @@ export default function ContactForm() {
           transition={{ duration: 0.6 }}
           className="text-center mb-8"
         >
-          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300">
+          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-comfort-terracotta-600 bg-comfort-terracotta-100 rounded-full border border-comfort-terracotta-300">
             Early Access
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
             Start Building Today
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
             Join the waitlist to be among the first to build with AI agents.
           </p>
         </motion.div>
@@ -81,11 +81,11 @@ export default function ContactForm() {
           viewport={{ once: true }}
           transition={{ delay: 0.2, duration: 0.8 }}
           onSubmit={handleSubmit}
-          className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 md:p-10 max-w-2xl mx-auto"
+          className="bg-comfort-beige-50 border border-comfort-beige-300 rounded-2xl p-8 md:p-10 max-w-2xl mx-auto shadow-sm"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="name" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
                 Name *
               </label>
               <input
@@ -95,13 +95,13 @@ export default function ContactForm() {
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-beige-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="Your name"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
                 Email *
               </label>
               <input
@@ -111,7 +111,7 @@ export default function ContactForm() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-beige-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="you@company.com"
               />
             </div>
@@ -119,7 +119,7 @@ export default function ContactForm() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="company" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
                 Company
               </label>
               <input
@@ -128,13 +128,13 @@ export default function ContactForm() {
                 name="company"
                 value={formData.company}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-beige-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="Your company"
               />
             </div>
 
             <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor="role" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
                 Role
               </label>
               <select
@@ -142,7 +142,7 @@ export default function ContactForm() {
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-beige-300 bg-white text-comfort-charcoal-800 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
               >
                 <option value="">Select role</option>
                 <option value="founder">Founder / CEO</option>
@@ -157,7 +157,7 @@ export default function ContactForm() {
           </div>
 
           <div className="mb-8">
-            <label htmlFor="message" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label htmlFor="message" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
               What would you build with AI?
             </label>
             <textarea
@@ -166,7 +166,7 @@ export default function ContactForm() {
               rows={4}
               value={formData.message}
               onChange={handleChange}
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 rounded-xl border border-comfort-beige-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
               placeholder="Tell us about your dream project..."
             />
           </div>
@@ -176,12 +176,12 @@ export default function ContactForm() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={isSubmitting}
-            className="w-full px-8 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold text-lg rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-8 py-4 bg-gradient-to-r from-comfort-sage-500 to-comfort-sage-600 text-white font-semibold text-lg rounded-xl shadow-lg shadow-comfort-sage-500/25 hover:shadow-xl hover:shadow-comfort-sage-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Joining...' : 'Join the Waitlist'}
           </motion.button>
 
-          <p className="text-center text-gray-500 text-sm mt-4">
+          <p className="text-center text-comfort-charcoal-500 text-sm mt-4">
             No spam. We&apos;ll only contact you about early access.
           </p>
         </motion.form>

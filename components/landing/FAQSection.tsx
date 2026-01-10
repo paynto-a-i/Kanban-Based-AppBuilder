@@ -42,7 +42,7 @@ export default function FAQSection() {
   ]
 
   return (
-    <section id="faq" className="py-12 md:py-16 bg-white">
+    <section id="faq" className="py-12 md:py-16 bg-comfort-beige-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -51,10 +51,10 @@ export default function FAQSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-10"
         >
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
             Questions?
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
             Everything you need to know about building with Paynto.AI
           </p>
         </motion.div>
@@ -67,19 +67,19 @@ export default function FAQSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.05 }}
-              className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 transition-colors duration-300"
+              className="bg-comfort-beige-100 rounded-2xl overflow-hidden border border-comfort-beige-300 hover:border-comfort-sage-300 transition-colors duration-300"
             >
               <button
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors duration-200"
+                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-comfort-beige-200 transition-colors duration-200"
               >
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white pr-4">
+                <h3 className="text-lg font-semibold text-comfort-charcoal-800 pr-4">
                   {faq.question}
                 </h3>
                 <motion.svg
                   animate={{ rotate: openIndex === index ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
-                  className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0"
+                  className="w-5 h-5 text-comfort-charcoal-400 flex-shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -98,7 +98,7 @@ export default function FAQSection() {
                 className="overflow-hidden"
               >
                 <div className="px-6 pb-5">
-                  <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <p className="text-comfort-charcoal-500 leading-relaxed">
                     {faq.answer}
                   </p>
                 </div>
@@ -114,14 +114,14 @@ export default function FAQSection() {
           transition={{ delay: 0.4 }}
           className="mt-12 text-center"
         >
-          <p className="text-gray-500 mb-4">
+          <p className="text-comfort-charcoal-500 mb-4">
             More questions? We&apos;d love to chat.
           </p>
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
-            className="px-6 py-3 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-medium rounded-xl transition-colors duration-300"
+            className="px-6 py-3 bg-comfort-beige-200 hover:bg-comfort-beige-300 text-comfort-charcoal-800 font-medium rounded-xl transition-colors duration-300"
           >
             Contact Us
           </motion.button>
