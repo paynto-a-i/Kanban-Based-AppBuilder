@@ -35,7 +35,6 @@ import { useGitSync } from '@/hooks/useGitSync';
 import { UserMenu, LoginButton } from '@/components/auth';
 import { UsagePill } from '@/components/usage/UsagePill';
 import UIOptionsSelector, { UIOption } from '@/components/ui-options/UIOptionsSelector';
-import ViewPaneUISelector from '@/components/ui-options/ViewPaneUISelector';
 import { useBugbot, ReviewResult } from '@/hooks/useBugbot';
 import { CodeReviewPanel, RegressionWarningModal } from '@/components/kanban';
 import { useSoftDelete } from '@/hooks/useSoftDelete';
@@ -43,6 +42,9 @@ import { useAutoRefactor } from '@/hooks/useAutoRefactor';
 import { useGitHubImport } from '@/hooks/useGitHubImport';
 import { usePlanVersions, type PlanVersion } from '@/hooks/usePlanVersions';
 import { PlanVersionHistoryPanel } from '@/components/planning';
+import { useGenerationState } from '@/hooks/useGenerationState';
+import IdleStateHero from '@/components/app/generation/IdleStateHero';
+import AnalyzingStateView from '@/components/app/generation/AnalyzingStateView';
 
 interface SandboxData {
   sandboxId: string;
@@ -254,6 +256,15 @@ function AISandboxPage() {
   // Store flag to trigger generation after component mounts
   const [shouldAutoGenerate, setShouldAutoGenerate] = useState(false);
 
+  // Generation state machine - derives UI state from app state
+  const generationState = useGenerationState({
+    plan: kanban.plan,
+    tickets: kanban.tickets,
+    isPlanning,
+    hasInitialSubmission,
+    generationProgress,
+  });
+
   // Clear old conversation data on component mount and create/restore sandbox
   useEffect(() => {
     let isMounted = true;
@@ -419,7 +430,7 @@ Visual Features: ${uiOption.features.join(', ')}`;
           newParams.delete('sandbox');
           window.history.replaceState({}, '', `/generation?${newParams.toString()}`);
         }
-
+        
         console.log('[home] Creating new sandbox...');
         sandboxCreated = true;
         await createSandbox(true);
@@ -645,7 +656,7 @@ Visual Features: ${uiOption.features.join(', ')}`;
       try {
         const response = await fetch('/api/sandbox-status');
         const data = await response.json();
-
+        
         if (data.sandboxStopped) {
           console.log('[keep-alive] Sandbox expired during build');
           setSandboxExpired(true);
@@ -657,7 +668,7 @@ Visual Features: ${uiOption.features.join(', ')}`;
 
     // Ping every 2 minutes to keep sandbox alive
     const interval = setInterval(keepAlive, 2 * 60 * 1000);
-
+    
     // Also ping immediately
     keepAlive();
 
@@ -826,12 +837,12 @@ Visual Features: ${uiOption.features.join(', ')}`;
         console.log('[checkSandboxStatus] Sandbox unavailable, clearing state and creating new one');
         setSandboxData(null);
         updateStatus('Sandbox stopped - creating new one...', false);
-
+        
         // Clear old sandbox ID from URL
         const newParams = new URLSearchParams(searchParams.toString());
         newParams.delete('sandbox');
         router.replace(`/generation?${newParams.toString()}`, { scroll: false });
-
+        
         const created = await createSandbox(true, 0, desiredTemplate);
         if (created) {
           // If we have an existing Kanban plan (often completed), rehydrate the new sandbox
@@ -952,7 +963,7 @@ Visual Features: ${uiOption.features.join(', ')}`;
         if (!ticket.generatedCode) continue;
         addChatMessage(`Restoring ${i + 1}/${restorableTickets.length}: ${ticket.title}`, 'system');
         // Apply sequentially so later tickets can override earlier ones even if files shrink.
-        await applyGeneratedCode(ticket.generatedCode, false, activeSandbox);
+        await applyGeneratedCode(ticket.generatedCode, false, activeSandbox, { throwOnError: true });
       }
 
       // Re-apply Supabase env vars if present in any ticket inputs (so the restored preview switches to Supabase mode).
@@ -1014,7 +1025,6 @@ Visual Features: ${uiOption.features.join(', ')}`;
     setIsLoadingUIOptions(true);
     setShowUIOptions(true);
     setPendingPrompt(prompt);
-    setActiveTab('preview'); // Switch to preview tab to show inline selector
 
     try {
       const response = await fetch('/api/generate-ui-options', {
@@ -1072,7 +1082,7 @@ Apply these design specifications consistently across all components.`;
 
   const handleCodeReviewApprove = () => {
     if (!pendingReviewData) return;
-
+    
     pendingReviewData.tickets.forEach(ticket => {
       kanban.updateTicketStatus(ticket.id, 'done');
       kanban.updateTicketProgress(ticket.id, 100);
@@ -1219,7 +1229,7 @@ Apply these design specifications consistently across all components.`;
       const response = await fetch('/api/plan-build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           prompt,
           context,
           uiStyle: uiStyle ? {
@@ -1239,28 +1249,53 @@ Apply these design specifications consistently across all components.`;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'ticket') {
-                kanban.setTickets(prev => [...prev, data.ticket]);
-              } else if (data.type === 'plan_complete') {
-                const serverPlan = data.plan;
-                kanban.setPlan({
-                  ...serverPlan,
-                  uiStyle:
-                    serverPlan?.uiStyle ||
-                    (uiStyle
-                      ? {
+        // SSE events are separated by a blank line (\n\n). Buffer until we have a full event.
+        let boundaryIndex = buffer.indexOf('\n\n');
+        while (boundaryIndex !== -1) {
+          const rawEvent = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + 2);
+          boundaryIndex = buffer.indexOf('\n\n');
+
+          // Extract and join all `data:` lines in the SSE event.
+          const dataLines = rawEvent
+            .split('\n')
+            .filter((line) => line.startsWith('data: '))
+            .map((line) => line.slice(6));
+
+          if (dataLines.length === 0) continue;
+
+          const payload = dataLines.join('\n');
+
+          try {
+            const data = JSON.parse(payload);
+
+            if (data.type === 'ticket') {
+              kanban.setTickets(prev => [...prev, data.ticket]);
+              continue;
+            }
+
+            if (data.type === 'plan_complete') {
+              const serverPlan = data.plan;
+
+              // Always hydrate tickets from `plan_complete` to avoid missing tickets if earlier streamed events were split across chunks.
+              if (serverPlan?.tickets && Array.isArray(serverPlan.tickets)) {
+                kanban.setTickets(serverPlan.tickets);
+              }
+
+              kanban.setPlan({
+                ...serverPlan,
+                uiStyle:
+                  serverPlan?.uiStyle ||
+                  (uiStyle
+                    ? {
                         name: uiStyle.name,
                         description: uiStyle.description,
                         style: uiStyle.style,
@@ -1268,22 +1303,29 @@ Apply these design specifications consistently across all components.`;
                         layout: uiStyle.layout,
                         features: uiStyle.features,
                       }
-                      : undefined),
+                    : undefined),
+              });
+
+              // Snapshot the initial plan (for plan versioning)
+              if (serverPlan?.tickets && Array.isArray(serverPlan.tickets) && serverPlan.tickets.length > 0) {
+                void planVersions.createSnapshot({
+                  source: 'initial_plan',
+                  name: '📦 Initial plan',
+                  description: 'Snapshot captured when planning completed',
+                  tickets: serverPlan.tickets,
+                  planIdOverride: serverPlan?.id || null,
                 });
-                // Snapshot the initial plan (for plan versioning)
-                if (data.plan?.tickets && Array.isArray(data.plan.tickets) && data.plan.tickets.length > 0) {
-                  void planVersions.createSnapshot({
-                    source: 'initial_plan',
-                    name: '📦 Initial plan',
-                    description: 'Snapshot captured when planning completed',
-                    tickets: data.plan.tickets,
-                    planIdOverride: data.plan?.id || null,
-                  });
-                }
               }
-            } catch (e) {
-              console.error('Failed to parse plan event:', e);
+
+              continue;
             }
+
+            if (data.type === 'error') {
+              addChatMessage(`❌ Planning error: ${data.message || 'Unknown error'}`, 'error');
+              continue;
+            }
+          } catch (e) {
+            console.error('Failed to parse plan event:', e, { rawEvent });
           }
         }
       }
@@ -1829,14 +1871,14 @@ Requirements:
 
         const nextTicket = opts?.onlyTicketId
           ? (() => {
-            const res = kanban.buildSingleTicket(opts.onlyTicketId);
-            if (!res) return null;
-            if (typeof (res as any).error === 'string') {
-              addChatMessage(`❌ Can't build that ticket yet: ${(res as any).error}`, 'error');
-              return null;
-            }
-            return res as any;
-          })()
+              const res = kanban.buildSingleTicket(opts.onlyTicketId);
+              if (!res) return null;
+              if (typeof (res as any).error === 'string') {
+                addChatMessage(`❌ Can't build that ticket yet: ${(res as any).error}`, 'error');
+                return null;
+              }
+              return res as any;
+            })()
           : kanban.getNextBuildableTicket();
 
         if (!nextTicket) break;
@@ -1851,7 +1893,7 @@ Requirements:
           /supabase/i.test(nextTicket.title || '') ||
           /supabase/i.test(nextTicket.description || '') ||
           Array.isArray((nextTicket as any).inputRequests) &&
-          (nextTicket as any).inputRequests.some((r: any) => typeof r?.id === 'string' && r.id.startsWith('supabase_'));
+            (nextTicket as any).inputRequests.some((r: any) => typeof r?.id === 'string' && r.id.startsWith('supabase_'));
 
         const hasSupabaseInputs =
           nextTicket.userInputs &&
@@ -1900,14 +1942,14 @@ Requirements:
         const credentialText =
           nextTicket.userInputs && Object.keys(nextTicket.userInputs).length > 0
             ? `\n\nUser inputs:\n${Object.entries(nextTicket.userInputs)
-              .map(([k, v]) => {
-                if (sensitiveIds.has(k)) return `- ${k}=[REDACTED]`;
-                const str = String(v ?? '');
-                // Avoid dumping long values into prompts even if not marked sensitive.
-                if (str.length > 120) return `- ${k}=[REDACTED]`;
-                return `- ${k}=${str}`;
-              })
-              .join('\n')}`
+                .map(([k, v]) => {
+                  if (sensitiveIds.has(k)) return `- ${k}=[REDACTED]`;
+                  const str = String(v ?? '');
+                  // Avoid dumping long values into prompts even if not marked sensitive.
+                  if (str.length > 120) return `- ${k}=[REDACTED]`;
+                  return `- ${k}=${str}`;
+                })
+                .join('\n')}`
             : '';
 
         const uiStyleForPrompt = (kanban.plan as any)?.uiStyle;
@@ -1973,12 +2015,17 @@ Requirements:
         kanban.updateTicketProgress(nextTicket.id, 90);
         setGenerationProgress(prev => ({ ...prev, status: `Applying: ${nextTicket.title}` }));
         setActiveTab('preview');
-        await applyGeneratedCode(generatedCode, true, activeSandbox);
+        const applyOutcome = await applyGeneratedCode(generatedCode, true, activeSandbox, { throwOnError: true });
 
-        const allFiles = Array.from(generatedCode.matchAll(/<file path="([^"]+)">/g)).map(m => m[1]);
+        const appliedFiles = Array.from(new Set(applyOutcome.appliedFiles || []));
+        const allFiles =
+          appliedFiles.length > 0
+            ? appliedFiles
+            : Array.from(generatedCode.matchAll(/<file path="([^"]+)">/g)).map(m => m[1]);
         if (allFiles.length > 0) {
           kanban.updateTicketFiles(nextTicket.id, allFiles);
         }
+        const appliedFilesSet = new Set(allFiles);
 
         // Code review gate (Bugbot)
         kanban.updateTicketStatus(nextTicket.id, 'pr_review');
@@ -2053,7 +2100,10 @@ Requirements:
           }
 
           // Apply the fix patch (incremental edit)
-          await applyGeneratedCode(fixCode, true, activeSandbox);
+          const fixApplyOutcome = await applyGeneratedCode(fixCode, true, activeSandbox, { throwOnError: true });
+          for (const p of fixApplyOutcome.appliedFiles || []) {
+            appliedFilesSet.add(p);
+          }
 
           // Update the in-memory file set for the next Bugbot pass using the returned <file> blocks.
           const updatedMap = new Map(currentFiles.map(f => [f.path, f.content]));
@@ -2069,6 +2119,23 @@ Requirements:
             ticketTitle: nextTicket.title,
             files: currentFiles,
           });
+        }
+
+        // Persist the final ticket code after any auto-fixes so restore + traceability remain accurate.
+        if (currentFiles.length > 0) {
+          const finalGeneratedCode = currentFiles
+            .map(f => `<file path="${f.path}">\n${f.content}\n</file>`)
+            .join('\n\n');
+          kanban.updateTicketCode(nextTicket.id, finalGeneratedCode);
+          const finalFiles = Array.from(
+            new Set([
+              ...Array.from(appliedFilesSet),
+              ...currentFiles.map(f => f.path),
+            ])
+          );
+          if (finalFiles.length > 0) {
+            kanban.updateTicketFiles(nextTicket.id, finalFiles);
+          }
         }
 
         if (hasBlockingIssues(currentReview)) {
@@ -2108,7 +2175,7 @@ Requirements:
         kanban.updateTicketStatus(nextTicket.id, 'done');
         kanban.updateTicketProgress(nextTicket.id, 100);
 
-        if (gitSync.isEnabled && fileContents.length > 0) {
+        if (gitSync.isEnabled && currentFiles.length > 0) {
           gitSync.syncTicketCompletion(
             {
               id: nextTicket.id,
@@ -2117,7 +2184,7 @@ Requirements:
               type: nextTicket.type,
               priority: nextTicket.priority,
             },
-            fileContents
+            currentFiles
           );
         }
 
@@ -2237,23 +2304,24 @@ Requirements:
           ? 'bg-green-50 text-green-700 border-green-200'
           : repoLoadStatus === 'error'
             ? 'bg-red-50 text-red-700 border-red-200'
-            : 'bg-comfort-sage-50 text-comfort-charcoal-600 border-comfort-sage-200';
+            : 'bg-gray-50 text-gray-700 border-gray-200';
 
     return (
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
-        <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-comfort-sage-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-comfort-sage-100 flex items-center justify-between gap-3">
+        <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-comfort-charcoal-800 truncate">Loading repo into sandbox</div>
-              <div className="text-xs text-comfort-charcoal-400 truncate">{titleRepo}</div>
+              <div className="text-sm font-semibold text-gray-900 truncate">Loading repo into sandbox</div>
+              <div className="text-xs text-gray-500 truncate">{titleRepo}</div>
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-[10px] px-2 py-1 rounded-full border ${statusClass}`}>{statusLabel}</span>
               <button
                 onClick={() => canClose && setRepoLoadModalOpen(false)}
                 disabled={!canClose}
-                className={`h-8 w-8 rounded-md border flex items-center justify-center ${canClose ? 'border-comfort-sage-200 hover:bg-comfort-sage-50 text-comfort-charcoal-600' : 'border-comfort-sage-100 text-comfort-charcoal-300 cursor-not-allowed'
-                  }`}
+                className={`h-8 w-8 rounded-md border flex items-center justify-center ${
+                  canClose ? 'border-gray-200 hover:bg-gray-50 text-gray-700' : 'border-gray-100 text-gray-300 cursor-not-allowed'
+                }`}
                 title={canClose ? 'Close' : 'Working…'}
               >
                 ✕
@@ -2262,14 +2330,14 @@ Requirements:
           </div>
 
           <div className="px-4 py-3">
-            <div className="text-xs text-comfort-charcoal-500">
+            <div className="text-xs text-gray-600">
               This can take a couple minutes (especially during <span className="font-medium">npm install</span>).
             </div>
           </div>
 
           <div className="px-4 pb-3 space-y-2">
             {repoLoadSteps.length === 0 ? (
-              <div className="text-xs text-comfort-charcoal-400">Preparing…</div>
+              <div className="text-xs text-gray-500">Preparing…</div>
             ) : (
               <div className="space-y-1.5">
                 {repoLoadSteps.map(step => {
@@ -2289,16 +2357,16 @@ Requirements:
                         ? 'border-green-200 bg-green-50'
                         : step.status === 'error'
                           ? 'border-red-200 bg-red-50'
-                          : 'border-comfort-sage-200 bg-white';
+                          : 'border-gray-200 bg-white';
 
                   return (
                     <div key={step.id} className={`rounded-lg border px-3 py-2 ${rowClass}`}>
                       <div className="flex items-start gap-2">
                         <span className="text-sm leading-5">{icon}</span>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-medium text-comfort-charcoal-800">{step.label}</div>
+                          <div className="text-xs font-medium text-gray-900">{step.label}</div>
                           {step.detail ? (
-                            <div className="mt-0.5 text-[11px] text-comfort-charcoal-500 whitespace-pre-wrap break-words">
+                            <div className="mt-0.5 text-[11px] text-gray-600 whitespace-pre-wrap break-words">
                               {step.detail}
                             </div>
                           ) : null}
@@ -2318,20 +2386,21 @@ Requirements:
 
             {repoLoadLogs.length > 0 ? (
               <div className="mt-2">
-                <div className="text-[10px] font-semibold text-comfort-charcoal-400 mb-1">Logs (tail)</div>
-                <pre className="max-h-40 overflow-auto rounded-lg border border-comfort-sage-200 bg-comfort-sage-50 p-2 text-[10px] text-comfort-charcoal-600 whitespace-pre-wrap break-words">
-                  {repoLoadLogs.slice(-20).join('\n\n')}
+                <div className="text-[10px] font-semibold text-gray-500 mb-1">Logs (tail)</div>
+                <pre className="max-h-40 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-2 text-[10px] text-gray-700 whitespace-pre-wrap break-words">
+{repoLoadLogs.slice(-20).join('\n\n')}
                 </pre>
               </div>
             ) : null}
           </div>
 
-          <div className="px-4 py-3 border-t border-comfort-sage-100 flex items-center justify-end gap-2">
+          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
             <button
               onClick={() => setRepoLoadModalOpen(false)}
               disabled={!canClose}
-              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${canClose ? 'border-comfort-sage-200 hover:bg-comfort-sage-50 text-comfort-charcoal-600' : 'border-comfort-sage-100 text-comfort-charcoal-300 cursor-not-allowed'
-                }`}
+              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                canClose ? 'border-gray-200 hover:bg-gray-50 text-gray-700' : 'border-gray-100 text-gray-300 cursor-not-allowed'
+              }`}
             >
               Close
             </button>
@@ -2471,7 +2540,20 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     }
   };
 
-  const applyGeneratedCode = async (code: string, isEdit: boolean = false, overrideSandboxData?: SandboxData) => {
+  type ApplyGeneratedCodeOutcome = {
+    success: boolean;
+    results?: any;
+    appliedFiles?: string[];
+    error?: string;
+  };
+
+  const applyGeneratedCode = async (
+    code: string,
+    isEdit: boolean = false,
+    overrideSandboxData?: SandboxData,
+    opts?: { throwOnError?: boolean }
+  ): Promise<ApplyGeneratedCodeOutcome> => {
+    const throwOnError = Boolean(opts?.throwOnError);
     setLoading(true);
     log('Applying AI-generated code...');
 
@@ -2508,6 +2590,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let finalData: any = null;
+      let streamError: string | null = null;
 
       while (reader) {
         const { done, value } = await reader.read();
@@ -2607,6 +2690,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
 
                 case 'error':
                   addChatMessage(`Error: ${data.message || data.error || 'Unknown error'}`, 'system');
+                  streamError = data.message || data.error || 'Unknown error';
                   // Reset loading state on error
                   setLoading(false);
                   break;
@@ -2629,6 +2713,10 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         }
       }
 
+      if (streamError) {
+        throw new Error(streamError);
+      }
+
       // Process final data
       if (finalData && finalData.type === 'complete') {
         const data: any = {
@@ -2644,8 +2732,13 @@ Tip: I automatically detect and install npm packages from your code imports (lik
           debug: finalData.debug
         };
 
+        const results = data.results || {};
+        const appliedFiles = [
+          ...(results.filesCreated || []),
+          ...(results.filesUpdated || []),
+        ];
+
         if (data.success) {
-          const { results } = data;
 
           // Log package installation results without duplicate messages
           if (results.packagesInstalled?.length > 0) {
@@ -2697,6 +2790,18 @@ Tip: I automatically detect and install npm packages from your code imports (lik
             results.errors.forEach((err: string) => {
               log(err, 'error');
             });
+          }
+
+          // In strict mode (used by Kanban builds/restores), treat any apply errors as blocking.
+          if (throwOnError) {
+            const fatal: string[] = [];
+            if (results.errors?.length > 0) fatal.push(...results.errors);
+            if (results.packagesFailed?.length > 0) {
+              fatal.push(`Packages failed to install: ${results.packagesFailed.join(', ')}`);
+            }
+            if (fatal.length > 0) {
+              throw new Error(fatal.slice(0, 3).join(' | '));
+            }
           }
 
           if (data.structure) {
@@ -2829,7 +2934,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
 
             setIsPreviewRefreshing(true);
             setActiveTab('preview');
-
+            
             setTimeout(async () => {
               if (iframeRef.current && currentSandboxData?.url) {
                 console.log('[applyGeneratedCode] Starting iframe refresh sequence...');
@@ -2845,7 +2950,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     setIsPreviewRefreshing(false);
                   };
                   iframeRef.current.src = urlWithTimestamp;
-
+                  
                   // Fallback timeout to hide loading state
                   setTimeout(() => setIsPreviewRefreshing(false), 5000);
                 } catch (e) {
@@ -2862,12 +2967,22 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         } else {
           throw new Error(finalData?.error || 'Failed to apply code');
         }
+
+        return { success: true, results: data.results, appliedFiles };
       } else {
-        // If no final data was received, still close loading
+        const msg = 'No completion event received from code application stream.';
         addChatMessage('Code application may have partially succeeded. Check the preview.', 'system');
+        if (throwOnError) {
+          throw new Error(msg);
+        }
+        return { success: false, error: msg };
       }
     } catch (error: any) {
       log(`Failed to apply code: ${error.message}`, 'error');
+      if (throwOnError) {
+        throw error;
+      }
+      return { success: false, error: error?.message || 'Failed to apply code' };
     } finally {
       setLoading(false);
       // Clear isEdit flag after applying code
@@ -2954,8 +3069,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         <div className="absolute inset-0 flex overflow-hidden">
           {/* File Explorer - Hide during edits */}
           {!generationProgress.isEdit && (
-            <div className="w-[250px] border-r border-comfort-sage-200 bg-white flex flex-col flex-shrink-0">
-              <div className="p-4 bg-comfort-sage-100 text-comfort-charcoal-800 flex items-center justify-between">
+            <div className="w-[250px] border-r border-gray-200 bg-white flex flex-col flex-shrink-0">
+              <div className="p-4 bg-gray-100 text-gray-900 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <BsFolderFill style={{ width: '16px', height: '16px' }} />
                   <span className="text-sm font-medium">Explorer</span>
@@ -2968,21 +3083,21 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 {generationProgress.isGenerating && generationProgress.files.length === 0 && (
                   <div className="space-y-2 animate-pulse">
                     <div className="flex items-center gap-2 py-1">
-                      <div className="w-4 h-4 bg-comfort-sage-200 rounded" />
+                      <div className="w-4 h-4 bg-gray-200 rounded" />
                       <div className="w-4 h-4 bg-blue-100 rounded" />
-                      <div className="w-16 h-3 bg-comfort-sage-200 rounded" />
+                      <div className="w-16 h-3 bg-gray-200 rounded" />
                     </div>
                     <div className="ml-6 space-y-2">
                       <div className="flex items-center gap-2 py-1">
-                        <div className="w-4 h-4 bg-comfort-sage-200 rounded" />
+                        <div className="w-4 h-4 bg-gray-200 rounded" />
                         <div className="w-4 h-4 bg-yellow-100 rounded" />
-                        <div className="w-20 h-3 bg-comfort-sage-200 rounded" />
+                        <div className="w-20 h-3 bg-gray-200 rounded" />
                       </div>
                       <div className="ml-6 space-y-1.5">
                         {[1, 2, 3, 4].map((i) => (
                           <div key={i} className="flex items-center gap-2 py-0.5 px-3">
-                            <div className="w-4 h-4 bg-comfort-sage-100 rounded" />
-                            <div className={`h-3 bg-comfort-sage-200 rounded`} style={{ width: `${60 + i * 15}px` }} />
+                            <div className="w-4 h-4 bg-gray-100 rounded" />
+                            <div className={`h-3 bg-gray-200 rounded`} style={{ width: `${60 + i * 15}px` }} />
                           </div>
                         ))}
                       </div>
@@ -2993,13 +3108,13 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 <div className="text-sm">
                   {/* Root app folder */}
                   <div
-                    className="flex items-center gap-2 py-0.5 px-3 hover:bg-comfort-sage-100 rounded cursor-pointer text-comfort-charcoal-600"
+                    className="flex items-center gap-2 py-0.5 px-3 hover:bg-gray-100 rounded cursor-pointer text-gray-700"
                     onClick={() => toggleFolder('app')}
                   >
                     {expandedFolders.has('app') ? (
-                      <FiChevronDown style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />
+                      <FiChevronDown style={{ width: '16px', height: '16px' }} className="text-gray-600" />
                     ) : (
-                      <FiChevronRight style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />
+                      <FiChevronRight style={{ width: '16px', height: '16px' }} className="text-gray-600" />
                     )}
                     {expandedFolders.has('app') ? (
                       <BsFolder2Open style={{ width: '16px', height: '16px' }} className="text-blue-500" />
@@ -3039,20 +3154,20 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                           <div key={dir} className="mb-1">
                             {dir && (
                               <div
-                                className="flex items-center gap-2 py-0.5 px-3 hover:bg-comfort-sage-100 rounded cursor-pointer text-comfort-charcoal-600"
+                                className="flex items-center gap-2 py-0.5 px-3 hover:bg-gray-100 rounded cursor-pointer text-gray-700"
                                 onClick={() => toggleFolder(dir)}
                               >
                                 {expandedFolders.has(dir) ? (
-                                  <FiChevronDown style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />
+                                  <FiChevronDown style={{ width: '16px', height: '16px' }} className="text-gray-600" />
                                 ) : (
-                                  <FiChevronRight style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />
+                                  <FiChevronRight style={{ width: '16px', height: '16px' }} className="text-gray-600" />
                                 )}
                                 {expandedFolders.has(dir) ? (
                                   <BsFolder2Open style={{ width: '16px', height: '16px' }} className="text-yellow-600" />
                                 ) : (
                                   <BsFolderFill style={{ width: '16px', height: '16px' }} className="text-yellow-600" />
                                 )}
-                                <span className="text-comfort-charcoal-600">{dir.split('/').pop()}</span>
+                                <span className="text-gray-700">{dir.split('/').pop()}</span>
                               </div>
                             )}
                             {(!dir || expandedFolders.has(dir)) && (
@@ -3066,7 +3181,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                                       key={fullPath}
                                       className={`flex items-center gap-2 py-0.5 px-3 rounded cursor-pointer transition-all ${isSelected
                                         ? 'bg-blue-500 text-white'
-                                        : 'text-comfort-charcoal-600 hover:bg-comfort-sage-100'
+                                        : 'text-gray-700 hover:bg-gray-100'
                                         }`}
                                       onClick={() => handleFileClick(fullPath)}
                                     >
@@ -3074,7 +3189,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                                       <span className={`text-xs flex items-center gap-1 ${isSelected ? 'font-medium' : ''}`}>
                                         {fileInfo.name}
                                         {fileInfo.edited && (
-                                          <span className={`text-[10px] px-1 rounded ${isSelected ? 'bg-blue-400' : 'bg-comfort-sage-500 text-white'
+                                          <span className={`text-[10px] px-1 rounded ${isSelected ? 'bg-blue-400' : 'bg-orange-500 text-white'
                                             }`}>✓</span>
                                         )}
                                       </span>
@@ -3129,7 +3244,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 {/* Show selected file if one is selected */}
                 {selectedFile ? (
                   <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="bg-black border border-comfort-sage-200 rounded-lg overflow-hidden shadow-sm">
+                    <div className="bg-black border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                       <div className="px-4 py-2 bg-[#36322F] text-white flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           {getFileIcon(selectedFile)}
@@ -3184,14 +3299,14 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                             </div>
                           </div>
                           <h3 className="text-xl font-medium text-white mb-2">AI is analyzing your request</h3>
-                          <p className="text-comfort-charcoal-400 text-sm">{generationProgress.status || 'Preparing to generate code...'}</p>
+                          <p className="text-gray-400 text-sm">{generationProgress.status || 'Preparing to generate code...'}</p>
                         </div>
                       </div>
                     ) : (
-                      <div className="bg-black border border-comfort-sage-200 rounded-lg overflow-hidden">
-                        <div className="px-4 py-2 bg-comfort-sage-100 text-comfort-charcoal-800 flex items-center justify-between">
+                      <div className="bg-black border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="px-4 py-2 bg-gray-100 text-gray-900 flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <div className="w-16 h-16 border-2 border-comfort-sage-500 border-t-transparent rounded-full animate-spin" />
+                            <div className="w-16 h-16 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
                             <span className="font-mono text-sm">Streaming code...</span>
                           </div>
                         </div>
@@ -3209,7 +3324,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                           >
                             {generationProgress.streamedCode || 'Starting code generation...'}
                           </SyntaxHighlighter>
-                          <span className="inline-block w-3 h-5 bg-comfort-sage-400 ml-1 animate-pulse" />
+                          <span className="inline-block w-3 h-5 bg-orange-400 ml-1 animate-pulse" />
                         </div>
                       </div>
                     )
@@ -3225,7 +3340,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                               <span className={`px-2 py-0.5 text-xs rounded ${generationProgress.currentFile.type === 'css' ? 'bg-blue-600 text-white' :
                                 generationProgress.currentFile.type === 'javascript' ? 'bg-yellow-600 text-white' :
                                   generationProgress.currentFile.type === 'json' ? 'bg-green-600 text-white' :
-                                    'bg-comfort-sage-200 text-comfort-charcoal-600'
+                                    'bg-gray-200 text-gray-700'
                                 }`}>
                                 {generationProgress.currentFile.type === 'javascript' ? 'JSX' : generationProgress.currentFile.type.toUpperCase()}
                               </span>
@@ -3250,14 +3365,14 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                             >
                               {generationProgress.currentFile.content}
                             </SyntaxHighlighter>
-                            <span className="inline-block w-3 h-4 bg-comfort-sage-400 ml-4 mb-4 animate-pulse" />
+                            <span className="inline-block w-3 h-4 bg-orange-400 ml-4 mb-4 animate-pulse" />
                           </div>
                         </div>
                       )}
 
                       {/* Show completed files */}
                       {generationProgress.files.map((file, idx) => (
-                        <div key={idx} className="bg-white border border-comfort-sage-200 rounded-lg overflow-hidden">
+                        <div key={idx} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                           <div className="px-4 py-2 bg-[#36322F] text-white flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-green-500">✓</span>
@@ -3266,7 +3381,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                             <span className={`px-2 py-0.5 text-xs rounded ${file.type === 'css' ? 'bg-blue-600 text-white' :
                               file.type === 'javascript' ? 'bg-yellow-600 text-white' :
                                 file.type === 'json' ? 'bg-green-600 text-white' :
-                                  'bg-comfort-sage-200 text-comfort-charcoal-600'
+                                  'bg-gray-200 text-gray-700'
                               }`}>
                               {file.type === 'javascript' ? 'JSX' : file.type.toUpperCase()}
                             </span>
@@ -3297,7 +3412,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
 
                       {/* Show remaining raw stream if there's content after the last file */}
                       {!generationProgress.currentFile && generationProgress.streamedCode.length > 0 && (
-                        <div className="bg-black border border-comfort-sage-200 rounded-lg overflow-hidden">
+                        <div className="bg-black border border-gray-200 rounded-lg overflow-hidden">
                           <div className="px-4 py-2 bg-[#36322F] text-white flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <div className="w-16 h-16 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -3342,9 +3457,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
             {/* Progress indicator */}
             {generationProgress.components.length > 0 && (
               <div className="mx-6 mb-6">
-                <div className="h-2 bg-comfort-sage-200 rounded-full overflow-hidden">
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-orange-500 to-orange-400 transition-all duration-300"
                     style={{
                       width: `${(generationProgress.currentComponent / Math.max(generationProgress.components.length, 1)) * 100}%`
                     }}
@@ -3356,22 +3471,6 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         </div>
       );
     } else if (activeTab === 'preview') {
-      // Show UI Options selector in view pane when generating options
-      if (showUIOptions) {
-        return (
-          <ViewPaneUISelector
-            options={uiOptions}
-            onSelect={(option) => {
-              setHasInitialSubmission(true);
-              handleUIOptionSelect(option);
-            }}
-            onCancel={handleUIOptionsCancel}
-            isLoading={isLoadingUIOptions}
-            prompt={pendingPrompt}
-          />
-        );
-      }
-
       // Show loading state for initial generation or when starting a new generation with existing sandbox
       const isInitialGeneration = !sandboxData?.url && (urlScreenshot || isCapturingScreenshot || isPreparingDesign || loadingStage);
       const isNewGenerationWithSandbox = isStartingNewGeneration && sandboxData?.url;
@@ -3443,9 +3542,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
         };
 
         return (
-          <div className="relative w-full h-full flex items-center justify-center bg-comfort-sage-100">
+          <div className="relative w-full h-full flex items-center justify-center bg-gray-100">
             <div
-              className={`h-full transition-all duration-300 ${previewDevice !== 'desktop' ? 'shadow-2xl rounded-lg overflow-hidden border border-comfort-sage-300' : ''}`}
+              className={`h-full transition-all duration-300 ${previewDevice !== 'desktop' ? 'shadow-2xl rounded-lg overflow-hidden border border-gray-300' : ''}`}
               style={deviceStyles[previewDevice]}
             >
               <iframe
@@ -3462,14 +3561,14 @@ Tip: I automatically detect and install npm packages from your code imports (lik
             {sandboxExpired && (
               <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-30">
                 <div className="text-center max-w-md p-6">
-                  <div className="w-16 h-16 mx-auto mb-4 text-comfort-sage-500">
+                  <div className="w-16 h-16 mx-auto mb-4 text-orange-500">
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-comfort-charcoal-800 mb-2">Sandbox Expired</h3>
-                  <p className="text-sm text-comfort-charcoal-500 mb-4">The sandbox session has timed out. Creating a new one...</p>
-                  <div className="w-8 h-8 mx-auto border-3 border-comfort-sage-500 border-t-transparent rounded-full animate-spin" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Sandbox Expired</h3>
+                  <p className="text-sm text-gray-600 mb-4">The sandbox session has timed out. Creating a new one...</p>
+                  <div className="w-8 h-8 mx-auto border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
                 </div>
               </div>
             )}
@@ -3478,8 +3577,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
             {isPreviewRefreshing && !sandboxExpired && (
               <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-20">
                 <div className="text-center">
-                  <div className="w-10 h-10 mx-auto mb-3 border-3 border-comfort-sage-500 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm font-medium text-comfort-charcoal-600">Updating preview...</p>
+                  <div className="w-10 h-10 mx-auto mb-3 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm font-medium text-gray-700">Updating preview...</p>
                 </div>
               </div>
             )}
@@ -3500,7 +3599,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     ) : null}
                   </div>
 
-                  <h3 className="text-lg font-semibold text-comfort-charcoal-800 mb-2">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
                     {codeApplicationState.stage === 'analyzing' && 'Analyzing code...'}
                     {codeApplicationState.stage === 'installing' && 'Installing packages...'}
                     {codeApplicationState.stage === 'applying' && 'Applying changes...'}
@@ -3515,7 +3614,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                             key={index}
                             className={`px-2 py-1 text-xs rounded-full transition-all ${codeApplicationState.installedPackages?.includes(pkg)
                               ? 'bg-green-100 text-green-700'
-                              : 'bg-comfort-sage-100 text-comfort-charcoal-500'
+                              : 'bg-gray-100 text-gray-600'
                               }`}
                           >
                             {pkg}
@@ -3530,12 +3629,12 @@ Tip: I automatically detect and install npm packages from your code imports (lik
 
                   {/* Files being generated */}
                   {codeApplicationState.stage === 'applying' && codeApplicationState.filesGenerated && (
-                    <div className="text-sm text-comfort-charcoal-500">
+                    <div className="text-sm text-gray-600">
                       Creating {codeApplicationState.filesGenerated.length} files...
                     </div>
                   )}
 
-                  <p className="text-sm text-comfort-charcoal-400 mt-2">
+                  <p className="text-sm text-gray-500 mt-2">
                     {codeApplicationState.stage === 'analyzing' && 'Parsing generated code and detecting dependencies...'}
                     {codeApplicationState.stage === 'installing' && 'This may take a moment while npm installs the required packages...'}
                     {codeApplicationState.stage === 'applying' && 'Writing files to your sandbox environment...'}
@@ -3555,15 +3654,16 @@ Tip: I automatically detect and install npm packages from your code imports (lik
             {/* Preview controls */}
             <div className="absolute bottom-4 right-4 flex gap-2">
               {sandboxData &&
-                kanban.plan?.blueprint &&
-                (kanban.tickets || []).some(t =>
-                  Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status)
-                ) ? (
+              kanban.plan?.blueprint &&
+              (kanban.tickets || []).some(t =>
+                Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status)
+              ) ? (
                 <button
                   onClick={() => restoreKanbanPlanToSandbox(undefined, 'manual')}
                   disabled={isRestoringSandbox}
-                  className={`bg-white/90 hover:bg-white text-comfort-charcoal-600 p-2 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 ${isRestoringSandbox ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
-                    }`}
+                  className={`bg-white/90 hover:bg-white text-gray-700 p-2 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 ${
+                    isRestoringSandbox ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
+                  }`}
                   title={isRestoringSandbox ? 'Restoring…' : 'Restore build into this sandbox'}
                 >
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3600,8 +3700,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     iframeRef.current.src = newSrc;
                   }
                 }}
-                className={`bg-white/90 hover:bg-white text-comfort-charcoal-600 p-2 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 ${isRestoringSandbox ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
-                  }`}
+                className={`bg-white/90 hover:bg-white text-gray-700 p-2 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 ${
+                  isRestoringSandbox ? 'opacity-60 cursor-not-allowed pointer-events-none' : ''
+                }`}
                 title={isRestoringSandbox ? 'Restoring…' : 'Refresh sandbox'}
               >
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3620,19 +3721,19 @@ Tip: I automatically detect and install npm packages from your code imports (lik
 
       // Default state when no sandbox and no screenshot
       return (
-        <div className="flex items-center justify-center h-full bg-comfort-sage-50 text-comfort-charcoal-500 text-lg">
+        <div className="flex items-center justify-center h-full bg-gray-50 text-gray-600 text-lg">
           {screenshotError ? (
             <div className="text-center">
               <p className="mb-2">Failed to capture screenshot</p>
-              <p className="text-sm text-comfort-charcoal-400">{screenshotError}</p>
+              <p className="text-sm text-gray-500">{screenshotError}</p>
             </div>
           ) : sandboxData ? (
-            <div className="text-comfort-charcoal-400">
-              <div className="w-16 h-16 border-2 border-comfort-sage-300 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <div className="text-gray-500">
+              <div className="w-16 h-16 border-2 border-gray-300 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <p className="text-sm">Loading preview...</p>
             </div>
           ) : (
-            <div className="text-comfort-charcoal-400 text-center">
+            <div className="text-gray-500 text-center">
               <p className="text-sm">Start chatting to create your first app</p>
             </div>
           )}
@@ -4299,9 +4400,9 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     } else if (ext === 'css') {
       return <SiCss3 style={{ width: '16px', height: '16px' }} className="text-blue-500" />;
     } else if (ext === 'json') {
-      return <SiJson style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />;
+      return <SiJson style={{ width: '16px', height: '16px' }} className="text-gray-600" />;
     } else {
-      return <FiFile style={{ width: '16px', height: '16px' }} className="text-comfort-charcoal-500" />;
+      return <FiFile style={{ width: '16px', height: '16px' }} className="text-gray-600" />;
     }
   };
 
@@ -5554,10 +5655,45 @@ Focus on the key sections and content, making it clean and modern.`;
     }, 500);
   };
 
+  // Handle idle state - show full-page template selector
+  if (generationState.state === 'idle') {
+    return (
+      <HeaderProvider>
+        <IdleStateHero
+          onSubmitPrompt={async (prompt) => {
+            setHasInitialSubmission(true);
+            await planBuild(prompt);
+          }}
+          onSubmitUrl={async (url) => {
+            setHasInitialSubmission(true);
+            const prompt = `Clone and recreate the website at ${url}`;
+            await planBuild(prompt);
+          }}
+          disabled={generationProgress.isGenerating || isPlanning}
+        />
+      </HeaderProvider>
+    );
+  }
+
+  // Handle analyzing state - show full-page analysis view
+  if (generationState.state === 'analyzing') {
+    return (
+      <HeaderProvider>
+        <AnalyzingStateView
+          prompt={pendingPrompt || homeContextInput}
+          tickets={kanban.tickets}
+          isPlanning={isPlanning}
+          loadingStage={loadingStage}
+        />
+      </HeaderProvider>
+    );
+  }
+
+  // Building/complete states - show the full builder interface
   return (
     <HeaderProvider>
-      <div className="font-sans bg-comfort-sage-50 text-comfort-charcoal-800 h-screen flex flex-col">
-        <div className="bg-white py-2 px-4 border-b border-comfort-sage-200 flex items-center justify-between shadow-sm">
+      <div className="font-sans bg-background text-foreground h-screen flex flex-col">
+        <div className="bg-white py-2 px-4 border-b border-border-faint flex items-center justify-between shadow-sm">
           <HeaderBrandKit />
           <div className="flex items-center gap-2">
             {/* Model Selector - Left side */}
@@ -5573,7 +5709,7 @@ Focus on the key sections and content, making it clean and modern.`;
                 }
                 router.push(`/generation?${params.toString()}`);
               }}
-              className="px-3 py-1.5 text-sm text-comfort-charcoal-800 bg-comfort-sage-100 border border-comfort-sage-300 rounded-lg focus:outline-none focus:border-comfort-sage-400 transition-colors"
+              className="px-3 py-1.5 text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-gray-300 transition-colors"
             >
               {appConfig.ai.availableModels.map(model => (
                 <option key={model} value={model}>
@@ -5583,7 +5719,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </select>
             <button
               onClick={() => createSandbox()}
-              className="p-2 rounded-lg transition-colors bg-comfort-sage-100 border border-comfort-sage-300 text-comfort-charcoal-600 hover:bg-comfort-sage-200 hover:border-comfort-sage-400"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
               title="Create new sandbox"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -5592,7 +5728,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </button>
             <button
               onClick={reapplyLastGeneration}
-              className="p-2 rounded-lg transition-colors bg-comfort-sage-100 border border-comfort-sage-300 text-comfort-charcoal-600 hover:bg-comfort-sage-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Re-apply last generation"
               disabled={!conversationContext.lastGeneratedCode || !sandboxData}
             >
@@ -5603,7 +5739,7 @@ Focus on the key sections and content, making it clean and modern.`;
             <button
               onClick={downloadZip}
               disabled={!sandboxData}
-              className="p-2 rounded-lg transition-colors bg-comfort-sage-100 border border-comfort-sage-300 text-comfort-charcoal-600 hover:bg-comfort-sage-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Download your Vite app as ZIP"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -5612,7 +5748,7 @@ Focus on the key sections and content, making it clean and modern.`;
             </button>
             <button
               onClick={() => setShowDeployModal(true)}
-              className="p-2 rounded-lg transition-colors bg-comfort-sage-100 border border-comfort-sage-300 text-comfort-charcoal-600 hover:bg-comfort-sage-200 hover:border-comfort-sage-400"
+              className="p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100"
               title="Deploy (Vercel/Netlify)"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -5621,14 +5757,14 @@ Focus on the key sections and content, making it clean and modern.`;
             </button>
             <button
               onClick={() => setShowVersionHistory(!showVersionHistory)}
-              className={`p-2 rounded-lg transition-colors border ${showVersionHistory ? 'bg-comfort-sage-100 border-comfort-sage-300 text-comfort-sage-700' : 'bg-comfort-sage-100 border-comfort-sage-300 text-comfort-charcoal-600 hover:bg-comfort-sage-200'}`}
+              className={`p-2 rounded-lg transition-colors border ${showVersionHistory ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
               title="Version History"
             >
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </button>
-            <div className="border-l border-comfort-sage-300 h-6 mx-1" />
+            <div className="border-l border-gray-200 h-6 mx-1" />
             <GitHubConnectButton className="text-sm" />
             <GitSyncToggle
               isEnabled={gitSync.isEnabled}
@@ -5650,41 +5786,18 @@ Focus on the key sections and content, making it clean and modern.`;
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Center Panel - AI Chat (1/3 of remaining width) */}
-          <div className="w-[320px] flex-none flex flex-col border-r border-border bg-white">
-            {/* Sidebar Input Component */}
-            {!hasInitialSubmission ? (
-              <div className="p-4 border-b border-border">
-                <SidebarInput
-                  onSubmit={async (url, style, model, instructions) => {
-                    setHasInitialSubmission(true);
-                    setAiModel(model);
-                    // Create a plan from the clone URL request
-                    const prompt = `Clone and recreate the website at ${url}. ${instructions ? `Additional instructions: ${instructions}` : ''} Style preference: ${style}`;
-                    await planBuild(prompt);
-                  }}
-                  onPromptSubmit={async (prompt, model) => {
-                    setAiModel(model);
-                    // Generate 3 UI options for user to choose from
-                    await generateUIOptions(prompt);
-                  }}
-                  onImportSubmit={async (repoFullName, branch, maxFiles, model, goalPrompt) => {
-                    await handleGitHubImportAndPlan(repoFullName, branch, maxFiles, model, goalPrompt);
-                  }}
-                  disabled={generationProgress.isGenerating || isPlanning || isLoadingUIOptions || isImportingRepo}
-                />
-              </div>
-            ) : null}
-
-            {(isPlanning || kanban.tickets.length > 0) && hasInitialSubmission && (
+          {/* Center Panel - Build Plan Sidebar */}
+          <div className="w-[320px] flex-none flex flex-col border-r border-border bg-white h-full">
+            {/* Build Plan - Always visible in building state */}
+            {(isPlanning || kanban.tickets.length > 0) && (
               <div className="flex-1 overflow-y-auto border-b border-border">
-                <div className="p-3 border-b border-comfort-sage-100 bg-comfort-sage-50 sticky top-0 z-10">
+                <div className="p-3 border-b border-gray-100 bg-gray-50 sticky top-0 z-10">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       {isPlanning && (
-                        <div className="w-3 h-3 border-2 border-comfort-sage-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
                       )}
-                      <span className="text-xs font-semibold text-comfort-charcoal-600">
+                      <span className="text-xs font-semibold text-gray-700">
                         {isPlanning ? 'Planning Build...' : `Build Plan (${kanban.tickets.length} tasks)`}
                       </span>
                     </div>
@@ -5693,10 +5806,11 @@ Focus on the key sections and content, making it clean and modern.`;
                         <button
                           onClick={handleLoadImportedRepoIntoSandbox}
                           disabled={isLoadingRepoIntoSandbox || kanbanBuildActive}
-                          className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${isLoadingRepoIntoSandbox || kanbanBuildActive
-                            ? 'bg-comfort-sage-100 text-comfort-charcoal-400 cursor-not-allowed'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`}
+                          className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${
+                            isLoadingRepoIntoSandbox || kanbanBuildActive
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
                           title="Replace sandbox files with the imported repo and restart dev server"
                         >
                           {isLoadingRepoIntoSandbox ? 'Loading…' : 'Load to sandbox'}
@@ -5706,7 +5820,7 @@ Focus on the key sections and content, making it clean and modern.`;
                       {!isPlanning && kanban.tickets.length > 0 && !kanbanBuildActive && (
                         <button
                           onClick={() => handleStartKanbanBuild()}
-                          className="px-2 py-1 text-[10px] font-medium rounded bg-comfort-sage-500 text-white hover:bg-comfort-sage-600 transition-colors"
+                          className="px-2 py-1 text-[10px] font-medium rounded bg-orange-500 text-white hover:bg-orange-600 transition-colors"
                         >
                           Start Build
                         </button>
@@ -5715,9 +5829,9 @@ Focus on the key sections and content, making it clean and modern.`;
                   </div>
                   {kanban.tickets.length > 0 && (
                     <div className="mt-2">
-                      <div className="w-full h-1.5 bg-comfort-sage-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-500"
                           style={{ width: `${kanban.tickets.length > 0 ? (kanban.tickets.filter(t => t.status === 'done').length / kanban.tickets.length) * 100 : 0}%` }}
                         />
                       </div>
@@ -5731,46 +5845,48 @@ Focus on the key sections and content, making it clean and modern.`;
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.05 }}
-                      className={`p-2.5 rounded-lg border transition-all ${ticket.status === 'done' ? 'bg-green-50 border-green-200' :
-                        ticket.status === 'generating' ? 'bg-comfort-sage-50 border-comfort-sage-200' :
-                          ticket.status === 'failed' ? 'bg-red-50 border-red-200' :
-                            'bg-white border-comfort-sage-200 hover:border-comfort-sage-300'
-                        }`}
+                      className={`p-2.5 rounded-lg border transition-all ${
+                        ticket.status === 'done' ? 'bg-green-50 border-green-200' :
+                        ticket.status === 'generating' ? 'bg-orange-50 border-orange-200' :
+                        ticket.status === 'failed' ? 'bg-red-50 border-red-200' :
+                        'bg-white border-gray-200 hover:border-gray-300'
+                      }`}
                     >
                       <div className="flex items-start gap-2">
                         <span className="text-sm">
                           {ticket.status === 'done' ? '✅' :
-                            ticket.status === 'generating' ? '⚡' :
-                              ticket.status === 'failed' ? '❌' :
-                                ticket.status === 'backlog' ? '📋' :
-                                  ticket.status === 'planning' ? '🎯' : '⏳'}
+                           ticket.status === 'generating' ? '⚡' :
+                           ticket.status === 'failed' ? '❌' :
+                           ticket.status === 'backlog' ? '📋' :
+                           ticket.status === 'planning' ? '🎯' : '⏳'}
                         </span>
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-medium text-gray-800 truncate">{ticket.title}</div>
-                          <div className="text-[10px] text-comfort-charcoal-400 truncate">{ticket.description}</div>
+                          <div className="text-[10px] text-gray-500 truncate">{ticket.description}</div>
                           {ticket.status === 'generating' && ticket.progress !== undefined && (
-                            <div className="mt-1.5 w-full h-1 bg-comfort-sage-200 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-comfort-sage-400 transition-all duration-300"
+                            <div className="mt-1.5 w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-orange-400 transition-all duration-300"
                                 style={{ width: `${ticket.progress}%` }}
                               />
                             </div>
                           )}
                         </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${ticket.type === 'component' ? 'bg-blue-100 text-blue-700' :
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                          ticket.type === 'component' ? 'bg-blue-100 text-blue-700' :
                           ticket.type === 'feature' ? 'bg-green-100 text-green-700' :
-                            ticket.type === 'layout' ? 'bg-purple-100 text-purple-700' :
-                              ticket.type === 'styling' ? 'bg-pink-100 text-pink-700' :
-                                ticket.type === 'integration' ? 'bg-amber-100 text-amber-700' :
-                                  'bg-comfort-sage-100 text-comfort-charcoal-500'
-                          }`}>
+                          ticket.type === 'layout' ? 'bg-purple-100 text-purple-700' :
+                          ticket.type === 'styling' ? 'bg-pink-100 text-pink-700' :
+                          ticket.type === 'integration' ? 'bg-amber-100 text-amber-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
                           {ticket.type}
                         </span>
                       </div>
                     </motion.div>
                   ))}
                   {isPlanning && (
-                    <div className="flex items-center gap-2 p-2 text-comfort-charcoal-400">
+                    <div className="flex items-center gap-2 p-2 text-gray-400">
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-pulse" />
                       <span className="text-[10px]">Analyzing requirements...</span>
                     </div>
@@ -5779,484 +5895,413 @@ Focus on the key sections and content, making it clean and modern.`;
               </div>
             )}
 
-            {conversationContext.scrapedWebsites.length > 0 && !hasInitialSubmission && (
-              <div className="p-4 bg-card border-b border-comfort-sage-200">
-                <div className="flex flex-col gap-4">
-                  {conversationContext.scrapedWebsites.map((site, idx) => {
-                    // Extract favicon and site info from the scraped data
-                    const metadata = site.content?.metadata || {};
-                    const sourceURL = metadata.sourceURL || site.url;
-                    const favicon = metadata.favicon || `https://www.google.com/s2/favicons?domain=${new URL(sourceURL).hostname}&sz=128`;
-                    const siteName = metadata.ogSiteName || metadata.title || new URL(sourceURL).hostname;
-                    const screenshot = site.content?.screenshot || sessionStorage.getItem('websiteScreenshot');
-
-                    return (
-                      <div key={idx} className="flex flex-col gap-3">
-                        {/* Site info with favicon */}
-                        <div className="flex items-center gap-3 text-sm">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={favicon}
-                            alt={siteName}
-                            className="w-8 h-8 rounded"
-                            onError={(e) => {
-                              e.currentTarget.src = `https://www.google.com/s2/favicons?domain=${new URL(sourceURL).hostname}&sz=128`;
-                            }}
-                          />
-                          <a
-                            href={sourceURL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-black hover:text-comfort-charcoal-600 truncate max-w-[250px] font-medium"
-                            title={sourceURL}
-                          >
-                            {siteName}
-                          </a>
-                        </div>
-
-                        {/* Pinned screenshot */}
-                        {screenshot && (
-                          <div className="w-full">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-medium text-comfort-charcoal-500">Screenshot Preview</span>
-                              <button
-                                onClick={() => setScreenshotCollapsed(!screenshotCollapsed)}
-                                className="text-comfort-charcoal-400 hover:text-comfort-charcoal-600 transition-colors p-1"
-                                aria-label={screenshotCollapsed ? 'Expand screenshot' : 'Collapse screenshot'}
-                              >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className={`transition-transform duration-300 ${screenshotCollapsed ? 'rotate-180' : ''}`}
-                                >
-                                  <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              </button>
-                            </div>
-                            <div
-                              className="w-full rounded-lg overflow-hidden border border-comfort-sage-200 transition-all duration-300"
-                              style={{
-                                opacity: screenshotCollapsed ? 0 : 1,
-                                transform: screenshotCollapsed ? 'translateY(-20px)' : 'translateY(0)',
-                                pointerEvents: screenshotCollapsed ? 'none' : 'auto',
-                                maxHeight: screenshotCollapsed ? '0' : '200px'
-                              }}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={screenshot}
-                                alt={`${siteName} preview`}
-                                className="w-full h-auto object-cover"
-                                style={{ maxHeight: '200px' }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+            {/* Empty state when no tickets - show guidance */}
+            {!isPlanning && kanban.tickets.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                  <span className="text-xl">📋</span>
                 </div>
+                <h3 className="text-sm font-medium text-gray-700 mb-1">No build plan yet</h3>
+                <p className="text-xs text-gray-500">Start by describing what you want to build</p>
               </div>
             )}
 
-            {!hasInitialSubmission && (
-              <div
-                className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-hide bg-comfort-sage-50"
-                ref={chatMessagesRef}>
-                {chatMessages.map((msg, idx) => {
-                  // Check if this message is from a successful generation
-                  const isGenerationComplete = msg.content.includes('Successfully recreated') ||
-                    msg.content.includes('AI recreation generated!') ||
-                    msg.content.includes('Code generated!');
+            {/* Activity feed placeholder for building state - can be expanded later */}
+            {false && (
+            <div
+              className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 scrollbar-hide bg-gray-50"
+              ref={chatMessagesRef}>
+              {chatMessages.map((msg, idx) => {
+                // Check if this message is from a successful generation
+                const isGenerationComplete = msg.content.includes('Successfully recreated') ||
+                  msg.content.includes('AI recreation generated!') ||
+                  msg.content.includes('Code generated!');
 
-                  // Get the files from metadata if this is a completion message
-                  // const completedFiles = msg.metadata?.appliedFiles || [];
+                // Get the files from metadata if this is a completion message
+                // const completedFiles = msg.metadata?.appliedFiles || [];
 
-                  return (
-                    <div key={idx} className="block">
-                      <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className="block">
-                          <div className={`block rounded-lg px-3 py-2 ${msg.type === 'user' ? 'bg-[#36322F] text-white ml-auto max-w-[80%]' :
-                            msg.type === 'ai' ? 'bg-comfort-sage-100 text-comfort-charcoal-800 mr-auto max-w-[80%]' :
-                              msg.type === 'system' ? 'bg-[#36322F] text-white text-sm' :
-                                msg.type === 'command' ? 'bg-[#36322F] text-white font-mono text-sm' :
-                                  msg.type === 'error' ? 'bg-red-900 text-red-100 text-sm border border-red-700' :
-                                    'bg-[#36322F] text-white text-sm'
-                            }`}>
-                            {msg.type === 'command' ? (
-                              <div className="flex items-start gap-2">
-                                <span className={`text-xs ${msg.metadata?.commandType === 'input' ? 'text-blue-400' :
-                                  msg.metadata?.commandType === 'error' ? 'text-red-400' :
-                                    msg.metadata?.commandType === 'success' ? 'text-green-400' :
-                                      'text-comfort-charcoal-400'
-                                  }`}>
-                                  {msg.metadata?.commandType === 'input' ? '$' : '>'}
-                                </span>
-                                <span className="flex-1 whitespace-pre-wrap text-white">{msg.content}</span>
-                              </div>
-                            ) : msg.type === 'error' ? (
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0">
-                                  <div className="w-8 h-8 bg-red-800 rounded-full flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                    </svg>
-                                  </div>
-                                </div>
-                                <div className="flex-1">
-                                  <div className="font-semibold mb-1">Build Errors Detected</div>
-                                  <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
-                                  <div className="mt-2 text-xs opacity-70">Press 'F' or click the Fix button above to resolve</div>
+                return (
+                  <div key={idx} className="block">
+                    <div className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className="block">
+                        <div className={`block rounded-lg px-3 py-2 ${msg.type === 'user' ? 'bg-[#36322F] text-white ml-auto max-w-[80%]' :
+                          msg.type === 'ai' ? 'bg-gray-100 text-gray-900 mr-auto max-w-[80%]' :
+                            msg.type === 'system' ? 'bg-[#36322F] text-white text-sm' :
+                              msg.type === 'command' ? 'bg-[#36322F] text-white font-mono text-sm' :
+                                msg.type === 'error' ? 'bg-red-900 text-red-100 text-sm border border-red-700' :
+                                  'bg-[#36322F] text-white text-sm'
+                          }`}>
+                          {msg.type === 'command' ? (
+                            <div className="flex items-start gap-2">
+                              <span className={`text-xs ${msg.metadata?.commandType === 'input' ? 'text-blue-400' :
+                                msg.metadata?.commandType === 'error' ? 'text-red-400' :
+                                  msg.metadata?.commandType === 'success' ? 'text-green-400' :
+                                    'text-gray-400'
+                                }`}>
+                                {msg.metadata?.commandType === 'input' ? '$' : '>'}
+                              </span>
+                              <span className="flex-1 whitespace-pre-wrap text-white">{msg.content}</span>
+                            </div>
+                          ) : msg.type === 'error' ? (
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0">
+                                <div className="w-8 h-8 bg-red-800 rounded-full flex items-center justify-center">
+                                  <svg className="w-6 h-6 text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
                                 </div>
                               </div>
-                            ) : (
-                              <span className="text-sm">{msg.content}</span>
-                            )}
-                          </div>
+                              <div className="flex-1">
+                                <div className="font-semibold mb-1">Build Errors Detected</div>
+                                <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
+                                <div className="mt-2 text-xs opacity-70">Press 'F' or click the Fix button above to resolve</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-sm">{msg.content}</span>
+                          )}
+                        </div>
 
-                          {/* Show branding data if this is a brand extraction message */}
-                          {msg.metadata?.brandingData && (
-                            <div className="mt-3 bg-gradient-to-br from-gray-50 to-white border-2 border-comfort-sage-200 rounded-xl overflow-hidden max-w-[500px] shadow-sm">
-                              <div className="bg-[#36322F] px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <Image
-                                    src={`https://www.google.com/s2/favicons?domain=${msg.metadata.sourceUrl}&sz=32`}
-                                    alt=""
-                                    width={32}
-                                    height={32}
-                                    className="w-8 h-8"
-                                  />
-                                  <div className="text-sm font-semibold text-white">
-                                    Brand Guidelines
-                                  </div>
+                        {/* Show branding data if this is a brand extraction message */}
+                        {msg.metadata?.brandingData && (
+                          <div className="mt-3 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 rounded-xl overflow-hidden max-w-[500px] shadow-sm">
+                            <div className="bg-[#36322F] px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Image
+                                  src={`https://www.google.com/s2/favicons?domain=${msg.metadata.sourceUrl}&sz=32`}
+                                  alt=""
+                                  width={32}
+                                  height={32}
+                                  className="w-8 h-8"
+                                />
+                                <div className="text-sm font-semibold text-white">
+                                  Brand Guidelines
                                 </div>
                               </div>
+                            </div>
 
-                              <div className="p-4">
-                                {/* Color Scheme Mode */}
-                                {msg.metadata.brandingData.colorScheme && (
-                                  <div className="mb-4">
-                                    <div className="text-sm">
-                                      <span className="text-comfort-charcoal-500 font-medium">Mode:</span>{' '}
-                                      <span className="font-semibold text-comfort-charcoal-800 capitalize">{msg.metadata.brandingData.colorScheme}</span>
-                                    </div>
+                            <div className="p-4">
+                              {/* Color Scheme Mode */}
+                              {msg.metadata.brandingData.colorScheme && (
+                                <div className="mb-4">
+                                  <div className="text-sm">
+                                    <span className="text-gray-600 font-medium">Mode:</span>{' '}
+                                    <span className="font-semibold text-gray-900 capitalize">{msg.metadata.brandingData.colorScheme}</span>
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {/* Colors */}
-                                {msg.metadata.brandingData.colors && (
-                                  <div className="mb-4">
-                                    <div className="text-sm font-semibold text-comfort-charcoal-800 mb-2">Colors</div>
-                                    <div className="flex flex-wrap gap-3">
-                                      {msg.metadata.brandingData.colors.primary && (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-8 h-8 rounded border border-comfort-sage-300" style={{ backgroundColor: msg.metadata.brandingData.colors.primary }} />
-                                          <div className="text-sm">
-                                            <div className="font-semibold text-comfort-charcoal-800">Primary</div>
-                                            <div className="text-comfort-charcoal-500 font-mono text-xs">{msg.metadata.brandingData.colors.primary}</div>
-                                          </div>
+                              {/* Colors */}
+                              {msg.metadata.brandingData.colors && (
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Colors</div>
+                                  <div className="flex flex-wrap gap-3">
+                                    {msg.metadata.brandingData.colors.primary && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.primary }} />
+                                        <div className="text-sm">
+                                          <div className="font-semibold text-gray-900">Primary</div>
+                                          <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.primary}</div>
                                         </div>
-                                      )}
-                                      {msg.metadata.brandingData.colors.accent && (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-8 h-8 rounded border border-comfort-sage-300" style={{ backgroundColor: msg.metadata.brandingData.colors.accent }} />
-                                          <div className="text-sm">
-                                            <div className="font-semibold text-comfort-charcoal-800">Accent</div>
-                                            <div className="text-comfort-charcoal-500 font-mono text-xs">{msg.metadata.brandingData.colors.accent}</div>
-                                          </div>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.colors.accent && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.accent }} />
+                                        <div className="text-sm">
+                                          <div className="font-semibold text-gray-900">Accent</div>
+                                          <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.accent}</div>
                                         </div>
-                                      )}
-                                      {msg.metadata.brandingData.colors.background && (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-8 h-8 rounded border border-comfort-sage-300" style={{ backgroundColor: msg.metadata.brandingData.colors.background }} />
-                                          <div className="text-sm">
-                                            <div className="font-semibold text-comfort-charcoal-800">Background</div>
-                                            <div className="text-comfort-charcoal-500 font-mono text-xs">{msg.metadata.brandingData.colors.background}</div>
-                                          </div>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.colors.background && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.background }} />
+                                        <div className="text-sm">
+                                          <div className="font-semibold text-gray-900">Background</div>
+                                          <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.background}</div>
                                         </div>
-                                      )}
-                                      {msg.metadata.brandingData.colors.textPrimary && (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-8 h-8 rounded border border-comfort-sage-300" style={{ backgroundColor: msg.metadata.brandingData.colors.textPrimary }} />
-                                          <div className="text-sm">
-                                            <div className="font-semibold text-comfort-charcoal-800">Text</div>
-                                            <div className="text-comfort-charcoal-500 font-mono text-xs">{msg.metadata.brandingData.colors.textPrimary}</div>
-                                          </div>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.colors.textPrimary && (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded border border-gray-300" style={{ backgroundColor: msg.metadata.brandingData.colors.textPrimary }} />
+                                        <div className="text-sm">
+                                          <div className="font-semibold text-gray-900">Text</div>
+                                          <div className="text-gray-600 font-mono text-xs">{msg.metadata.brandingData.colors.textPrimary}</div>
                                         </div>
-                                      )}
-                                    </div>
+                                      </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {/* Typography */}
-                                {msg.metadata.brandingData.typography && (
-                                  <div className="mb-4">
-                                    <div className="text-sm font-semibold text-comfort-charcoal-800 mb-2">Typography</div>
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                      {msg.metadata.brandingData.typography.fontFamilies?.primary && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">Primary:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.typography.fontFamilies.primary}</span>
-                                        </div>
-                                      )}
-                                      {msg.metadata.brandingData.typography.fontFamilies?.heading && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">Heading:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.typography.fontFamilies.heading}</span>
-                                        </div>
-                                      )}
-                                      {msg.metadata.brandingData.typography.fontSizes?.h1 && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">H1 Size:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.typography.fontSizes.h1}</span>
-                                        </div>
-                                      )}
-                                      {msg.metadata.brandingData.typography.fontSizes?.h2 && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">H2 Size:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.typography.fontSizes.h2}</span>
-                                        </div>
-                                      )}
-                                      {msg.metadata.brandingData.typography.fontSizes?.body && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">Body Size:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.typography.fontSizes.body}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Spacing */}
-                                {msg.metadata.brandingData.spacing && (
-                                  <div className="mb-4">
-                                    <div className="text-sm font-semibold text-comfort-charcoal-800 mb-2">Spacing</div>
-                                    <div className="flex flex-wrap gap-4 text-sm">
-                                      {msg.metadata.brandingData.spacing.baseUnit && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">Base Unit:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.spacing.baseUnit}px</span>
-                                        </div>
-                                      )}
-                                      {msg.metadata.brandingData.spacing.borderRadius && (
-                                        <div>
-                                          <span className="text-comfort-charcoal-500 font-medium">Border Radius:</span>{' '}
-                                          <span className="font-semibold text-comfort-charcoal-800">{msg.metadata.brandingData.spacing.borderRadius}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Button Styles */}
-                                {msg.metadata.brandingData.components?.buttonPrimary && (
-                                  <div className="mb-4">
-                                    <div className="text-sm font-semibold text-comfort-charcoal-800 mb-2">Button Styles</div>
-                                    <div className="flex flex-wrap gap-3">
+                              {/* Typography */}
+                              {msg.metadata.brandingData.typography && (
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Typography</div>
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    {msg.metadata.brandingData.typography.fontFamilies?.primary && (
                                       <div>
-                                        <div className="text-xs text-comfort-charcoal-500 mb-1.5 font-medium">Primary Button</div>
+                                        <span className="text-gray-600 font-medium">Primary:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.typography.fontFamilies.primary}</span>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.typography.fontFamilies?.heading && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">Heading:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.typography.fontFamilies.heading}</span>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.typography.fontSizes?.h1 && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">H1 Size:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.typography.fontSizes.h1}</span>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.typography.fontSizes?.h2 && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">H2 Size:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.typography.fontSizes.h2}</span>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.typography.fontSizes?.body && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">Body Size:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.typography.fontSizes.body}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Spacing */}
+                              {msg.metadata.brandingData.spacing && (
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Spacing</div>
+                                  <div className="flex flex-wrap gap-4 text-sm">
+                                    {msg.metadata.brandingData.spacing.baseUnit && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">Base Unit:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.spacing.baseUnit}px</span>
+                                      </div>
+                                    )}
+                                    {msg.metadata.brandingData.spacing.borderRadius && (
+                                      <div>
+                                        <span className="text-gray-600 font-medium">Border Radius:</span>{' '}
+                                        <span className="font-semibold text-gray-900">{msg.metadata.brandingData.spacing.borderRadius}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Button Styles */}
+                              {msg.metadata.brandingData.components?.buttonPrimary && (
+                                <div className="mb-4">
+                                  <div className="text-sm font-semibold text-gray-900 mb-2">Button Styles</div>
+                                  <div className="flex flex-wrap gap-3">
+                                    <div>
+                                      <div className="text-xs text-gray-600 mb-1.5 font-medium">Primary Button</div>
+                                      <button
+                                        className="px-4 py-2 text-sm font-medium"
+                                        style={{
+                                          backgroundColor: msg.metadata.brandingData.components.buttonPrimary.background,
+                                          color: msg.metadata.brandingData.components.buttonPrimary.textColor,
+                                          borderRadius: msg.metadata.brandingData.components.buttonPrimary.borderRadius,
+                                          boxShadow: msg.metadata.brandingData.components.buttonPrimary.shadow
+                                        }}
+                                      >
+                                        Sample Button
+                                      </button>
+                                    </div>
+                                    {msg.metadata.brandingData.components?.buttonSecondary && (
+                                      <div>
+                                        <div className="text-xs text-gray-600 mb-1.5 font-medium">Secondary Button</div>
                                         <button
                                           className="px-4 py-2 text-sm font-medium"
                                           style={{
-                                            backgroundColor: msg.metadata.brandingData.components.buttonPrimary.background,
-                                            color: msg.metadata.brandingData.components.buttonPrimary.textColor,
-                                            borderRadius: msg.metadata.brandingData.components.buttonPrimary.borderRadius,
-                                            boxShadow: msg.metadata.brandingData.components.buttonPrimary.shadow
+                                            backgroundColor: msg.metadata.brandingData.components.buttonSecondary.background,
+                                            color: msg.metadata.brandingData.components.buttonSecondary.textColor,
+                                            borderRadius: msg.metadata.brandingData.components.buttonSecondary.borderRadius,
+                                            boxShadow: msg.metadata.brandingData.components.buttonSecondary.shadow
                                           }}
                                         >
                                           Sample Button
                                         </button>
                                       </div>
-                                      {msg.metadata.brandingData.components?.buttonSecondary && (
-                                        <div>
-                                          <div className="text-xs text-comfort-charcoal-500 mb-1.5 font-medium">Secondary Button</div>
-                                          <button
-                                            className="px-4 py-2 text-sm font-medium"
-                                            style={{
-                                              backgroundColor: msg.metadata.brandingData.components.buttonSecondary.background,
-                                              color: msg.metadata.brandingData.components.buttonSecondary.textColor,
-                                              borderRadius: msg.metadata.brandingData.components.buttonSecondary.borderRadius,
-                                              boxShadow: msg.metadata.brandingData.components.buttonSecondary.shadow
-                                            }}
-                                          >
-                                            Sample Button
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
+                                    )}
                                   </div>
-                                )}
+                                </div>
+                              )}
 
-                                {/* Personality */}
-                                {msg.metadata.brandingData.personality && (
-                                  <div className="text-sm">
-                                    <span className="text-comfort-charcoal-500 font-medium">Personality:</span>{' '}
-                                    <span className="font-semibold text-comfort-charcoal-800 capitalize">
-                                      {msg.metadata.brandingData.personality.tone} tone, {msg.metadata.brandingData.personality.energy} energy
-                                    </span>
-                                  </div>
-                                )}
+                              {/* Personality */}
+                              {msg.metadata.brandingData.personality && (
+                                <div className="text-sm">
+                                  <span className="text-gray-600 font-medium">Personality:</span>{' '}
+                                  <span className="font-semibold text-gray-900 capitalize">
+                                    {msg.metadata.brandingData.personality.tone} tone, {msg.metadata.brandingData.personality.energy} energy
+                                  </span>
+                                </div>
+                              )}
 
-                                {/* Target Audience */}
-                                {msg.metadata.brandingData.personality?.targetAudience && (
-                                  <div className="text-sm mt-8">
-                                    <span className="text-comfort-charcoal-500 font-medium">Target:</span>{' '}
-                                    <span className="text-comfort-charcoal-800">{msg.metadata.brandingData.personality.targetAudience}</span>
-                                  </div>
-                                )}
-                              </div>
+                              {/* Target Audience */}
+                              {msg.metadata.brandingData.personality?.targetAudience && (
+                                <div className="text-sm mt-8">
+                                  <span className="text-gray-600 font-medium">Target:</span>{' '}
+                                  <span className="text-gray-900">{msg.metadata.brandingData.personality.targetAudience}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+                        )}
 
-                          {/* Show applied files if this is an apply success message */}
-                          {msg.metadata?.appliedFiles && msg.metadata.appliedFiles.length > 0 && (
-                            <div className="mt-3 inline-block bg-comfort-sage-100 rounded-lg p-3">
-                              <div className="text-sm font-medium mb-3 text-comfort-charcoal-600">
-                                {msg.content.includes('Applied') ? 'Files Updated:' : 'Generated Files:'}
-                              </div>
-                              <div className="flex flex-wrap items-start gap-2">
-                                {msg.metadata.appliedFiles.map((filePath, fileIdx) => {
-                                  const fileName = filePath.split('/').pop() || filePath;
-                                  const fileExt = fileName.split('.').pop() || '';
-                                  const fileType = fileExt === 'jsx' || fileExt === 'js' ? 'javascript' :
-                                    fileExt === 'css' ? 'css' :
-                                      fileExt === 'json' ? 'json' : 'text';
-
-                                  return (
-                                    <div
-                                      key={`applied-${fileIdx}`}
-                                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-sm animate-fade-in-up"
-                                      style={{ animationDelay: `${fileIdx * 30}ms` }}
-                                    >
-                                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${fileType === 'css' ? 'bg-blue-400' :
-                                        fileType === 'javascript' ? 'bg-yellow-400' :
-                                          fileType === 'json' ? 'bg-green-400' :
-                                            'bg-gray-400'
-                                        }`} />
-                                      {fileName}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                        {/* Show applied files if this is an apply success message */}
+                        {msg.metadata?.appliedFiles && msg.metadata.appliedFiles.length > 0 && (
+                          <div className="mt-3 inline-block bg-gray-100 rounded-lg p-3">
+                            <div className="text-sm font-medium mb-3 text-gray-700">
+                              {msg.content.includes('Applied') ? 'Files Updated:' : 'Generated Files:'}
                             </div>
-                          )}
+                            <div className="flex flex-wrap items-start gap-2">
+                              {msg.metadata.appliedFiles.map((filePath, fileIdx) => {
+                                const fileName = filePath.split('/').pop() || filePath;
+                                const fileExt = fileName.split('.').pop() || '';
+                                const fileType = fileExt === 'jsx' || fileExt === 'js' ? 'javascript' :
+                                  fileExt === 'css' ? 'css' :
+                                    fileExt === 'json' ? 'json' : 'text';
 
-                          {/* Show generated files for completion messages - but only if no appliedFiles already shown */}
-                          {isGenerationComplete && generationProgress.files.length > 0 && idx === chatMessages.length - 1 && !msg.metadata?.appliedFiles && !chatMessages.some(m => m.metadata?.appliedFiles) && (
-                            <div className="mt-2 inline-block bg-comfort-sage-100 rounded-[10px] p-3">
-                              <div className="text-xs font-medium mb-1 text-comfort-charcoal-600">Generated Files:</div>
-                              <div className="flex flex-wrap items-start gap-1">
-                                {generationProgress.files.map((file, fileIdx) => (
+                                return (
                                   <div
-                                    key={`complete-${fileIdx}`}
-                                    className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
+                                    key={`applied-${fileIdx}`}
+                                    className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-sm animate-fade-in-up"
                                     style={{ animationDelay: `${fileIdx * 30}ms` }}
                                   >
-                                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${file.type === 'css' ? 'bg-blue-400' :
-                                      file.type === 'javascript' ? 'bg-yellow-400' :
-                                        file.type === 'json' ? 'bg-green-400' :
+                                    <span className={`inline-block w-1.5 h-1.5 rounded-full ${fileType === 'css' ? 'bg-blue-400' :
+                                      fileType === 'javascript' ? 'bg-yellow-400' :
+                                        fileType === 'json' ? 'bg-green-400' :
                                           'bg-gray-400'
                                       }`} />
-                                    {file.path.split('/').pop()}
+                                    {fileName}
                                   </div>
-                                ))}
-                              </div>
+                                );
+                              })}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
+
+                        {/* Show generated files for completion messages - but only if no appliedFiles already shown */}
+                        {isGenerationComplete && generationProgress.files.length > 0 && idx === chatMessages.length - 1 && !msg.metadata?.appliedFiles && !chatMessages.some(m => m.metadata?.appliedFiles) && (
+                          <div className="mt-2 inline-block bg-gray-100 rounded-[10px] p-3">
+                            <div className="text-xs font-medium mb-1 text-gray-700">Generated Files:</div>
+                            <div className="flex flex-wrap items-start gap-1">
+                              {generationProgress.files.map((file, fileIdx) => (
+                                <div
+                                  key={`complete-${fileIdx}`}
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
+                                  style={{ animationDelay: `${fileIdx * 30}ms` }}
+                                >
+                                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${file.type === 'css' ? 'bg-blue-400' :
+                                    file.type === 'javascript' ? 'bg-yellow-400' :
+                                      file.type === 'json' ? 'bg-green-400' :
+                                        'bg-gray-400'
+                                    }`} />
+                                  {file.path.split('/').pop()}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
 
-                {/* Code application progress */}
-                {codeApplicationState.stage && (
-                  <CodeApplicationProgress state={codeApplicationState} />
-                )}
+              {/* Code application progress */}
+              {codeApplicationState.stage && (
+                <CodeApplicationProgress state={codeApplicationState} />
+              )}
 
-                {/* File generation progress - inline display (during generation) */}
-                {generationProgress.isGenerating && (
-                  <div className="inline-block bg-comfort-sage-100 rounded-lg p-3">
-                    <div className="text-sm font-medium mb-2 text-comfort-charcoal-600">
-                      {generationProgress.status}
-                    </div>
-                    <div className="flex flex-wrap items-start gap-1">
-                      {/* Show completed files */}
-                      {generationProgress.files.map((file, idx) => (
-                        <div
-                          key={`file-${idx}`}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
-                          style={{ animationDelay: `${idx * 30}ms` }}
-                        >
-                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                          {file.path.split('/').pop()}
-                        </div>
-                      ))}
-
-                      {/* Show current file being generated */}
-                      {generationProgress.currentFile && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-[#36322F]/70 text-white rounded-[10px] text-sm animate-pulse"
-                          style={{ animationDelay: `${generationProgress.files.length * 30}ms` }}>
-                          <div className="w-16 h-16 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          {generationProgress.currentFile.path.split('/').pop()}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Live streaming response display */}
-                    {generationProgress.streamedCode && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="mt-3 border-t border-comfort-sage-300 pt-3"
+              {/* File generation progress - inline display (during generation) */}
+              {generationProgress.isGenerating && (
+                <div className="inline-block bg-gray-100 rounded-lg p-3">
+                  <div className="text-sm font-medium mb-2 text-gray-700">
+                    {generationProgress.status}
+                  </div>
+                  <div className="flex flex-wrap items-start gap-1">
+                    {/* Show completed files */}
+                    {generationProgress.files.map((file, idx) => (
+                      <div
+                        key={`file-${idx}`}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#36322F] text-white rounded-md text-xs animate-fade-in-up"
+                        style={{ animationDelay: `${idx * 30}ms` }}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="flex items-center gap-1">
-                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-xs font-medium text-comfort-charcoal-500">AI Response Stream</span>
-                          </div>
-                          <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent" />
-                        </div>
-                        <div className="bg-gray-900 border border-gray-700 rounded max-h-128 overflow-y-auto scrollbar-hide">
-                          <SyntaxHighlighter
-                            language="jsx"
-                            style={vscDarkPlus}
-                            customStyle={{
-                              margin: 0,
-                              padding: '0.75rem',
-                              fontSize: '11px',
-                              lineHeight: '1.5',
-                              background: 'transparent',
-                              maxHeight: '8rem',
-                              overflow: 'hidden'
-                            }}
-                          >
-                            {(() => {
-                              const lastContent = generationProgress.streamedCode.slice(-1000);
-                              // Show the last part of the stream, starting from a complete tag if possible
-                              const startIndex = lastContent.indexOf('<');
-                              return startIndex !== -1 ? lastContent.slice(startIndex) : lastContent;
-                            })()}
-                          </SyntaxHighlighter>
-                          <span className="inline-block w-3 h-4 bg-comfort-sage-400 ml-3 mb-3 animate-pulse" />
-                        </div>
-                      </motion.div>
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {file.path.split('/').pop()}
+                      </div>
+                    ))}
+
+                    {/* Show current file being generated */}
+                    {generationProgress.currentFile && (
+                      <div className="flex items-center gap-1 px-2 py-1 bg-[#36322F]/70 text-white rounded-[10px] text-sm animate-pulse"
+                        style={{ animationDelay: `${generationProgress.files.length * 30}ms` }}>
+                        <div className="w-16 h-16 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        {generationProgress.currentFile?.path?.split('/').pop()}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
+
+                  {/* Live streaming response display */}
+                  {generationProgress.streamedCode && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="mt-3 border-t border-gray-300 pt-3"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                          <span className="text-xs font-medium text-gray-600">AI Response Stream</span>
+                        </div>
+                        <div className="flex-1 h-px bg-gradient-to-r from-gray-300 to-transparent" />
+                      </div>
+                      <div className="bg-gray-900 border border-gray-700 rounded max-h-128 overflow-y-auto scrollbar-hide">
+                        <SyntaxHighlighter
+                          language="jsx"
+                          style={vscDarkPlus}
+                          customStyle={{
+                            margin: 0,
+                            padding: '0.75rem',
+                            fontSize: '11px',
+                            lineHeight: '1.5',
+                            background: 'transparent',
+                            maxHeight: '8rem',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {(() => {
+                            const lastContent = generationProgress.streamedCode.slice(-1000);
+                            // Show the last part of the stream, starting from a complete tag if possible
+                            const startIndex = lastContent.indexOf('<');
+                            return startIndex !== -1 ? lastContent.slice(startIndex) : lastContent;
+                          })()}
+                        </SyntaxHighlighter>
+                        <span className="inline-block w-3 h-4 bg-orange-400 ml-3 mb-3 animate-pulse" />
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+              )}
+            </div>
             )}
 
             {/* Suggested follow-up actions after generation */}
             {!generationProgress.isGenerating && generationProgress.files.length > 0 && !aiChatInput && (
-              <div className="px-4 py-2 border-t border-border bg-comfort-sage-50">
+              <div className="px-4 py-2 border-t border-border bg-gray-50">
                 <div className="flex flex-wrap gap-2">
                   {[
                     { label: 'Add dark mode', prompt: 'Add a dark mode toggle and apply dark theme styles' },
@@ -6269,7 +6314,7 @@ Focus on the key sections and content, making it clean and modern.`;
                       onClick={() => {
                         setAiChatInput(action.prompt);
                       }}
-                      className="px-3 py-1.5 text-xs bg-white hover:bg-comfort-sage-100 text-comfort-charcoal-500 border border-comfort-sage-200 rounded-full transition-all"
+                      className="px-3 py-1.5 text-xs bg-white hover:bg-gray-100 text-gray-600 border border-gray-200 rounded-full transition-all"
                     >
                       {action.label}
                     </button>
@@ -6278,28 +6323,30 @@ Focus on the key sections and content, making it clean and modern.`;
               </div>
             )}
 
-            <div className="p-4 border-t border-border bg-background-base">
-              <HeroInput
-                value={aiChatInput}
-                onChange={setAiChatInput}
-                onSubmit={sendChatMessage}
-                placeholder="Describe what you want to build..."
-                showSearchFeatures={false}
-              />
-            </div>
+            {hasInitialSubmission && (
+              <div className="p-4 border-t border-border bg-background-base">
+                <HeroInput
+                  value={aiChatInput}
+                  onChange={setAiChatInput}
+                  onSubmit={sendChatMessage}
+                  placeholder="Describe what you want to build..."
+                  showSearchFeatures={false}
+                />
+              </div>
+            )}
           </div>
 
           {/* Right Panel - Preview or Generation (2/3 of remaining width) */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-3 pt-4 pb-4 bg-white border-b border-comfort-sage-200 flex justify-between items-center">
+            <div className="px-3 pt-4 pb-4 bg-white border-b border-gray-200 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 {/* Toggle-style Code/View switcher */}
-                <div className="inline-flex bg-comfort-sage-100 border border-comfort-sage-200 rounded-md p-0.5">
+                <div className="inline-flex bg-gray-100 border border-gray-200 rounded-md p-0.5">
                   <button
                     onClick={() => setActiveTab('generation')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'generation'
-                      ? 'bg-white text-comfort-charcoal-800 shadow-sm'
-                      : 'bg-transparent text-comfort-charcoal-500 hover:text-comfort-charcoal-800'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -6312,8 +6359,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('preview')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'preview'
-                      ? 'bg-white text-comfort-charcoal-800 shadow-sm'
-                      : 'bg-transparent text-comfort-charcoal-500 hover:text-comfort-charcoal-800'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -6327,8 +6374,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('kanban')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'kanban'
-                      ? 'bg-white text-comfort-charcoal-800 shadow-sm'
-                      : 'bg-transparent text-comfort-charcoal-500 hover:text-comfort-charcoal-800'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                   >
                     <div className="flex items-center gap-1.5">
@@ -6346,8 +6393,8 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setActiveTab('split')}
                     className={`px-3 py-1 rounded transition-all text-xs font-medium ${activeTab === 'split'
-                      ? 'bg-white text-comfort-charcoal-800 shadow-sm'
-                      : 'bg-transparent text-comfort-charcoal-500 hover:text-comfort-charcoal-800'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'bg-transparent text-gray-600 hover:text-gray-900'
                       }`}
                     title="Split view: Kanban + Preview side by side"
                   >
@@ -6363,31 +6410,31 @@ Focus on the key sections and content, making it clean and modern.`;
               <div className="flex gap-2 items-center">
                 {/* Device Frame Toggles - Only show in preview mode */}
                 {activeTab === 'preview' && sandboxData && (
-                  <div className="inline-flex bg-comfort-sage-100 border border-comfort-sage-200 rounded-md p-0.5">
+                  <div className="inline-flex bg-gray-100 border border-gray-200 rounded-md p-0.5">
                     <button
                       onClick={() => setPreviewDevice('desktop')}
-                      className={`p-1.5 rounded transition-all ${previewDevice === 'desktop' ? 'bg-white shadow-sm' : 'hover:bg-comfort-sage-50'}`}
+                      className={`p-1.5 rounded transition-all ${previewDevice === 'desktop' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'}`}
                       title="Desktop view"
                     >
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'desktop' ? 'text-comfort-charcoal-800' : 'text-comfort-charcoal-400'}>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'desktop' ? 'text-gray-900' : 'text-gray-500'}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                     </button>
                     <button
                       onClick={() => setPreviewDevice('tablet')}
-                      className={`p-1.5 rounded transition-all ${previewDevice === 'tablet' ? 'bg-white shadow-sm' : 'hover:bg-comfort-sage-50'}`}
+                      className={`p-1.5 rounded transition-all ${previewDevice === 'tablet' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'}`}
                       title="Tablet view"
                     >
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'tablet' ? 'text-comfort-charcoal-800' : 'text-comfort-charcoal-400'}>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'tablet' ? 'text-gray-900' : 'text-gray-500'}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
                     </button>
                     <button
                       onClick={() => setPreviewDevice('mobile')}
-                      className={`p-1.5 rounded transition-all ${previewDevice === 'mobile' ? 'bg-white shadow-sm' : 'hover:bg-comfort-sage-50'}`}
+                      className={`p-1.5 rounded transition-all ${previewDevice === 'mobile' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'}`}
                       title="Mobile view"
                     >
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'mobile' ? 'text-comfort-charcoal-800' : 'text-comfort-charcoal-400'}>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className={previewDevice === 'mobile' ? 'text-gray-900' : 'text-gray-500'}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                       </svg>
                     </button>
@@ -6396,14 +6443,14 @@ Focus on the key sections and content, making it clean and modern.`;
 
                 {/* Files generated count */}
                 {activeTab === 'generation' && !generationProgress.isEdit && generationProgress.files.length > 0 && (
-                  <div className="text-comfort-charcoal-400 text-xs font-medium">
+                  <div className="text-gray-500 text-xs font-medium">
                     {generationProgress.files.length} files generated
                   </div>
                 )}
 
                 {/* Live Code Generation Status */}
                 {activeTab === 'generation' && generationProgress.isGenerating && (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-comfort-sage-100 border border-comfort-sage-200 rounded-md text-xs font-medium text-comfort-charcoal-600">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 border border-gray-200 rounded-md text-xs font-medium text-gray-700">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                     {generationProgress.isEdit ? 'Editing code' : 'Live generation'}
                   </div>
@@ -6411,7 +6458,7 @@ Focus on the key sections and content, making it clean and modern.`;
 
                 {/* Sandbox Status Indicator */}
                 {sandboxData && (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-comfort-sage-100 border border-comfort-sage-200 rounded-md text-xs font-medium text-comfort-charcoal-600">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 border border-gray-200 rounded-md text-xs font-medium text-gray-700">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                     Sandbox active
                   </div>
@@ -6426,7 +6473,7 @@ Focus on the key sections and content, making it clean and modern.`;
                       setTimeout(() => setShowCopiedToast(false), 2000);
                     }}
                     title="Copy sandbox URL"
-                    className="p-1.5 rounded-md transition-all text-comfort-charcoal-500 hover:text-comfort-charcoal-800 hover:bg-comfort-sage-100 relative"
+                    className="p-1.5 rounded-md transition-all text-gray-600 hover:text-gray-900 hover:bg-gray-100 relative"
                   >
                     {showCopiedToast ? (
                       <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="text-green-500">
@@ -6445,7 +6492,7 @@ Focus on the key sections and content, making it clean and modern.`;
                   <button
                     onClick={() => setIsFullscreenPreview(true)}
                     title="Fullscreen preview (⌘⇧F)"
-                    className="p-1.5 rounded-md transition-all text-comfort-charcoal-500 hover:text-comfort-charcoal-800 hover:bg-comfort-sage-100"
+                    className="p-1.5 rounded-md transition-all text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -6460,7 +6507,7 @@ Focus on the key sections and content, making it clean and modern.`;
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open in new tab"
-                    className="p-1.5 rounded-md transition-all text-comfort-charcoal-500 hover:text-comfort-charcoal-800 hover:bg-comfort-sage-100"
+                    className="p-1.5 rounded-md transition-all text-gray-600 hover:text-gray-900 hover:bg-gray-100"
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -6475,23 +6522,25 @@ Focus on the key sections and content, making it clean and modern.`;
           </div>
 
           {showVersionHistory && (
-            <div className="w-[280px] border-l border-comfort-sage-200 bg-gray-900 flex-shrink-0 overflow-hidden">
+            <div className="w-[280px] border-l border-gray-200 bg-gray-900 flex-shrink-0 overflow-hidden">
               <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-800">
                 <button
                   onClick={() => setVersionHistoryTab('plan')}
-                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${versionHistoryTab === 'plan'
-                    ? 'bg-comfort-sage-600 text-white'
-                    : 'bg-gray-800 hover:bg-gray-700 text-comfort-charcoal-300'
-                    }`}
+                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                    versionHistoryTab === 'plan'
+                      ? 'bg-orange-600 text-white'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
                 >
                   Plan
                 </button>
                 <button
                   onClick={() => setVersionHistoryTab('code')}
-                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${versionHistoryTab === 'code'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 hover:bg-gray-700 text-comfort-charcoal-300'
-                    }`}
+                  className={`flex-1 text-xs px-2 py-1.5 rounded transition-colors ${
+                    versionHistoryTab === 'code'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+                  }`}
                 >
                   Code
                 </button>
@@ -6528,7 +6577,18 @@ Focus on the key sections and content, making it clean and modern.`;
           )}
         </div>
 
-        {/* UI Options Selector - Now rendered inline in the View pane (see renderMainContent) */}
+        {/* UI Options Selector Modal */}
+        {showUIOptions && (
+          <UIOptionsSelector
+            options={uiOptions}
+            onSelect={(option) => {
+              setHasInitialSubmission(true);
+              handleUIOptionSelect(option);
+            }}
+            onCancel={handleUIOptionsCancel}
+            isLoading={isLoadingUIOptions}
+          />
+        )}
 
         {/* Code Review Panel Modal */}
         {showCodeReview && bugbot.lastReview && (
