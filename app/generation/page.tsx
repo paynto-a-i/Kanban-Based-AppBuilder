@@ -1237,51 +1237,83 @@ Apply these design specifications consistently across all components.`;
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'ticket') {
-                kanban.setTickets(prev => [...prev, data.ticket]);
-              } else if (data.type === 'plan_complete') {
-                const serverPlan = data.plan;
-                kanban.setPlan({
-                  ...serverPlan,
-                  uiStyle:
-                    serverPlan?.uiStyle ||
-                    (uiStyle
-                      ? {
-                          name: uiStyle.name,
-                          description: uiStyle.description,
-                          style: uiStyle.style,
-                          colorScheme: uiStyle.colorScheme,
-                          layout: uiStyle.layout,
-                          features: uiStyle.features,
-                        }
-                      : undefined),
-                });
-                // Snapshot the initial plan (for plan versioning)
-                if (data.plan?.tickets && Array.isArray(data.plan.tickets) && data.plan.tickets.length > 0) {
-                  void planVersions.createSnapshot({
-                    source: 'initial_plan',
-                    name: '📦 Initial plan',
-                    description: 'Snapshot captured when planning completed',
-                    tickets: data.plan.tickets,
-                    planIdOverride: data.plan?.id || null,
-                  });
-                }
-              }
-            } catch (e) {
-              console.error('Failed to parse plan event:', e);
+        // SSE events are separated by a blank line (\n\n). Buffer until we have a full event.
+        let boundaryIndex = buffer.indexOf('\n\n');
+        while (boundaryIndex !== -1) {
+          const rawEvent = buffer.slice(0, boundaryIndex);
+          buffer = buffer.slice(boundaryIndex + 2);
+          boundaryIndex = buffer.indexOf('\n\n');
+
+          // Extract and join all `data:` lines in the SSE event.
+          const dataLines = rawEvent
+            .split('\n')
+            .filter((line) => line.startsWith('data: '))
+            .map((line) => line.slice(6));
+
+          if (dataLines.length === 0) continue;
+
+          const payload = dataLines.join('\n');
+
+          try {
+            const data = JSON.parse(payload);
+
+            if (data.type === 'ticket') {
+              kanban.setTickets(prev => [...prev, data.ticket]);
+              continue;
             }
+
+            if (data.type === 'plan_complete') {
+              const serverPlan = data.plan;
+
+              // Always hydrate tickets from `plan_complete` to avoid missing tickets if earlier streamed events were split across chunks.
+              if (serverPlan?.tickets && Array.isArray(serverPlan.tickets)) {
+                kanban.setTickets(serverPlan.tickets);
+              }
+
+              kanban.setPlan({
+                ...serverPlan,
+                uiStyle:
+                  serverPlan?.uiStyle ||
+                  (uiStyle
+                    ? {
+                        name: uiStyle.name,
+                        description: uiStyle.description,
+                        style: uiStyle.style,
+                        colorScheme: uiStyle.colorScheme,
+                        layout: uiStyle.layout,
+                        features: uiStyle.features,
+                      }
+                    : undefined),
+              });
+
+              // Snapshot the initial plan (for plan versioning)
+              if (serverPlan?.tickets && Array.isArray(serverPlan.tickets) && serverPlan.tickets.length > 0) {
+                void planVersions.createSnapshot({
+                  source: 'initial_plan',
+                  name: '📦 Initial plan',
+                  description: 'Snapshot captured when planning completed',
+                  tickets: serverPlan.tickets,
+                  planIdOverride: serverPlan?.id || null,
+                });
+              }
+
+              continue;
+            }
+
+            if (data.type === 'error') {
+              addChatMessage(`❌ Planning error: ${data.message || 'Unknown error'}`, 'error');
+              continue;
+            }
+          } catch (e) {
+            console.error('Failed to parse plan event:', e, { rawEvent });
           }
         }
       }
@@ -6338,15 +6370,17 @@ Focus on the key sections and content, making it clean and modern.`;
               </div>
             )}
 
-            <div className="p-4 border-t border-border bg-background-base">
-              <HeroInput
-                value={aiChatInput}
-                onChange={setAiChatInput}
-                onSubmit={sendChatMessage}
-                placeholder="Describe what you want to build..."
-                showSearchFeatures={false}
-              />
-            </div>
+            {hasInitialSubmission && (
+              <div className="p-4 border-t border-border bg-background-base">
+                <HeroInput
+                  value={aiChatInput}
+                  onChange={setAiChatInput}
+                  onSubmit={sendChatMessage}
+                  placeholder="Describe what you want to build..."
+                  showSearchFeatures={false}
+                />
+              </div>
+            )}
           </div>
 
           {/* Right Panel - Preview or Generation (2/3 of remaining width) */}

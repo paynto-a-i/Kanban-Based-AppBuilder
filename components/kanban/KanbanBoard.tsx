@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { KanbanTicket, BuildPlan, TicketStatus, COLUMN_CONFIG, BuildAnalytics, BuildMode } from './types';
+import { KanbanTicket, BuildPlan, TicketStatus, COLUMN_CONFIG, BuildAnalytics, BuildMode, TicketType, TYPE_COLORS } from './types';
 import KanbanColumn from './KanbanColumn';
 import KanbanTicketModal from './KanbanTicketModal';
 import TicketEditor from './TicketEditor';
@@ -88,11 +88,26 @@ export default function KanbanBoard({
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [inputTicketId, setInputTicketId] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<TicketType | null>(null);
   const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
 
   const inputTicket = inputTicketId ? tickets.find(t => t.id === inputTicketId) : null;
   const selectedTicket = selectedTicketId ? tickets.find(t => t.id === selectedTicketId) : null;
+
+  const typeFilters: Array<{ type: TicketType; label: string }> = [
+    { type: 'layout', label: 'Layout' },
+    { type: 'component', label: 'Components' },
+    { type: 'feature', label: 'Features' },
+    { type: 'styling', label: 'Styling' },
+    { type: 'integration', label: 'Integrations' },
+    { type: 'database', label: 'Database' },
+    { type: 'config', label: 'Config' },
+  ];
+
+  const typeCounts = tickets.reduce<Record<TicketType, number>>((acc, t) => {
+    acc[t.type] = (acc[t.type] || 0) + 1;
+    return acc;
+  }, {} as Record<TicketType, number>);
 
   const displayColumns = COLUMN_CONFIG.filter(col =>
     !['blocked', 'failed', 'skipped'].includes(col.id) || ticketsByColumn[col.id].length > 0
@@ -224,19 +239,28 @@ export default function KanbanBoard({
               }`}
             >
               All
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === null ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                {tickets.length}
+              </span>
             </button>
-            {['Architect', 'Coder', 'Designer', 'Analyst', 'Planner', 'DevOps'].map(role => (
+            {typeFilters.map(({ type, label }) => (
               <button
-                key={role}
-                onClick={() => setActiveFilter(activeFilter === role ? null : role)}
+                key={type}
+                onClick={() => setActiveFilter(activeFilter === type ? null : type)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 whitespace-nowrap ${
-                  activeFilter === role
+                  activeFilter === type
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                <span>{role === 'Architect' ? '🏗️' : role === 'Coder' ? '💻' : role === 'Designer' ? '🎨' : role === 'DevOps' ? '🚀' : '🤖'}</span>
-                {role}
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: TYPE_COLORS[type] }}
+                />
+                {label}
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === type ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                  {typeCounts[type] || 0}
+                </span>
               </button>
             ))}
           </div>
