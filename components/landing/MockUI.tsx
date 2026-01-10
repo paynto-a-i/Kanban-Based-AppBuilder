@@ -285,7 +285,7 @@ export default function MockUI() {
 
               {/* Kanban Board */}
               <div className="flex-1 p-4 bg-white min-h-[400px] overflow-x-auto">
-                <div className="flex gap-4 pb-4">
+                <div className="flex gap-4 pb-4 min-w-[850px]">
                   {columns.map(column => (
                     <Column
                       key={column.id}

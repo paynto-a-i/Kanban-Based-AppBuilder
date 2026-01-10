@@ -59,8 +59,8 @@ export default function MetricsSection() {
   ]
 
   return (
-    <section className="py-24 md:py-32 px-4 md:px-8 bg-white dark:bg-black">
-      <div className="max-w-6xl mx-auto">
+    <section id="metrics" className="py-20 md:py-28 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -246,7 +246,68 @@ export default function MetricsSection() {
             )}
           </div>
         </motion.div>
+
+        {/* Scrolling Testimonial Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.5, duration: 0.6 }}
+          className="mt-12 overflow-hidden"
+        >
+          <div className="text-center mb-6">
+            <span className="text-sm font-medium text-gray-500">Trusted by builders everywhere</span>
+          </div>
+          <div className="relative">
+            <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white dark:from-black to-transparent z-10" />
+            <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white dark:from-black to-transparent z-10" />
+            <motion.div
+              className="flex gap-8 whitespace-nowrap"
+              animate={{ x: [0, -1200] }}
+              transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+            >
+              {[
+                { text: '"Built my entire SaaS in 2 days!"', author: 'Sarah K.', role: 'Founder' },
+                { text: '"The AI agents are incredible"', author: 'Mike R.', role: 'CTO' },
+                { text: '"10x faster than traditional dev"', author: 'Lisa M.', role: 'Product Manager' },
+                { text: '"Finally, no-code that works"', author: 'John D.', role: 'Entrepreneur' },
+                { text: '"My team loves the Kanban view"', author: 'Anna T.', role: 'Tech Lead' },
+                { text: '"Shipping features daily now!"', author: 'Chris P.', role: 'Solo Founder' },
+                { text: '"Built my entire SaaS in 2 days!"', author: 'Sarah K.', role: 'Founder' },
+                { text: '"The AI agents are incredible"', author: 'Mike R.', role: 'CTO' },
+                { text: '"10x faster than traditional dev"', author: 'Lisa M.', role: 'Product Manager' },
+              ].map((t, i) => (
+                <div key={i} className="flex items-center gap-4 px-6 py-3 bg-gray-50 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-800">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{t.text}</span>
+                    <span className="text-xs text-gray-500">— {t.author}, {t.role}</span>
+                  </div>
+                  <span className="text-yellow-500">⭐⭐⭐⭐⭐</span>
+                </div>
+              ))}
+            </motion.div>
+          </div>
+        </motion.div>
+
+        {/* Company Logos Ticker */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          className="mt-12 overflow-hidden"
+        >
+          <motion.div
+            className="flex gap-12 items-center justify-center"
+            animate={{ x: [0, -600, 0] }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+          >
+            {['🏢 TechCorp', '🚀 StartupX', '💼 Enterprise Co', '🌐 GlobalTech', '⚡ FastScale', '🎯 Precision AI', '🏢 TechCorp', '🚀 StartupX', '💼 Enterprise Co'].map((company, i) => (
+              <span key={i} className="text-gray-400 text-lg font-medium whitespace-nowrap">{company}</span>
+            ))}
+          </motion.div>
+        </motion.div>
       </div>
     </section>
   )
 }
+

@@ -124,10 +124,10 @@ export default function AgentTypesSection() {
   ]
 
   return (
-    <section className="py-24 md:py-32 px-4 md:px-8 bg-white relative overflow-hidden">
+    <section id="agents" className="py-20 md:py-28 bg-white relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-100/40 via-transparent to-transparent pointer-events-none" />
 
-      <div className="max-w-6xl mx-auto relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}

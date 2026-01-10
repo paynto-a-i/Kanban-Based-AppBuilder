@@ -42,8 +42,8 @@ export default function FAQSection() {
   ]
 
   return (
-    <section className="py-24 md:py-32 px-4 md:px-8 bg-white dark:bg-black">
-      <div className="max-w-4xl mx-auto">
+    <section id="faq" className="py-20 md:py-28 bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}

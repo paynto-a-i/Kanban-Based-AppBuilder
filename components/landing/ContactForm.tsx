@@ -34,8 +34,8 @@ export default function ContactForm() {
 
   if (isSubmitted) {
     return (
-      <section id="contact" className="py-24 md:py-32 px-4 md:px-8 bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-black">
-        <div className="max-w-2xl mx-auto text-center">
+      <section id="contact" className="py-20 md:py-28 bg-gradient-to-b from-gray-50 to-white">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -55,8 +55,8 @@ export default function ContactForm() {
   }
 
   return (
-    <section id="contact" className="py-24 md:py-32 px-4 md:px-8 bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-black">
-      <div className="max-w-4xl mx-auto">
+    <section id="contact" className="py-20 md:py-28 bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}

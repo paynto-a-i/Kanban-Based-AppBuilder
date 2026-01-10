@@ -1,6 +1,7 @@
 'use client'
 
 import { ThemeProvider } from '@/components/landing/ThemeContext'
+import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
 import MockUI from '@/components/landing/MockUI'
 import AgentTypesSection from '@/components/landing/AgentTypesSection'
@@ -14,17 +15,20 @@ import Footer from '@/components/landing/Footer'
 export default function Home() {
   return (
     <ThemeProvider>
-      <main className="min-h-screen bg-white dark:bg-black antialiased">
-        <Hero />
-        <MockUI />
-        <AgentTypesSection />
-        <HowItWorksSection />
-        <MetricsSection />
-        <FeaturesSection />
-        <FAQSection />
-        <ContactForm />
+      <div className="min-h-screen bg-white antialiased overflow-x-hidden">
+        <Navbar />
+        <main>
+          <Hero />
+          <MockUI />
+          <AgentTypesSection />
+          <HowItWorksSection />
+          <MetricsSection />
+          <FeaturesSection />
+          <FAQSection />
+          <ContactForm />
+        </main>
         <Footer />
-      </main>
+      </div>
     </ThemeProvider>
   )
 }

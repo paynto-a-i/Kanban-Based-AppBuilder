@@ -1,7 +1,6 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import Link from 'next/link'
 
 export default function Hero() {
   const handleGetAccess = () => {
@@ -13,37 +12,12 @@ export default function Hero() {
   }
 
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white">
-      <header className="absolute top-0 left-0 right-0 z-30">
-        <div className="container mx-auto px-6 py-6 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800 shadow-lg">
-              <span className="text-xl font-bold text-white">P</span>
-            </div>
-            <span className="text-2xl font-bold text-gray-900">
-              Paynto<span className="text-emerald-700">.</span>AI
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/sign-in"
-              className="hidden sm:block px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/generation"
-              className="px-4 py-2 text-sm font-medium text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white pt-20">
+      {/* Grid background */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:40px_40px]" />
 
-      <div className="absolute inset-0 overflow-hidden">
+      {/* Gradient orbs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
           animate={{
             scale: [1, 1.2, 1],
@@ -70,13 +44,15 @@ export default function Hero() {
         />
       </div>
 
-      <div className="container relative z-10">
+      {/* Main content */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 60 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
           className="text-center max-w-5xl mx-auto"
         >
+          {/* Badge */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -90,19 +66,20 @@ export default function Hero() {
             AI-Powered App Development
           </motion.div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold mb-8 leading-[0.95] tracking-tight">
+          {/* Headline */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 leading-[1.1] tracking-tight">
             <span className="text-gray-900">Kanban Command Centre</span>
             <br />
-            <span className="text-emerald-700">
-              to Build Any App
-            </span>
+            <span className="text-emerald-700">to Build Any App</span>
           </h1>
 
-          <p className="text-xl md:text-2xl max-w-3xl mx-auto mb-12 text-gray-600 leading-relaxed font-light">
+          {/* Subheadline */}
+          <p className="text-lg sm:text-xl md:text-2xl max-w-3xl mx-auto mb-10 text-gray-600 leading-relaxed">
             Don&apos;t write code &mdash; <span className="text-gray-900 font-medium">direct it</span>.
             Create a card, and watch coordinated AI agents architect, code, test, and deploy your vision.
           </p>
 
+          {/* CTA Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -113,48 +90,40 @@ export default function Hero() {
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleGetAccess}
-              className="group relative overflow-hidden px-8 py-4 bg-emerald-700 hover:bg-emerald-800 text-white text-lg font-semibold rounded-xl transition-all duration-300 min-w-[240px] shadow-lg shadow-emerald-700/25 hover:shadow-xl hover:shadow-emerald-700/40"
+              className="w-full sm:w-auto px-8 py-4 bg-emerald-700 hover:bg-emerald-800 text-white text-lg font-semibold rounded-xl transition-all duration-300 shadow-lg shadow-emerald-700/25 hover:shadow-xl hover:shadow-emerald-700/40"
             >
-              <span className="relative z-10">Get Early Access</span>
+              Get Early Access
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleWatchDemo}
-              className="px-8 py-4 bg-white hover:bg-gray-50 text-gray-900 border-2 border-emerald-700 hover:border-emerald-800 text-lg font-semibold rounded-xl transition-all duration-300 min-w-[240px] shadow-sm"
+              className="w-full sm:w-auto px-8 py-4 bg-white hover:bg-gray-50 text-gray-900 border-2 border-emerald-700 hover:border-emerald-800 text-lg font-semibold rounded-xl transition-all duration-300 shadow-sm"
             >
               See How It Works
             </motion.button>
           </motion.div>
 
+          {/* Feature list */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1, delay: 0.8 }}
-            className="mt-16 flex flex-wrap items-center justify-center gap-6 md:gap-8 text-sm text-gray-500"
+            className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 text-sm text-gray-600"
           >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Multi-Agent Orchestration
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Real-time Preview
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Full Human Control
-            </div>
+            {['Multi-Agent Orchestration', 'Real-time Preview', 'Full Human Control'].map((feature) => (
+              <div key={feature} className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                <span>{feature}</span>
+              </div>
+            ))}
           </motion.div>
         </motion.div>
       </div>
 
+      {/* Scroll indicator */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

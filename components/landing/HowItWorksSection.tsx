@@ -367,8 +367,8 @@ export default function HowItWorksSection() {
   ]
 
   return (
-    <section className="py-24 md:py-32 px-4 md:px-8 bg-gradient-to-b from-gray-50 to-white dark:from-black dark:to-gray-950">
-      <div className="max-w-6xl mx-auto">
+    <section id="how-it-works" className="py-20 md:py-28 bg-gradient-to-b from-gray-50 to-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}

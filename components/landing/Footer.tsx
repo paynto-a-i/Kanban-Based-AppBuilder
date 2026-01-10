@@ -3,25 +3,32 @@
 import { motion } from 'framer-motion'
 import Link from 'next/link'
 
+const socialLinks = [
+  { name: 'Twitter', icon: '𝕏', href: '#' },
+  { name: 'GitHub', icon: '⌂', href: '#' },
+  { name: 'Discord', icon: '💬', href: '#' },
+  { name: 'YouTube', icon: '▶️', href: '#' },
+]
+
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 dark:bg-black border-t border-gray-200 dark:border-gray-900">
+    <footer className="bg-gray-50 border-t border-gray-200">
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.8 }}
-        className="max-w-6xl mx-auto px-4 md:px-8 py-16"
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16"
       >
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
           <div className="lg:col-span-2">
             <div className="mb-6">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-cyan-500 to-purple-600 shadow-lg">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800 shadow-lg">
                   <span className="text-xl font-bold text-white">P</span>
                 </div>
-                <span className="text-2xl font-bold bg-gradient-to-r from-cyan-500 to-purple-500 bg-clip-text text-transparent">
-                  Paynto.AI
+                <span className="text-2xl font-bold text-gray-900">
+                  Paynto<span className="text-emerald-700">.</span>AI
                 </span>
               </Link>
             </div>
@@ -29,11 +36,38 @@ export default function Footer() {
               The Kanban Command Centre for AI-Powered App Development.
               Don&apos;t write code &mdash; direct it.
             </p>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-4 mb-6">
+              <motion.div
+                className="flex items-center gap-2 text-sm text-gray-500"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <motion.div
+                  className="w-2 h-2 bg-cyan-500 rounded-full"
+                  animate={{ scale: [1, 1.5, 1] }}
+                  transition={{ duration: 1, repeat: Infinity }}
+                />
                 Building the future
-              </div>
+              </motion.div>
+            </div>
+            {/* Social Links */}
+            <div className="flex items-center gap-3">
+              {socialLinks.map((social, i) => (
+                <motion.a
+                  key={social.name}
+                  href={social.href}
+                  whileHover={{ scale: 1.2, rotate: 10 }}
+                  whileTap={{ scale: 0.9 }}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  aria-label={social.name}
+                >
+                  {social.icon}
+                </motion.a>
+              ))}
             </div>
           </div>
 
@@ -57,15 +91,42 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="pt-8 border-t border-gray-200 dark:border-gray-900 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-gray-500">
-            &copy; 2025 Paynto.AI. All rights reserved.
+        {/* Fun animated divider */}
+        <div className="relative py-4 mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-900" />
           </div>
-          <div className="text-sm text-gray-500">
-            A command centre where ideas turn into working software.
+          <div className="relative flex justify-center">
+            <motion.span
+              className="px-4 bg-gray-50 dark:bg-black text-2xl"
+              animate={{ rotate: [0, 360] }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            >
+              ⚡
+            </motion.span>
           </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="text-sm text-gray-500">
+            &copy; 2026 Paynto.AI. All rights reserved.
+          </div>
+          <motion.div
+            className="text-sm text-gray-500 flex items-center gap-2"
+            whileHover={{ scale: 1.05 }}
+          >
+            <span>Made with</span>
+            <motion.span
+              animate={{ scale: [1, 1.3, 1] }}
+              transition={{ duration: 1, repeat: Infinity }}
+            >
+              ❤️
+            </motion.span>
+            <span>by AI + Humans</span>
+          </motion.div>
         </div>
       </motion.div>
     </footer>
   )
 }
+
