@@ -149,22 +149,22 @@ export default function MockUI() {
   const progress = Math.round((completedTasks / totalTasks) * 100)
 
   return (
-    <section ref={sectionRef} id="demo" className="py-24 md:py-32 px-4 md:px-8 bg-gray-50 overflow-hidden" style={{ perspective: '1000px', perspectiveOrigin: 'center bottom' }}>
-      <div className="max-w-7xl mx-auto">
+    <section ref={sectionRef} id="demo" className="py-12 md:py-16 bg-gray-50 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="text-center mb-12"
+          transition={{ duration: 0.6 }}
+          className="text-center mb-8"
         >
-          <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium text-emerald-800 bg-emerald-100 rounded-full border border-emerald-300">
+          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-emerald-800 bg-emerald-100 rounded-full border border-emerald-300">
             Live Preview
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
             Your Command Centre
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             A single interface to direct your entire AI development team
           </p>
         </motion.div>
@@ -284,8 +284,8 @@ export default function MockUI() {
               </div>
 
               {/* Kanban Board */}
-              <div className="flex-1 p-4 bg-white min-h-[400px] overflow-x-auto">
-                <div className="flex gap-4 pb-4 min-w-[850px]">
+              <div className="flex-1 p-3 bg-white min-h-[320px] overflow-x-auto">
+                <div className="flex gap-3 pb-3 min-w-[750px]">
                   {columns.map(column => (
                     <Column
                       key={column.id}

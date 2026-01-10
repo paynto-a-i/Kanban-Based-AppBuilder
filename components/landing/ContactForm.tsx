@@ -34,7 +34,7 @@ export default function ContactForm() {
 
   if (isSubmitted) {
     return (
-      <section id="contact" className="py-20 md:py-28 bg-gradient-to-b from-gray-50 to-white">
+      <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-gray-50 to-white">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -55,22 +55,22 @@ export default function ContactForm() {
   }
 
   return (
-    <section id="contact" className="py-20 md:py-28 bg-gradient-to-b from-gray-50 to-white">
+    <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 40 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
-          className="text-center mb-12"
+          transition={{ duration: 0.6 }}
+          className="text-center mb-8"
         >
-          <div className="inline-flex items-center px-4 py-2 mb-6 text-sm font-medium text-pink-700 dark:text-pink-300 bg-pink-100 dark:bg-pink-900/30 rounded-full border border-pink-300 dark:border-pink-700/50">
+          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300">
             Early Access
           </div>
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-gray-900 dark:text-white tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
             Start Building Today
           </h2>
-          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Join the waitlist to be among the first to build with AI agents.
           </p>
         </motion.div>

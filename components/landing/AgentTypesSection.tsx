@@ -124,7 +124,7 @@ export default function AgentTypesSection() {
   ]
 
   return (
-    <section id="agents" className="py-20 md:py-28 bg-white relative overflow-hidden">
+    <section id="agents" className="py-12 md:py-16 bg-white relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-100/40 via-transparent to-transparent pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -133,30 +133,25 @@ export default function AgentTypesSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="text-center mb-16"
+          className="text-center mb-10"
         >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            whileInView={{ scale: 1, opacity: 1 }}
-            viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300"
-          >
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-4 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
             </span>
             6 Specialist AI Agents
-          </motion.div>
+          </div>
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="group flex flex-col items-center gap-3 mx-auto"
+            className="group flex flex-col items-center gap-2 mx-auto"
           >
-            <span className="flex items-center gap-3 text-4xl sm:text-5xl md:text-6xl font-bold text-gray-900 tracking-tight group-hover:text-emerald-700 transition-colors">
+            <span className="flex items-center gap-2 text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 tracking-tight group-hover:text-emerald-700 transition-colors">
               Your AI Development Team
               <motion.svg
                 animate={{ rotate: isOpen ? 180 : 0 }}
                 transition={{ duration: 0.3 }}
-                className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-emerald-600"
+                className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 text-emerald-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -165,7 +160,7 @@ export default function AgentTypesSection() {
               </motion.svg>
             </span>
           </button>
-          <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mt-6">
+          <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mt-4">
             Each agent is a specialist. Together, they&apos;re a full engineering department that never sleeps.
           </p>
         </motion.div>
