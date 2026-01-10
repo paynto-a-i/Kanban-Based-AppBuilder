@@ -5,10 +5,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 const socialLinks = [
-  { name: 'Twitter', icon: '𝕏', href: '#' },
-  { name: 'GitHub', icon: '⌂', href: '#' },
-  { name: 'Discord', icon: '💬', href: '#' },
-  { name: 'YouTube', icon: '▶️', href: '#' },
+  { name: 'Twitter', icon: '𝕏', href: 'https://twitter.com/payntoai', external: true },
+  { name: 'GitHub', icon: '⌂', href: 'https://github.com/payntoai', external: true },
+  { name: 'Discord', icon: '💬', href: 'https://discord.gg/payntoai', external: true },
+  { name: 'LinkedIn', icon: '🔗', href: 'https://linkedin.com/company/payntoai', external: true },
 ]
 
 export default function Footer() {
@@ -61,6 +61,8 @@ export default function Footer() {
                 <motion.a
                   key={social.name}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   whileHover={{ scale: 1.2, rotate: 10 }}
                   whileTap={{ scale: 0.9 }}
                   initial={{ opacity: 0, y: 20 }}
@@ -80,18 +82,19 @@ export default function Footer() {
             <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Product</h3>
             <ul className="space-y-3 text-sm">
               <li><Link href="/generation" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Get Started</Link></li>
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Features</Link></li>
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Pricing</Link></li>
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Documentation</Link></li>
+              <li><Link href="/#features" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Features</Link></li>
+              <li><Link href="/#pricing" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Pricing</Link></li>
+              <li><Link href="/#how-it-works" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">How It Works</Link></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Legal</h3>
+            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Company</h3>
             <ul className="space-y-3 text-sm">
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Terms of Service</Link></li>
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Privacy Policy</Link></li>
-              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Security</Link></li>
+              <li><Link href="/careers" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Careers</Link></li>
+              <li><Link href="/terms" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Privacy Policy</Link></li>
+              <li><Link href="/#contact" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Contact</Link></li>
             </ul>
           </div>
         </div>
