@@ -37,8 +37,8 @@ export const metadata: Metadata = {
   title: "Paynto A.I.",
   description: "Re-imagine any website in seconds with AI-powered website builder.",
   icons: {
-    icon: "/paynto-icon.svg",
-    apple: "/paynto-logo.svg",
+    icon: "/paynto-logo.png",
+    apple: "/paynto-logo.png",
   },
 };
 

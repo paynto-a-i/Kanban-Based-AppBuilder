@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { UserMenu, TenantSwitcher } from '@/components/auth';
 
 const isAuthEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
@@ -99,31 +100,35 @@ export default function DashboardPage() {
 
   if (!isLoaded || isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-700 rounded-full animate-spin" />
+      <div className="min-h-screen bg-comfort-beige-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-comfort-sage-200 border-t-comfort-sage-600 rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-comfort-beige-50">
+      <header className="bg-comfort-beige-100 border-b border-comfort-beige-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800">
-                <span className="text-sm font-bold text-white">P</span>
-              </div>
-              <span className="text-xl font-bold text-gray-900">
-                Paynto<span className="text-emerald-700">.</span>AI
+              <Image
+                src="/paynto-logo.png"
+                alt="Paynto.AI Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-lg"
+              />
+              <span className="text-xl font-bold text-comfort-charcoal-800">
+                Paynto<span className="text-comfort-sage-600">.</span>AI
               </span>
             </Link>
-            <span className="text-gray-300">/</span>
-            <span className="text-gray-600">My Projects</span>
+            <span className="text-comfort-beige-400">/</span>
+            <span className="text-comfort-charcoal-500">My Projects</span>
           </div>
           <div className="flex items-center gap-4">
             <TenantSwitcher />
-            <span className="text-sm text-gray-600">{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>
+            <span className="text-sm text-comfort-charcoal-500">{user?.fullName || user?.primaryEmailAddress?.emailAddress}</span>
             <UserMenu />
           </div>
         </div>
@@ -132,12 +137,12 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">My Projects</h1>
-            <p className="text-gray-600 mt-1">Manage and continue your AI-built applications</p>
+            <h1 className="text-2xl font-semibold text-comfort-charcoal-800">My Projects</h1>
+            <p className="text-comfort-charcoal-500 mt-1">Manage and continue your AI-built applications</p>
           </div>
           <button
             onClick={() => setShowNewProjectModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-comfort-sage-600 hover:bg-comfort-sage-700 text-white rounded-lg transition-colors shadow-sm"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -147,17 +152,17 @@ export default function DashboardPage() {
         </div>
 
         {projects.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
-            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="bg-comfort-beige-100 rounded-2xl border border-comfort-beige-300 p-12 text-center shadow-sm">
+            <div className="w-16 h-16 bg-comfort-sage-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-comfort-sage-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No projects yet</h3>
-            <p className="text-gray-600 mb-6">Create your first AI-powered application</p>
+            <h3 className="text-lg font-semibold text-comfort-charcoal-800 mb-2">No projects yet</h3>
+            <p className="text-comfort-charcoal-500 mb-6">Create your first AI-powered application</p>
             <button
               onClick={() => setShowNewProjectModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-comfort-sage-600 hover:bg-comfort-sage-700 text-white rounded-lg transition-colors shadow-sm"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -170,9 +175,9 @@ export default function DashboardPage() {
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
+                className="bg-comfort-beige-100 rounded-2xl border border-comfort-beige-300 overflow-hidden hover:shadow-lg transition-shadow"
               >
-                <div className="aspect-video bg-gray-50 relative">
+                <div className="aspect-video bg-comfort-beige-50 relative">
                   {project.sandboxUrl ? (
                     <iframe
                       src={project.sandboxUrl}
@@ -180,41 +185,40 @@ export default function DashboardPage() {
                       title={project.name}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <div className="w-full h-full flex items-center justify-center text-comfort-charcoal-300">
                       <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                       </svg>
                     </div>
                   )}
                   <div className="absolute top-2 right-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      project.mode === 'clone'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-emerald-50 text-emerald-600'
-                    }`}>
+                    <span className={`px-2 py-1 text-xs rounded-full ${project.mode === 'clone'
+                      ? 'bg-comfort-sage-100 text-comfort-sage-700'
+                      : 'bg-comfort-beige-200 text-comfort-charcoal-600'
+                      }`}>
                       {project.mode === 'clone' ? 'Clone' : 'Prompt'}
                     </span>
                   </div>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 mb-1">{project.name}</h3>
+                  <h3 className="font-semibold text-comfort-charcoal-800 mb-1">{project.name}</h3>
                   {project.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{project.description}</p>
+                    <p className="text-sm text-comfort-charcoal-500 mb-3 line-clamp-2">{project.description}</p>
                   )}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-comfort-charcoal-400">
                       {new Date(project.updatedAt).toLocaleDateString()}
                     </span>
                     <div className="flex items-center gap-2">
                       <Link
                         href={`/generation?project=${project.id}`}
-                        className="px-3 py-1.5 text-sm bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-sm bg-comfort-sage-600 hover:bg-comfort-sage-700 text-white rounded-lg transition-colors"
                       >
                         Open
                       </Link>
                       <button
                         onClick={() => handleDeleteProject(project.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                        className="p-1.5 text-comfort-charcoal-400 hover:text-comfort-terracotta-500 transition-colors"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -231,12 +235,12 @@ export default function DashboardPage() {
 
       {showNewProjectModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-2xl w-full max-w-md mx-4">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">New Project</h2>
+          <div className="bg-comfort-beige-50 border border-comfort-beige-300 rounded-2xl shadow-2xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b border-comfort-beige-300 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-comfort-charcoal-800">New Project</h2>
               <button
                 onClick={() => setShowNewProjectModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-comfort-charcoal-400 hover:text-comfort-charcoal-600"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -245,30 +249,30 @@ export default function DashboardPage() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
+                <label className="block text-sm font-medium text-comfort-charcoal-700 mb-1">Project Name *</label>
                 <input
                   type="text"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   placeholder="My Awesome App"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-comfort-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-comfort-sage-200 focus:border-comfort-sage-500 bg-white"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                <label className="block text-sm font-medium text-comfort-charcoal-700 mb-1">Description (optional)</label>
                 <textarea
                   value={newProjectDescription}
                   onChange={(e) => setNewProjectDescription(e.target.value)}
                   placeholder="A brief description of your project"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-500 resize-none bg-white"
+                  className="w-full px-3 py-2 border border-comfort-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-comfort-sage-200 focus:border-comfort-sage-500 resize-none bg-white"
                 />
               </div>
               <button
                 onClick={handleCreateProject}
                 disabled={isCreating || !newProjectName.trim()}
-                className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-comfort-sage-600 hover:bg-comfort-sage-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isCreating ? (
                   <>

@@ -266,6 +266,57 @@ const themeConfig: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Comfort color palette - soft, friendly aesthetic
+        comfort: {
+          beige: {
+            50: '#FDFCFA',
+            100: '#FAF8F5',
+            200: '#F5F1EB',
+            300: '#EDE6DC',
+            400: '#E2D8C9',
+            500: '#D4C7B5', // Soft oatmeal beige
+            600: '#B8A68E',
+            700: '#9C8A70',
+            800: '#7A6B57',
+            900: '#5C5042',
+          },
+          sage: {
+            50: '#F6F9F7',
+            100: '#E8F0EA',
+            200: '#D5E5D9',
+            300: '#B8D4BE',
+            400: '#9AC4A3',
+            500: '#7FB589', // Pastel sage green
+            600: '#5E9A6A',
+            700: '#4A7D54',
+            800: '#3C6444',
+            900: '#2F4E35',
+          },
+          terracotta: {
+            50: '#FDF8F6',
+            100: '#FAEDE8',
+            200: '#F5D9CF',
+            300: '#EEC0AD',
+            400: '#E5A289',
+            500: '#D98B6A', // Warm terracotta
+            600: '#C47352',
+            700: '#A35C40',
+            800: '#834A34',
+            900: '#683C2B',
+          },
+          charcoal: {
+            50: '#F7F7F7',
+            100: '#E3E3E3',
+            200: '#C8C8C8',
+            300: '#A4A4A4',
+            400: '#818181',
+            500: '#666666',
+            600: '#515151',
+            700: '#434343',
+            800: '#383838', // Dark charcoal (text)
+            900: '#2D2D2D',
+          },
+        },
         ...colors
       },
       screens: {
@@ -305,6 +356,36 @@ const themeConfig: Config = {
       },
       transitionDelay: {
         ...transitionDurations
+      },
+      animation: {
+        spotlight: "spotlight 2s ease .75s 1 forwards",
+        "scroll": "scroll var(--animation-duration, 40s) var(--animation-direction, forwards) linear infinite",
+        aurora: "aurora 4s ease-in-out infinite",
+      },
+      keyframes: {
+        spotlight: {
+          "0%": {
+            opacity: "0",
+            transform: "translate(-72%, -62%) scale(0.5)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translate(-50%, -40%) scale(1)",
+          },
+        },
+        scroll: {
+          to: {
+            transform: "translate(calc(-50% - 0.5rem))",
+          },
+        },
+        aurora: {
+          "0%, 100%": {
+            backgroundPosition: "0% 50%",
+          },
+          "50%": {
+            backgroundPosition: "100% 50%",
+          },
+        },
       },
       borderRadius: (() => {
         const radius: Record<string | number, string> = {

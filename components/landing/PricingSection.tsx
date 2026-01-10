@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { GlowingCard } from '@/components/ui/moving-border'
 
 export default function PricingSection() {
   const handleGetStarted = () => {
@@ -22,7 +23,6 @@ export default function PricingSection() {
       ],
       cta: "Get Started Free",
       popular: false,
-      gradient: "from-gray-100 to-gray-50"
     },
     {
       name: "Pro",
@@ -40,7 +40,6 @@ export default function PricingSection() {
       ],
       cta: "Start Pro Trial",
       popular: true,
-      gradient: "from-emerald-50 to-white"
     },
     {
       name: "Enterprise",
@@ -58,32 +57,31 @@ export default function PricingSection() {
       ],
       cta: "Contact Sales",
       popular: false,
-      gradient: "from-gray-100 to-gray-50"
     }
   ]
 
   return (
-    <section id="pricing" className="py-12 md:py-16 bg-gradient-to-b from-white to-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="pricing" className="py-20 md:py-28 bg-comfort-beige-100">
+      <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="text-center mb-12"
+          className="text-center mb-16"
         >
-          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-emerald-700 bg-emerald-100 rounded-full border border-emerald-300">
+          <div className="inline-flex items-center px-5 py-2 mb-6 text-sm font-medium text-comfort-sage-700 bg-comfort-sage-100 rounded-full">
             Pricing
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-5 text-comfort-charcoal-800 tracking-tight">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto leading-relaxed">
             Choose the plan that fits your needs. Start free and scale as you grow.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.name}
@@ -92,43 +90,46 @@ export default function PricingSection() {
               viewport={{ once: true }}
               transition={{ delay: index * 0.1, duration: 0.6 }}
               whileHover={{ y: -8, transition: { duration: 0.2 } }}
-              className={`relative bg-gradient-to-b ${plan.gradient} rounded-2xl border-2 overflow-hidden ${
+            >
+            <GlowingCard
+              className={`relative rounded-[24px] overflow-hidden h-full ${
                 plan.popular
-                  ? 'border-emerald-500 shadow-xl shadow-emerald-500/10'
-                  : 'border-gray-200 hover:border-emerald-300'
+                  ? 'shadow-xl shadow-comfort-sage-500/10 ring-2 ring-comfort-sage-400 animate-glow-pulse'
+                  : 'shadow-lg shadow-comfort-charcoal-800/5'
               }`}
+              glowColor={plan.popular ? "rgba(127, 181, 137, 0.4)" : "rgba(127, 181, 137, 0.2)"}
             >
               {plan.popular && (
                 <div className="absolute top-0 left-0 right-0">
-                  <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-center py-2 text-sm font-medium">
+                  <div className="bg-gradient-to-r from-comfort-sage-500 to-comfort-sage-600 text-white text-center py-2.5 text-sm font-medium">
                     Most Popular
                   </div>
                 </div>
               )}
 
-              <div className={`p-6 ${plan.popular ? 'pt-12' : ''}`}>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                <p className="text-gray-500 text-sm mb-4">{plan.description}</p>
+              <div className={`p-8 ${plan.popular ? 'pt-14' : ''}`}>
+                <h3 className="text-xl font-bold text-comfort-charcoal-800 mb-2">{plan.name}</h3>
+                <p className="text-comfort-charcoal-400 text-sm mb-6">{plan.description}</p>
 
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
+                <div className="mb-8">
+                  <span className="text-4xl font-bold text-comfort-charcoal-800">{plan.price}</span>
                   {plan.period && (
-                    <span className="text-gray-500 ml-1">{plan.period}</span>
+                    <span className="text-comfort-charcoal-400 ml-1">{plan.period}</span>
                   )}
                 </div>
 
-                <ul className="space-y-3 mb-6">
+                <ul className="space-y-4 mb-8">
                   {plan.features.map((feature, i) => (
                     <li key={i} className="flex items-start text-sm">
                       <svg
-                        className={`w-5 h-5 mr-3 flex-shrink-0 ${plan.popular ? 'text-emerald-500' : 'text-gray-400'}`}
+                        className={`w-5 h-5 mr-3 flex-shrink-0 ${plan.popular ? 'text-comfort-sage-500' : 'text-comfort-charcoal-300'}`}
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      <span className="text-gray-600">{feature}</span>
+                      <span className="text-comfort-charcoal-600">{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -137,15 +138,16 @@ export default function PricingSection() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleGetStarted}
-                  className={`w-full py-3 px-6 rounded-xl font-semibold transition-all duration-300 ${
+                  className={`w-full py-4 px-6 rounded-[16px] font-semibold transition-all duration-300 ${
                     plan.popular
-                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl hover:shadow-emerald-500/25'
-                      : 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 hover:border-emerald-300'
+                      ? 'bg-comfort-sage-500 hover:bg-comfort-sage-600 text-white shadow-lg shadow-comfort-sage-500/25 hover:shadow-xl'
+                      : 'bg-comfort-beige-100 hover:bg-comfort-beige-200 text-comfort-charcoal-700'
                   }`}
                 >
                   {plan.cta}
                 </motion.button>
               </div>
+            </GlowingCard>
             </motion.div>
           ))}
         </div>
@@ -157,7 +159,7 @@ export default function PricingSection() {
           transition={{ delay: 0.4 }}
           className="mt-12 text-center"
         >
-          <p className="text-gray-500 text-sm">
+          <p className="text-comfort-charcoal-400 text-sm">
             All plans include a 14-day free trial. No credit card required.
           </p>
         </motion.div>

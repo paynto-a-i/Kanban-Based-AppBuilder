@@ -2,6 +2,40 @@
 
 import { motion } from 'framer-motion'
 import { useState } from 'react'
+import { InfiniteMovingCards } from '@/components/ui/infinite-moving-cards'
+
+const testimonials = [
+  {
+    quote: "Built my entire SaaS in 2 days! The AI agents understand exactly what I need and the Kanban board makes it so easy to track progress.",
+    name: "Sarah K.",
+    title: "Founder, TechStart"
+  },
+  {
+    quote: "The multi-agent system is incredible. It's like having a full dev team that never sleeps. We've 10x'd our shipping velocity.",
+    name: "Mike R.",
+    title: "CTO, ScaleUp Inc"
+  },
+  {
+    quote: "Finally, a no-code platform that actually produces production-quality code. The real-time preview is a game changer.",
+    name: "Lisa M.",
+    title: "Product Manager"
+  },
+  {
+    quote: "My team loves the visual workflow. We can see exactly what each agent is doing and intervene when needed.",
+    name: "John D.",
+    title: "Tech Lead"
+  },
+  {
+    quote: "Shipped 5 new features this week alone. The automatic error fixing saves us hours of debugging time.",
+    name: "Anna T.",
+    title: "Solo Founder"
+  },
+  {
+    quote: "The code quality is surprisingly good. Clean, well-documented, and follows best practices. Highly recommend!",
+    name: "Chris P.",
+    title: "Senior Developer"
+  },
+]
 
 const tools = [
   { name: 'React', emoji: '⚛️', color: '#61DAFB', feature: 'Frontend Framework' },
@@ -29,7 +63,7 @@ export default function MetricsSection() {
       label: "Faster Development",
       description: "Build apps in hours, not weeks",
       emoji: "🚀",
-      color: "from-orange-500 to-red-500",
+      color: "from-comfort-sage-500 to-comfort-sage-600",
       funFact: "From idea to deployment!"
     },
     {
@@ -37,7 +71,7 @@ export default function MetricsSection() {
       label: "AI Assistance",
       description: "Agents work around the clock while you sleep",
       emoji: "🌙",
-      color: "from-blue-500 to-indigo-500",
+      color: "from-comfort-sage-400 to-comfort-sage-500",
       funFact: "Sleep tight, ship features!"
     },
     {
@@ -45,7 +79,7 @@ export default function MetricsSection() {
       label: "Stack Coverage",
       description: "Frontend, backend, database, deployment",
       emoji: "🎯",
-      color: "from-green-500 to-emerald-500",
+      color: "from-comfort-sage-600 to-comfort-sage-700",
       funFact: "Everything in one place!"
     },
     {
@@ -53,13 +87,13 @@ export default function MetricsSection() {
       label: "Coding Required",
       description: "Just describe what you want to build",
       emoji: "🧠",
-      color: "from-purple-500 to-pink-500",
+      color: "from-comfort-terracotta-400 to-comfort-terracotta-500",
       funFact: "Your ideas become reality!"
     }
   ]
 
   return (
-    <section id="metrics" className="py-12 md:py-16 bg-white">
+    <section id="metrics" className="py-12 md:py-16 bg-comfort-beige-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -68,10 +102,10 @@ export default function MetricsSection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-10"
         >
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
             Human Vision, AI Execution
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
             You direct the vision &mdash; AI handles the implementation.
           </p>
         </motion.div>
@@ -91,7 +125,7 @@ export default function MetricsSection() {
               }}
               onHoverStart={() => setHoveredMetric(index)}
               onHoverEnd={() => setHoveredMetric(null)}
-              className="group relative bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-8 text-center hover:border-gray-300 dark:hover:border-gray-700 transition-all duration-300 cursor-pointer overflow-hidden"
+              className="group relative bg-gradient-to-b from-comfort-beige-50 to-white border border-comfort-beige-200 rounded-2xl p-8 text-center hover:border-comfort-sage-300 transition-all duration-300 cursor-pointer overflow-hidden"
             >
               <motion.div
                 className={`absolute inset-0 bg-gradient-to-br ${metric.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`}
@@ -116,11 +150,11 @@ export default function MetricsSection() {
                 {metric.value}
               </motion.div>
 
-              <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              <div className="text-xl font-semibold text-comfort-charcoal-800 mb-2">
                 {metric.label}
               </div>
 
-              <p className="text-gray-500 text-sm mb-2">
+              <p className="text-comfort-charcoal-500 text-sm mb-2">
                 {metric.description}
               </p>
 
@@ -140,50 +174,30 @@ export default function MetricsSection() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.4, duration: 0.6 }}
-          className="mt-16 bg-gradient-to-r from-purple-100 to-cyan-100 dark:from-purple-900/20 dark:to-cyan-900/20 border border-purple-200 dark:border-gray-800 rounded-2xl p-8 md:p-12 overflow-hidden"
+          className="mt-16 bg-gradient-to-r from-comfort-sage-50 to-comfort-beige-100 border border-comfort-sage-200 rounded-2xl p-8 md:p-12 overflow-hidden"
         >
-          <h3 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-8 text-center">
+          <h3 className="text-2xl md:text-3xl font-bold text-comfort-charcoal-800 mb-10 text-center">
             The Complete App Building Platform
           </h3>
 
-          <div className="flex flex-col items-center gap-8">
-            <div className="flex flex-wrap justify-center items-center gap-4">
+          <div className="flex flex-col items-center gap-10">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-10 md:gap-14">
               {tools.map((tool, index) => (
                 <motion.div
                   key={tool.name}
                   initial={{ opacity: 0, scale: 0 }}
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
-                  transition={{ delay: 0.5 + index * 0.1, type: 'spring', stiffness: 200 }}
-                  whileHover={{ scale: 1.1, rotate: [0, -5, 5, 0] }}
-                  onHoverStart={() => setHoveredTool(tool.name)}
-                  onHoverEnd={() => setHoveredTool(null)}
-                  className="relative cursor-pointer"
+                  transition={{ delay: 0.3 + index * 0.1, type: 'spring', stiffness: 200 }}
+                  whileHover={{ scale: 1.05, y: -4 }}
+                  className="flex flex-col items-center gap-3"
                 >
-                  <div
-                    className="w-20 h-20 md:w-24 md:h-24 rounded-2xl flex flex-col items-center justify-center gap-1 border-2 transition-all duration-300 bg-white dark:bg-gray-900"
-                    style={{
-                      borderColor: hoveredTool === tool.name ? tool.color : '#e5e7eb'
-                    }}
-                  >
-                    <span className="text-3xl md:text-4xl">{tool.emoji}</span>
-                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{tool.name}</span>
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl flex items-center justify-center bg-white border border-comfort-beige-200 shadow-sm hover:shadow-md hover:border-comfort-sage-300 transition-all">
+                    <span className="text-2xl md:text-3xl">{tool.emoji}</span>
                   </div>
-                  {hoveredTool === tool.name && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400"
-                    >
-                      {tool.feature}
-                    </motion.div>
-                  )}
-                  {index < tools.length - 1 && (
-                    <span className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 text-2xl text-gray-400">+</span>
-                  )}
+                  <span className="text-sm font-medium text-comfort-charcoal-600">{tool.name}</span>
                 </motion.div>
               ))}
-
               <motion.div
                 initial={{ opacity: 0, scale: 0 }}
                 whileInView={{ opacity: 1, scale: 1 }}
@@ -203,8 +217,8 @@ export default function MetricsSection() {
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setFusionComplete(!fusionComplete)}
                 className={`w-28 h-28 md:w-32 md:h-32 rounded-2xl flex flex-col items-center justify-center gap-2 border-2 transition-all duration-500 ${fusionComplete
-                  ? 'bg-gradient-to-br from-cyan-500 to-purple-600 border-transparent shadow-lg shadow-purple-500/30'
-                  : 'bg-white dark:bg-gray-900 border-dashed border-gray-300 dark:border-gray-700 hover:border-purple-400'
+                  ? 'bg-gradient-to-br from-comfort-sage-500 to-comfort-sage-600 border-transparent shadow-lg shadow-comfort-sage-500/30'
+                  : 'bg-white border-dashed border-comfort-beige-300 hover:border-comfort-sage-400'
                   }`}
               >
                 <motion.span
@@ -214,7 +228,7 @@ export default function MetricsSection() {
                 >
                   {fusionComplete ? '⚡' : '🔮'}
                 </motion.span>
-                <span className={`text-xs font-bold ${fusionComplete ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                <span className={`text-xs font-bold ${fusionComplete ? 'text-white' : 'text-comfort-charcoal-500'}`}>
                   {fusionComplete ? 'Paynto.AI' : 'Click to fuse!'}
                 </span>
               </motion.button>
@@ -234,11 +248,11 @@ export default function MetricsSection() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
                       whileHover={{ y: -4 }}
-                      className="bg-white dark:bg-gray-900/50 rounded-xl p-4 text-center border border-gray-200 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-700 transition-colors cursor-default"
+                      className="bg-white rounded-xl p-4 text-center border border-comfort-beige-200 hover:border-comfort-sage-300 transition-colors cursor-default"
                     >
                       <span className="text-2xl mb-2 block">{feature.icon}</span>
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white mb-1">{feature.name}</p>
-                      <p className="text-[10px] text-gray-500">{feature.desc}</p>
+                      <p className="text-xs font-semibold text-comfort-charcoal-800 mb-1">{feature.name}</p>
+                      <p className="text-[10px] text-comfort-charcoal-500">{feature.desc}</p>
                     </motion.div>
                   ))}
                 </div>
@@ -247,65 +261,30 @@ export default function MetricsSection() {
           </div>
         </motion.div>
 
-        {/* Scrolling Testimonial Bar */}
+        {/* Testimonials with infinite scroll */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.5, duration: 0.6 }}
-          className="mt-12 overflow-hidden"
+          className="mt-16"
         >
-          <div className="text-center mb-6">
-            <span className="text-sm font-medium text-gray-500">Trusted by builders everywhere</span>
+          <div className="text-center mb-8">
+            <h3 className="text-xl font-semibold text-comfort-charcoal-800 mb-2">
+              Trusted by Builders Everywhere
+            </h3>
+            <p className="text-sm text-comfort-charcoal-500">
+              Join thousands of developers shipping faster with AI
+            </p>
           </div>
-          <div className="relative">
-            <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white dark:from-black to-transparent z-10" />
-            <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white dark:from-black to-transparent z-10" />
-            <motion.div
-              className="flex gap-8 whitespace-nowrap"
-              animate={{ x: [0, -1200] }}
-              transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-            >
-              {[
-                { text: '"Built my entire SaaS in 2 days!"', author: 'Sarah K.', role: 'Founder' },
-                { text: '"The AI agents are incredible"', author: 'Mike R.', role: 'CTO' },
-                { text: '"10x faster than traditional dev"', author: 'Lisa M.', role: 'Product Manager' },
-                { text: '"Finally, no-code that works"', author: 'John D.', role: 'Entrepreneur' },
-                { text: '"My team loves the Kanban view"', author: 'Anna T.', role: 'Tech Lead' },
-                { text: '"Shipping features daily now!"', author: 'Chris P.', role: 'Solo Founder' },
-                { text: '"Built my entire SaaS in 2 days!"', author: 'Sarah K.', role: 'Founder' },
-                { text: '"The AI agents are incredible"', author: 'Mike R.', role: 'CTO' },
-                { text: '"10x faster than traditional dev"', author: 'Lisa M.', role: 'Product Manager' },
-              ].map((t, i) => (
-                <div key={i} className="flex items-center gap-4 px-6 py-3 bg-gray-50 dark:bg-gray-900 rounded-full border border-gray-200 dark:border-gray-800">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{t.text}</span>
-                    <span className="text-xs text-gray-500">— {t.author}, {t.role}</span>
-                  </div>
-                  <span className="text-yellow-500">⭐⭐⭐⭐⭐</span>
-                </div>
-              ))}
-            </motion.div>
-          </div>
+          <InfiniteMovingCards
+            items={testimonials}
+            direction="left"
+            speed="slow"
+            pauseOnHover={true}
+          />
         </motion.div>
 
-        {/* Company Logos Ticker */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="mt-12 overflow-hidden"
-        >
-          <motion.div
-            className="flex gap-12 items-center justify-center"
-            animate={{ x: [0, -600, 0] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          >
-            {['🏢 TechCorp', '🚀 StartupX', '💼 Enterprise Co', '🌐 GlobalTech', '⚡ FastScale', '🎯 Precision AI', '🏢 TechCorp', '🚀 StartupX', '💼 Enterprise Co'].map((company, i) => (
-              <span key={i} className="text-gray-400 text-lg font-medium whitespace-nowrap">{company}</span>
-            ))}
-          </motion.div>
-        </motion.div>
       </div>
     </section>
   )

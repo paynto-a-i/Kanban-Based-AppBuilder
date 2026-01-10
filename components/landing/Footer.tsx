@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import Link from 'next/link'
+import Image from 'next/image'
 
 const socialLinks = [
   { name: 'Twitter', icon: '𝕏', href: '#' },
@@ -12,7 +13,7 @@ const socialLinks = [
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 border-t border-gray-200">
+    <footer className="bg-comfort-beige-100 border-t border-comfort-beige-300">
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -24,26 +25,30 @@ export default function Footer() {
           <div className="lg:col-span-2">
             <div className="mb-6">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br from-emerald-600 to-emerald-800 shadow-lg">
-                  <span className="text-xl font-bold text-white">P</span>
-                </div>
-                <span className="text-2xl font-bold text-gray-900">
-                  Paynto<span className="text-emerald-700">.</span>AI
+                <Image
+                  src="/paynto-logo.png"
+                  alt="Paynto.AI Logo"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-xl"
+                />
+                <span className="text-2xl font-bold text-comfort-charcoal-800">
+                  Paynto<span className="text-comfort-sage-600">.</span>AI
                 </span>
               </Link>
             </div>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md leading-relaxed mb-6">
+            <p className="text-comfort-charcoal-500 max-w-md leading-relaxed mb-6">
               The Kanban Command Centre for AI-Powered App Development.
               Don&apos;t write code &mdash; direct it.
             </p>
             <div className="flex items-center gap-4 mb-6">
               <motion.div
-                className="flex items-center gap-2 text-sm text-gray-500"
+                className="flex items-center gap-2 text-sm text-comfort-charcoal-500"
                 animate={{ opacity: [0.5, 1, 0.5] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
                 <motion.div
-                  className="w-2 h-2 bg-cyan-500 rounded-full"
+                  className="w-2 h-2 bg-comfort-sage-500 rounded-full"
                   animate={{ scale: [1, 1.5, 1] }}
                   transition={{ duration: 1, repeat: Infinity }}
                 />
@@ -62,7 +67,7 @@ export default function Footer() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: i * 0.1 }}
-                  className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  className="w-10 h-10 rounded-xl bg-comfort-beige-50 border border-comfort-beige-300 flex items-center justify-center text-lg hover:bg-comfort-beige-200 transition-colors"
                   aria-label={social.name}
                 >
                   {social.icon}
@@ -72,21 +77,21 @@ export default function Footer() {
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Product</h3>
+            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Product</h3>
             <ul className="space-y-3 text-sm">
-              <li><Link href="/generation" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Get Started</Link></li>
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Features</Link></li>
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Pricing</Link></li>
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Documentation</Link></li>
+              <li><Link href="/generation" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Get Started</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Features</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Pricing</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Documentation</Link></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Legal</h3>
+            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Legal</h3>
             <ul className="space-y-3 text-sm">
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Terms of Service</Link></li>
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Privacy Policy</Link></li>
-              <li><Link href="#" className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">Security</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Terms of Service</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Privacy Policy</Link></li>
+              <li><Link href="#" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Security</Link></li>
             </ul>
           </div>
         </div>
@@ -94,11 +99,11 @@ export default function Footer() {
         {/* Fun animated divider */}
         <div className="relative py-4 mb-4">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-200 dark:border-gray-900" />
+            <div className="w-full border-t border-comfort-beige-300" />
           </div>
           <div className="relative flex justify-center">
             <motion.span
-              className="px-4 bg-gray-50 dark:bg-black text-2xl"
+              className="px-4 bg-comfort-beige-100 text-2xl"
               animate={{ rotate: [0, 360] }}
               transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
             >
@@ -108,11 +113,11 @@ export default function Footer() {
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-comfort-charcoal-500">
             &copy; 2026 Paynto.AI. All rights reserved.
           </div>
           <motion.div
-            className="text-sm text-gray-500 flex items-center gap-2"
+            className="text-sm text-comfort-charcoal-500 flex items-center gap-2"
             whileHover={{ scale: 1.05 }}
           >
             <span>Made with</span>
