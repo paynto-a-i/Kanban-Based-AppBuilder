@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { getTenantContext } from '@/lib/auth/tenant';
 import { supabaseAdmin, Database } from '@/lib/supabase';
 
 type Project = Database['public']['Tables']['projects']['Row'];
@@ -13,27 +13,35 @@ export async function GET(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const { userId } = await auth();
-
-  if (!userId) {
+  const tenant = await getTenantContext();
+  if (!tenant) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { id } = await params;
 
   try {
+    // Query project - check user ownership or org membership
     const { data, error } = await (supabaseAdmin as any)
       .from('projects')
       .select('*')
       .eq('id', id)
-      .eq('user_id', userId)
+      .or(`user_id.eq.${tenant.userId},org_id.eq.${tenant.orgId || 'null'}`)
       .single();
 
     if (error || !data) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    // Verify access based on tenant context
     const project = data as Project;
+    const hasAccess = tenant.tenantType === 'organization'
+      ? project.org_id === tenant.orgId
+      : project.user_id === tenant.userId && !project.org_id;
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
 
     const { data: versions } = await (supabaseAdmin as any)
       .from('versions')
@@ -55,6 +63,7 @@ export async function GET(
         githubBranch: project.github_branch,
         createdAt: project.created_at,
         updatedAt: project.updated_at,
+        orgId: project.org_id,
         versions: versions || [],
       }
     });
@@ -72,9 +81,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const { userId } = await auth();
-
-  if (!userId) {
+  const tenant = await getTenantContext();
+  if (!tenant) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -84,14 +92,24 @@ export async function PATCH(
     const body = await request.json();
     const { name, description, sandboxId, sandboxUrl, githubRepo, githubBranch } = body;
 
+    // Check project ownership or org membership
     const { data: existing } = await (supabaseAdmin as any)
       .from('projects')
-      .select('id')
+      .select('id, user_id, org_id')
       .eq('id', id)
-      .eq('user_id', userId)
+      .or(`user_id.eq.${tenant.userId},org_id.eq.${tenant.orgId || 'null'}`)
       .single();
 
     if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    // Verify access
+    const hasAccess = tenant.tenantType === 'organization'
+      ? existing.org_id === tenant.orgId
+      : existing.user_id === tenant.userId && !existing.org_id;
+
+    if (!hasAccess) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
@@ -132,6 +150,7 @@ export async function PATCH(
         githubBranch: project.github_branch,
         createdAt: project.created_at,
         updatedAt: project.updated_at,
+        orgId: project.org_id,
       }
     });
   } catch (error: any) {
@@ -148,25 +167,40 @@ export async function DELETE(
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
   }
 
-  const { userId } = await auth();
-
-  if (!userId) {
+  const tenant = await getTenantContext();
+  if (!tenant) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { id } = await params;
 
   try {
+    // Check project ownership or org membership
     const { data: existing } = await (supabaseAdmin as any)
       .from('projects')
-      .select('id')
+      .select('id, user_id, org_id')
       .eq('id', id)
-      .eq('user_id', userId)
+      .or(`user_id.eq.${tenant.userId},org_id.eq.${tenant.orgId || 'null'}`)
       .single();
 
     if (!existing) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
+
+    // Verify access
+    const hasAccess = tenant.tenantType === 'organization'
+      ? existing.org_id === tenant.orgId
+      : existing.user_id === tenant.userId && !existing.org_id;
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    // Delete associated versions first
+    await (supabaseAdmin as any)
+      .from('versions')
+      .delete()
+      .eq('project_id', id);
 
     const { error } = await (supabaseAdmin as any)
       .from('projects')

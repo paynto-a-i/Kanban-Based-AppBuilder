@@ -84,6 +84,7 @@ export type Database = {
         Row: {
           id: string;
           user_id: string;
+          org_id: string | null;
           name: string;
           description: string | null;
           sandbox_id: string | null;
@@ -100,6 +101,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
+          org_id?: string | null;
           name: string;
           description?: string | null;
           sandbox_id?: string | null;
@@ -112,6 +114,7 @@ export type Database = {
         Update: {
           name?: string;
           description?: string | null;
+          org_id?: string | null;
           sandbox_id?: string | null;
           sandbox_url?: string | null;
           github_repo?: string | null;
@@ -190,6 +193,52 @@ export type Database = {
           sandbox_seconds?: number;
           last_sandbox_ping_at?: string | null;
           last_sandbox_id?: string | null;
+          updated_at?: string;
+        };
+      };
+      organizations: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string | null;
+          image_url: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          name: string;
+          slug?: string | null;
+          image_url?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          slug?: string | null;
+          image_url?: string | null;
+          updated_at?: string;
+        };
+      };
+      organization_memberships: {
+        Row: {
+          id: string;
+          org_id: string;
+          user_id: string;
+          role: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          user_id: string;
+          role?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          role?: string;
           updated_at?: string;
         };
       };

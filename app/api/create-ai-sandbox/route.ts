@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { SandboxFactory } from '@/lib/sandbox/factory';
 import type { SandboxState } from '@/types/sandbox';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
+import { withAuth } from '@/lib/auth/api-auth';
 
 declare global {
   var activeSandbox: any;
@@ -13,7 +14,12 @@ declare global {
   var sandboxCreationPromise: Promise<any> | null;
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // Optional auth with sandbox rate limiting - allows guest users but rate limits
+  const authResult = await withAuth(request, { requireAuth: false, rateLimitType: 'sandbox' });
+  if (!authResult.success) {
+    return authResult.response;
+  }
   if (global.sandboxCreationInProgress && global.sandboxCreationPromise) {
     console.log('[create-ai-sandbox] Sandbox creation already in progress, waiting for existing creation...');
     try {
