@@ -5,11 +5,11 @@ import Image from 'next/image'
 
 export default function BuiltBySection() {
   const organizations = [
-    { name: 'University of Manchester', logo: '/logos/manchester.svg', isPlaceholder: true },
-    { name: 'UCL', logo: '/logos/ucl.svg', isPlaceholder: false },
-    { name: "King's College London", logo: '/logos/kings.svg', isPlaceholder: true },
-    { name: 'Entrepreneur First', logo: '/logos/ef.svg', isPlaceholder: true },
-    { name: 'Microsoft', logo: '/logos/microsoft.png', isPlaceholder: false },
+    { name: 'University of Manchester', logo: '/logos/manchester.svg' },
+    { name: 'UCL', logo: '/logos/ucl.svg' },
+    { name: "King's College London", logo: '/logos/kings.svg' },
+    { name: 'Entrepreneur First', logo: '/logos/ef.svg' },
+    { name: 'Microsoft', logo: '/logos/microsoft.png' },
   ]
 
   return (
