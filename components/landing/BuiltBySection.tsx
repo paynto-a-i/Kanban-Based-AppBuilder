@@ -49,15 +49,15 @@ export default function BuiltBySection() {
               {[...organizations, ...organizations, ...organizations, ...organizations].map((org, i) => (
                 <motion.div
                   key={`${org.name}-${i}`}
-                  className="flex items-center justify-center flex-shrink-0 px-6 py-4 bg-white rounded-2xl border border-comfort-sage-200/80 hover:border-comfort-sage-400 hover:shadow-lg transition-all shadow-sm"
+                  className="flex items-center justify-center flex-shrink-0 px-8 py-5 bg-white rounded-2xl border border-comfort-sage-200/80 hover:border-comfort-sage-400 hover:shadow-lg transition-all shadow-sm"
                   whileHover={{ scale: 1.05, y: -3 }}
                 >
                   <Image
                     src={org.logo}
                     alt={`${org.name} logo`}
-                    width={200}
-                    height={56}
-                    className="h-12 w-auto object-contain"
+                    width={280}
+                    height={80}
+                    className="h-20 w-auto object-contain"
                   />
                 </motion.div>
               ))}
