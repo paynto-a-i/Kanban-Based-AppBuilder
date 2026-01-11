@@ -3,7 +3,7 @@
 import { ThemeProvider } from '@/components/landing/ThemeContext'
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
-import CommandCentreDashboard from '@/components/landing/CommandCentreDashboard'
+import MockUI from '@/components/landing/MockUI'
 import ProgressMetricsStrip from '@/components/landing/ProgressMetricsStrip'
 import LowerKanbanSection from '@/components/landing/LowerKanbanSection'
 import FeaturesSection from '@/components/landing/FeaturesSection'
@@ -20,7 +20,7 @@ export default function Home() {
         <Navbar />
         <main>
           <Hero />
-          <CommandCentreDashboard />
+          <MockUI />
           <ProgressMetricsStrip />
           <LowerKanbanSection />
           <FeaturesSection />
