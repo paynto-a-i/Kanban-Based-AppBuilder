@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Inter, Roboto_Mono } from "next/font/google";
+import { Inter, Roboto_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { SessionProvider } from "@/components/auth/SessionProvider";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,6 +27,12 @@ const robotoMono = Roboto_Mono({
   variable: "--font-roboto-mono",
 });
 
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-plus-jakarta",
+  weight: ["200", "300", "400", "500", "600", "700", "800"],
+});
+
 export const metadata: Metadata = {
   title: "Paynto A.I.",
   description: "Re-imagine any website in seconds with AI-powered website builder.",
@@ -42,17 +48,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        suppressHydrationWarning
-        className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} font-sans`}
-      >
-        <SessionProvider>
+    <ClerkProvider>
+      <html lang="en">
+        <body className={`${inter.variable} ${geistSans.variable} ${geistMono.variable} ${robotoMono.variable} ${plusJakarta.variable} font-sans`}>
           <ErrorBoundary>
             {children}
           </ErrorBoundary>
-        </SessionProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
