@@ -14,6 +14,11 @@ export async function POST(request: NextRequest) {
     const tickets = body?.tickets;
     const uiStyle = body?.uiStyle;
     const onlyTicketId = typeof body?.onlyTicketId === 'string' ? body.onlyTicketId : undefined;
+    const maxConcurrencyRaw = body?.maxConcurrency;
+    const maxConcurrency =
+      typeof maxConcurrencyRaw === 'number' && Number.isFinite(maxConcurrencyRaw) && maxConcurrencyRaw > 0
+        ? Math.floor(maxConcurrencyRaw)
+        : undefined;
 
     if (!sandboxId) {
       return NextResponse.json({ success: false, error: 'sandboxId is required' }, { status: 400 });
@@ -35,6 +40,7 @@ export async function POST(request: NextRequest) {
       model,
       uiStyle,
       onlyTicketId,
+      maxConcurrency,
     };
 
     const baseUrl = new URL(request.url).origin;

@@ -143,6 +143,16 @@ function AISandboxPage() {
       return false;
     }
   });
+  const [maxConcurrency, setMaxConcurrency] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    try {
+      const raw = localStorage.getItem('buildMaxConcurrency');
+      const n = raw ? Number(raw) : 2;
+      return Number.isFinite(n) && n > 0 ? Math.max(1, Math.min(Math.floor(n), 5)) : 2;
+    } catch {
+      return 2;
+    }
+  });
 
   // Server-side BuildRun (Phase 1): keep build execution truth on the server and stream events via SSE.
   const [buildRunId, setBuildRunId] = useState<string | null>(null);
@@ -198,6 +208,15 @@ function AISandboxPage() {
       // ignore
     }
   }, [autoOpenPreviewOnApply]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('buildMaxConcurrency', String(maxConcurrency));
+    } catch {
+      // ignore
+    }
+  }, [maxConcurrency]);
 
   useEffect(() => {
     return () => {
@@ -672,7 +691,12 @@ Visual Features: ${uiOption.features.join(', ')}`;
   }, [shouldAutoGenerate, homeUrlInput, showHomeScreen]);
 
   const hasTestingOrReviewTickets = useMemo(() => {
-    return kanban.tickets.some(t => t.status === 'testing' || t.status === 'pr_review');
+    return kanban.tickets.some(t =>
+      t.status === 'pr_review' ||
+      t.status === 'merge_queued' ||
+      t.status === 'merging' ||
+      t.status === 'testing'
+    );
   }, [kanban.tickets]);
 
   // Keep-alive effect: ping sandbox periodically during active builds AND during human gates
@@ -733,7 +757,8 @@ Visual Features: ${uiOption.features.join(', ')}`;
       if (newSandbox) {
         // If we have an existing Kanban plan with ticket code, restore automatically so the preview isn't a blank starter.
         const hasRestorableTickets = (kanban.tickets || []).some(t =>
-          Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status)
+          Boolean(t.generatedCode) &&
+          ['done', 'testing', 'merging', 'merge_queued', 'pr_review', 'applying', 'generating'].includes(t.status)
         );
         if ((kanban.plan as any)?.blueprint && hasRestorableTickets) {
           await restoreKanbanPlanToSandbox(newSandbox, 'recreate');
@@ -882,7 +907,8 @@ Visual Features: ${uiOption.features.join(', ')}`;
           // If we have an existing Kanban plan (often completed), rehydrate the new sandbox
           // so the preview returns to the generated app instead of the default Vite starter.
           const hasRestorableTickets = (kanban.tickets || []).some(t =>
-            Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status)
+            Boolean(t.generatedCode) &&
+            ['done', 'testing', 'merging', 'merge_queued', 'pr_review', 'applying', 'generating'].includes(t.status)
           );
           if (kanban.plan?.blueprint && hasRestorableTickets) {
             await restoreKanbanPlanToSandbox(created, 'recreate');
@@ -945,7 +971,10 @@ Visual Features: ${uiOption.features.join(', ')}`;
     }
 
     const restorableTickets = (kanban.tickets || [])
-      .filter(t => Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status))
+      .filter(t =>
+        Boolean(t.generatedCode) &&
+        ['done', 'testing', 'merging', 'merge_queued', 'pr_review', 'applying', 'generating'].includes(t.status)
+      )
       .sort((a, b) => (a.order || 0) - (b.order || 0));
 
     if (restorableTickets.length === 0) {
@@ -1158,9 +1187,11 @@ Apply these design specifications consistently across all components.`;
     awaiting_input: 2,
     generating: 3,
     applying: 4,
-    testing: 5,
-    pr_review: 6,
-    done: 7,
+    pr_review: 5,
+    merge_queued: 6,
+    merging: 7,
+    testing: 8,
+    done: 9,
     blocked: -1,
     failed: -1,
     skipped: -1,
@@ -1172,8 +1203,10 @@ Apply these design specifications consistently across all components.`;
     awaiting_input: 'Awaiting Input',
     generating: 'Generating',
     applying: 'Applying',
-    testing: 'Testing',
     pr_review: 'PR Review',
+    merge_queued: 'Merge Queued',
+    merging: 'Merging',
+    testing: 'Testing',
     done: 'Done',
     blocked: 'Blocked',
     failed: 'Failed',
@@ -1691,6 +1724,15 @@ Requirements:
         if (typeof evt.progress === 'number') {
           kanban.updateTicketProgress(evt.ticketId, evt.progress);
         }
+        // Surface "preview updated" signal only when a ticket is actually merged/done.
+        if (evt.status === 'done') {
+          if (autoOpenPreviewOnApply) {
+            setActiveTab('preview');
+            setPreviewHasUpdate(false);
+          } else {
+            setPreviewHasUpdate(true);
+          }
+        }
       }
       return;
     }
@@ -1779,6 +1821,7 @@ Requirements:
         model: aiModel,
         uiStyle: (kanban.plan as any)?.uiStyle,
         onlyTicketId,
+        maxConcurrency,
       }),
     });
 
@@ -3938,7 +3981,8 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               {sandboxData &&
               kanban.plan?.blueprint &&
               (kanban.tickets || []).some(t =>
-                Boolean(t.generatedCode) && ['done', 'testing', 'pr_review', 'applying', 'generating'].includes(t.status)
+                Boolean(t.generatedCode) &&
+                ['done', 'testing', 'merging', 'merge_queued', 'pr_review', 'applying', 'generating'].includes(t.status)
               ) ? (
                 <button
                   onClick={() => restoreKanbanPlanToSandbox(undefined, 'manual')}
@@ -6792,6 +6836,28 @@ Focus on the key sections and content, making it clean and modern.`;
                   />
                   <span className="select-none">Auto-open View</span>
                 </label>
+
+                {/* Parallel worker pool size */}
+                <div
+                  className="hidden md:inline-flex items-center gap-2 px-2 py-1 rounded-md border border-gray-200 bg-white text-xs text-gray-600"
+                  title="Max number of tickets to execute concurrently. Higher values can be faster but use more sandbox resources."
+                >
+                  <span className="select-none">Workers</span>
+                  <select
+                    value={maxConcurrency}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      setMaxConcurrency(Number.isFinite(n) ? Math.max(1, Math.min(Math.floor(n), 5)) : 1);
+                    }}
+                    className="bg-transparent outline-none text-xs text-gray-800"
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 {/* Live Code Generation Status */}
                 {activeTab === 'generation' && generationProgress.isGenerating && (

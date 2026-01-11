@@ -22,7 +22,7 @@ class SandboxManager {
   
   // OPTIMIZATION: Sandbox pool for reuse
   private sandboxPool: PooledSandbox[] = [];
-  private readonly MAX_POOL_SIZE = 2;
+  private readonly MAX_POOL_SIZE: number;
   private isPrewarming = false;
   private lastCleanupAt: number = 0;
   
@@ -32,6 +32,13 @@ class SandboxManager {
     process.env.SANDBOX_PREWARM_ENABLED === 'true' || process.env.SANDBOX_PREWARM === 'true';
   private readonly DEFAULT_POOL_TTL_MS = 10 * 60 * 1000; // 10 minutes
   private readonly CLEANUP_DEBOUNCE_MS = 30 * 1000; // avoid thrashing when many requests hit
+
+  constructor() {
+    const envSize = Number(process.env.SANDBOX_POOL_SIZE || process.env.SANDBOX_MAX_POOL_SIZE);
+    const size = Number.isFinite(envSize) && envSize > 0 ? Math.floor(envSize) : 2;
+    // Keep it bounded to avoid runaway costs by misconfig.
+    this.MAX_POOL_SIZE = Math.max(0, Math.min(size, 10));
+  }
 
   /**
    * Get or create a sandbox provider for the given sandbox ID
@@ -78,7 +85,7 @@ class SandboxManager {
   /**
    * Register a new sandbox
    */
-  registerSandbox(sandboxId: string, provider: SandboxProvider): void {
+  registerSandbox(sandboxId: string, provider: SandboxProvider, opts?: { setActive?: boolean }): void {
     this.sandboxes.set(sandboxId, {
       sandboxId,
       provider,
@@ -86,7 +93,10 @@ class SandboxManager {
       lastAccessed: new Date(),
       inUse: true
     });
-    this.activeSandboxId = sandboxId;
+    const setActive = opts?.setActive !== false;
+    if (setActive) {
+      this.activeSandboxId = sandboxId;
+    }
     
     // Start pre-warming another sandbox in background (optional; can be expensive)
     if (this.POOL_ENABLED && this.PREWARM_ENABLED) {

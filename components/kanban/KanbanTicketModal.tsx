@@ -37,7 +37,11 @@ export default function KanbanTicketModal({
     setIsEditing(false);
   };
 
-  const canApprove = ticket.status === 'testing' || ticket.status === 'pr_review';
+  const canApprove =
+    ticket.status === 'pr_review' ||
+    ticket.status === 'merge_queued' ||
+    ticket.status === 'merging' ||
+    ticket.status === 'testing';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>

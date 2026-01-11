@@ -25,6 +25,10 @@ export interface BuildRunInput {
    * Optional: run only one ticket (manual build-now).
    */
   onlyTicketId?: string;
+  /**
+   * Optional: maximum number of tickets to execute concurrently (bounded worker pool).
+   */
+  maxConcurrency?: number;
 }
 
 export type BuildEvent =

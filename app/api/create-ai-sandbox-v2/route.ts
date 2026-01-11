@@ -69,18 +69,23 @@ export async function POST(request: NextRequest) {
       templateTarget = 'vite';
     }
     
-    // Clean up all existing sandboxes
-    console.log('[create-ai-sandbox-v2] Cleaning up existing sandboxes...');
-    await sandboxManager.terminateAll();
-    
-    // Also clean up legacy global state
-    if (global.activeSandboxProvider) {
-      try {
-        await global.activeSandboxProvider.terminate();
-      } catch (e) {
-        console.error('Failed to terminate legacy global sandbox:', e);
+    // Clean up the previously active sandbox only (do not terminate all sandboxes).
+    // This enables a bounded pool of warm sandboxes for faster startup and supports multi-sandbox workflows.
+    console.log('[create-ai-sandbox-v2] Cleaning up previous active sandbox (if any)...');
+    try {
+      const activeProvider = sandboxManager.getActiveProvider() || global.activeSandboxProvider;
+      const activeId = activeProvider?.getSandboxInfo?.()?.sandboxId || global.sandboxData?.sandboxId;
+      if (activeId) {
+        await sandboxManager.terminateSandbox(activeId);
+      } else if (activeProvider) {
+        await activeProvider.terminate();
       }
+    } catch (e) {
+      console.warn('[create-ai-sandbox-v2] Failed to terminate previous active sandbox (non-fatal):', e);
+    } finally {
+      sandboxManager.clearActiveProvider();
       global.activeSandboxProvider = null;
+      global.sandboxData = null;
     }
     
     // Clear existing files tracking
@@ -90,19 +95,26 @@ export async function POST(request: NextRequest) {
       global.existingFiles = new Set<string>();
     }
 
-    // Create new sandbox using factory
-    const provider = SandboxFactory.create();
-    const sandboxInfo = await provider.createSandbox();
-    
-    console.log('[create-ai-sandbox-v2] Setting up Vite React app...');
-    await provider.setupViteApp();
+    // Create new sandbox using factory (prefer pooled warm sandbox when enabled)
+    let provider = await sandboxManager.getPooledSandbox();
+    let sandboxInfo = provider?.getSandboxInfo?.() || null;
+
+    if (provider && sandboxInfo?.sandboxId) {
+      console.log(`[create-ai-sandbox-v2] Reused pooled sandbox ${sandboxInfo.sandboxId}`);
+    } else {
+      provider = SandboxFactory.create();
+      sandboxInfo = await provider.createSandbox();
+
+      console.log('[create-ai-sandbox-v2] Setting up Vite React app...');
+      await provider.setupViteApp();
+    }
 
     // Annotate info for the UI (provider may not set these fields)
     (sandboxInfo as any).templateTarget = templateTarget;
     if (!(sandboxInfo as any).devPort) (sandboxInfo as any).devPort = 5173;
     
-    // Register with sandbox manager
-    sandboxManager.registerSandbox(sandboxInfo.sandboxId, provider);
+    // Register with sandbox manager (active)
+    sandboxManager.registerSandbox(sandboxInfo.sandboxId, provider, { setActive: true });
 
     // Start tracking sandbox time for this user/ip (best-effort)
     try {
@@ -152,15 +164,21 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[create-ai-sandbox-v2] Error:', error);
     
-    // Clean up on error
-    await sandboxManager.terminateAll();
-    if (global.activeSandboxProvider) {
-      try {
-        await global.activeSandboxProvider.terminate();
-      } catch (e) {
-        console.error('Failed to terminate sandbox on error:', e);
+    // Clean up on error (best-effort)
+    try {
+      const activeProvider = sandboxManager.getActiveProvider() || global.activeSandboxProvider;
+      const activeId = activeProvider?.getSandboxInfo?.()?.sandboxId || global.sandboxData?.sandboxId;
+      if (activeId) {
+        await sandboxManager.terminateSandbox(activeId);
+      } else if (activeProvider) {
+        await activeProvider.terminate();
       }
+    } catch (e) {
+      console.warn('[create-ai-sandbox-v2] Failed to terminate sandbox on error (non-fatal):', e);
+    } finally {
+      sandboxManager.clearActiveProvider();
       global.activeSandboxProvider = null;
+      global.sandboxData = null;
     }
     
     return NextResponse.json(
