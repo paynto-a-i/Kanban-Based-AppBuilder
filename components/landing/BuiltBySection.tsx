@@ -28,39 +28,41 @@ export default function BuiltBySection() {
         </motion.div>
 
         <div className="relative overflow-hidden">
-          <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-comfort-sage-50/80 to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-comfort-sage-50/80 to-transparent z-10 pointer-events-none" />
+          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-comfort-sage-50 to-transparent z-10 pointer-events-none" />
+          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-comfort-sage-50 to-transparent z-10 pointer-events-none" />
 
-          <motion.div
-            animate={{
-              x: ['0%', '-50%']
-            }}
-            transition={{
-              x: {
-                repeat: Infinity,
-                repeatType: "loop",
-                duration: 20,
-                ease: "linear",
-              },
-            }}
-            className="flex gap-10 py-4"
-          >
-            {[...organizations, ...organizations].map((org, i) => (
-              <motion.div
-                key={`${org.name}-${i}`}
-                className="flex items-center justify-center flex-shrink-0 px-4 py-2 bg-white rounded-xl border border-comfort-sage-200/80 hover:border-comfort-sage-400 hover:shadow-md transition-all shadow-sm"
-                whileHover={{ scale: 1.03, y: -2 }}
-              >
-                <Image
-                  src={org.logo}
-                  alt={`${org.name} logo`}
-                  width={140}
-                  height={40}
-                  className="h-8 w-auto object-contain"
-                />
-              </motion.div>
-            ))}
-          </motion.div>
+          <div className="flex">
+            <motion.div
+              animate={{
+                x: ['0%', '-50%']
+              }}
+              transition={{
+                x: {
+                  repeat: Infinity,
+                  repeatType: "loop",
+                  duration: 25,
+                  ease: "linear",
+                },
+              }}
+              className="flex gap-12 py-6 shrink-0"
+            >
+              {[...organizations, ...organizations, ...organizations, ...organizations].map((org, i) => (
+                <motion.div
+                  key={`${org.name}-${i}`}
+                  className="flex items-center justify-center flex-shrink-0 px-6 py-4 bg-white rounded-2xl border border-comfort-sage-200/80 hover:border-comfort-sage-400 hover:shadow-lg transition-all shadow-sm"
+                  whileHover={{ scale: 1.05, y: -3 }}
+                >
+                  <Image
+                    src={org.logo}
+                    alt={`${org.name} logo`}
+                    width={200}
+                    height={56}
+                    className="h-12 w-auto object-contain"
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
         </div>
       </div>
     </section>
