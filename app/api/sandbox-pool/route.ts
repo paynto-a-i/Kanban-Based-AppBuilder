@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 type PoolTarget = 'baseline' | 'burst' | number;
 
 export async function GET() {
-  const poolEnabled = process.env.SANDBOX_POOL_ENABLED === 'true';
+  // Warm sandbox pooling/prewarming is disabled (single-sandbox workflow).
+  const poolEnabled = false;
   return NextResponse.json({
     success: true,
     poolEnabled,
@@ -17,40 +18,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const poolEnabled = process.env.SANDBOX_POOL_ENABLED === 'true';
+    // Warm sandbox pooling/prewarming is disabled (single-sandbox workflow).
+    // We still accept the request for backwards compatibility with older clients,
+    // but do not create/adopt/scale any sandboxes.
+    const poolEnabled = false;
     const body = await request.json().catch(() => null);
     const targetRaw: PoolTarget | undefined = body?.target;
-    const knownSandboxIds: string[] | undefined = Array.isArray(body?.knownSandboxIds)
-      ? body.knownSandboxIds.filter((x: any) => typeof x === 'string')
-      : undefined;
-
     const targets = sandboxManager.getPoolTargets();
-    const resolvedTarget =
-      targetRaw === 'baseline'
-        ? targets.baseline
-        : targetRaw === 'burst'
-          ? targets.burst
-          : typeof targetRaw === 'number' && Number.isFinite(targetRaw)
-            ? Math.floor(targetRaw)
-            : targets.burst;
-
-    // Burst warmup runs in the background so the endpoint stays responsive.
-    // Best-effort: adopt any known warm sandboxes first (client can supply ids from previous sessions).
-    let adopted = { adopted: 0, attempted: 0 };
-    if (knownSandboxIds && knownSandboxIds.length > 0) {
-      try {
-        adopted = await sandboxManager.adoptKnownSandboxes(knownSandboxIds);
-      } catch {
-        adopted = { adopted: 0, attempted: knownSandboxIds.length };
-      }
-    }
-
-    if (targetRaw === 'baseline') {
-      // Best-effort scale down immediately.
-      void sandboxManager.shrinkPool(resolvedTarget);
-    } else {
-      void sandboxManager.ensureWarmPool(resolvedTarget);
-    }
+    const resolvedTarget = targets.baseline;
 
     return NextResponse.json({
       success: true,
@@ -58,7 +33,7 @@ export async function POST(request: NextRequest) {
       requestedTarget: targetRaw ?? 'burst',
       resolvedTarget,
       targets,
-      adopted,
+      adopted: { adopted: 0, attempted: 0 },
       pool: sandboxManager.getPoolStatus(),
     });
   } catch (e: any) {

@@ -32,9 +32,12 @@ class SandboxManager {
   private readonly POOL_BURST_SIZE: number;
   
   // Resource limiting / lifecycle controls
-  private readonly POOL_ENABLED = process.env.SANDBOX_POOL_ENABLED === 'true';
-  private readonly PREWARM_ENABLED =
-    process.env.SANDBOX_PREWARM_ENABLED === 'true' || process.env.SANDBOX_PREWARM === 'true';
+  //
+  // IMPORTANT: Warm sandbox pooling/prewarming is intentionally disabled.
+  // We run a single-sandbox workflow now to avoid background sandbox churn and billing surprises.
+  // (Leaving the implementation in place makes it easy to re-enable later if we ever want it back.)
+  private readonly POOL_ENABLED = false;
+  private readonly PREWARM_ENABLED = false;
   private readonly DEFAULT_POOL_TTL_MS = 10 * 60 * 1000; // 10 minutes
   private readonly CLEANUP_DEBOUNCE_MS = 30 * 1000; // avoid thrashing when many requests hit
   private readonly DEFAULT_POOL_SCALE_DOWN_IDLE_MS = 10 * 60 * 1000; // 10 minutes
@@ -60,6 +63,35 @@ class SandboxManager {
 
     const envConc = clampInt(Number(process.env.SANDBOX_PREWARM_CONCURRENCY), 1, 5);
     this.PREWARM_CONCURRENCY = envConc ?? 2;
+  }
+
+  private desiredProviderId(): 'vercel' | 'modal' | null {
+    const pref = SandboxFactory.getPreferredProvider();
+    if (pref === 'vercel') return 'vercel';
+    if (pref === 'modal') return 'modal';
+
+    // auto: prefer Vercel when configured, else Modal
+    const vercelOk =
+      Boolean(process.env.VERCEL_OIDC_TOKEN) ||
+      Boolean(process.env.VERCEL_TOKEN && process.env.VERCEL_TEAM_ID && process.env.VERCEL_PROJECT_ID);
+    const modalOk = Boolean(process.env.MODAL_TOKEN_ID && process.env.MODAL_TOKEN_SECRET);
+    if (vercelOk) return 'vercel';
+    if (modalOk) return 'modal';
+    return null;
+  }
+
+  private pooledProviderId(p: PooledSandbox): string | null {
+    try {
+      const info: any = p?.provider?.getSandboxInfo?.();
+      const v = info?.provider;
+      if (v === 'vercel' || v === 'modal') return v;
+    } catch {
+      // ignore
+    }
+    const id = String(p?.sandboxId || '');
+    if (id.startsWith('modal_')) return 'modal';
+    if (id.startsWith('sbx_') || id.startsWith('vercel_')) return 'vercel';
+    return null;
   }
 
   private getAllKnownSandboxIds(): Set<string> {
@@ -339,6 +371,29 @@ class SandboxManager {
   // OPTIMIZATION: Get a sandbox from pool or create new
   async getPooledSandbox(): Promise<SandboxProvider | null> {
     if (!this.POOL_ENABLED) return null;
+
+    // If the preferred provider changed (e.g. switching from Modal to Vercel), drop mismatched pooled sandboxes
+    // so we don't keep handing out the wrong provider and so prewarm can refill with the desired provider.
+    const desired = this.desiredProviderId();
+    if (desired) {
+      const keep: PooledSandbox[] = [];
+      const drop: PooledSandbox[] = [];
+      for (const p of this.sandboxPool) {
+        const pid = this.pooledProviderId(p);
+        if (!pid || pid === desired) keep.push(p);
+        else drop.push(p);
+      }
+      if (drop.length > 0) {
+        this.sandboxPool = keep;
+        void Promise.allSettled(
+          drop.map(p =>
+            p.provider
+              .terminate()
+              .catch(err => console.warn(`[SandboxManager] Failed to terminate mismatched pooled sandbox ${p.sandboxId}:`, err))
+          )
+        );
+      }
+    }
 
     // Check if we have a warmed sandbox in the pool
     const pooled = this.sandboxPool.shift();

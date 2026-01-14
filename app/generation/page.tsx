@@ -26,6 +26,7 @@ import { motion } from 'framer-motion';
 import CodeApplicationProgress, { type CodeApplicationState } from '@/components/CodeApplicationProgress';
 import { KanbanBoard, useKanbanBoard, BuildPlan, TicketStatus } from '@/components/kanban';
 import type { KanbanTicket as KanbanTicketType } from '@/components/kanban/types';
+import { Switch } from '@/components/ui/shadcn/switch';
 import { useVersioning } from '@/hooks/useVersioning';
 import { GitHubConnectButton, VersionHistoryPanel, SaveStatusIndicator, GitSyncToggle } from '@/components/versioning';
 import { saveGitHubConnection } from '@/lib/versioning/github';
@@ -144,6 +145,16 @@ function AISandboxPage() {
       return false;
     }
   });
+  const [demoSpeedMode, setDemoSpeedMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const raw = localStorage.getItem('demoSpeedMode');
+      if (raw === null) return true; // default ON (demo-first)
+      return raw === 'true';
+    } catch {
+      return true;
+    }
+  });
   // Hard-coded parallelism setting (demo-first): default to 10 workers for server-side BuildRuns.
   const maxConcurrency = 10;
 
@@ -206,48 +217,18 @@ function AISandboxPage() {
     }
   }, [autoOpenPreviewOnApply]);
 
-  // On-demand warm sandbox pool:
-  // - Burst to the configured maximum while this page is open (fast demos)
-  // - Scale back to baseline when leaving
+  // Persist user preference: demo-speed mode (skip PR review + integration gate).
   useEffect(() => {
-    const setPoolTarget = async (target: 'burst' | 'baseline') => {
-      try {
-        const knownSandboxIds = (() => {
-          if (typeof window === 'undefined') return [];
-          try {
-            const raw = localStorage.getItem('warmSandboxIds');
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed.filter((x: any) => typeof x === 'string') : [];
-          } catch {
-            return [];
-          }
-        })();
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('demoSpeedMode', String(demoSpeedMode));
+    } catch {
+      // ignore
+    }
+  }, [demoSpeedMode]);
 
-        const res = await fetch('/api/sandbox-pool', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target, knownSandboxIds }),
-        });
-
-        const json = await res.json().catch(() => null);
-        const ids = json?.pool?.sandboxIds;
-        if (Array.isArray(ids)) {
-          try {
-            localStorage.setItem('warmSandboxIds', JSON.stringify(ids.slice(0, 25)));
-          } catch {
-            // ignore
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    void setPoolTarget('burst');
-    return () => {
-      void setPoolTarget('baseline');
-    };
-  }, []);
+  // NOTE: Warm sandbox pooling / prewarming was removed.
+  // We run a single-sandbox workflow now, to reduce sandbox churn and billing surprises.
 
   useEffect(() => {
     return () => {
@@ -1038,6 +1019,22 @@ Visual Features: ${uiOption.features.join(', ')}`;
         ? `/api/sandbox-status?sandboxId=${encodeURIComponent(hintedSandboxId)}`
         : '/api/sandbox-status';
 
+      // #region agent log (debug)
+      fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'preview-stuck-pre',
+          hypothesisId: 'H3',
+          location: 'app/generation/page.tsx:checkSandboxStatus:start',
+          message: 'checkSandboxStatus start',
+          data: { desiredTemplate, hintedSandboxId: hintedSandboxId || null, statusUrl },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion agent log (debug)
+
       const response = await fetch(statusUrl);
       const data = await response.json();
 
@@ -1050,6 +1047,30 @@ Visual Features: ${uiOption.features.join(', ')}`;
       const shouldRecreate =
         Boolean(data?.sandboxStopped) ||
         (hasSandboxHint && (!data?.active || data?.sandboxData?.healthStatusCode === 410));
+
+      // #region agent log (debug)
+      fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'preview-stuck-pre',
+          hypothesisId: 'H3',
+          location: 'app/generation/page.tsx:checkSandboxStatus:result',
+          message: 'checkSandboxStatus status response',
+          data: {
+            ok: Boolean(response.ok),
+            active: Boolean(data?.active),
+            healthy: Boolean(data?.healthy),
+            sandboxStopped: Boolean(data?.sandboxStopped),
+            healthStatusCode: typeof data?.sandboxData?.healthStatusCode === 'number' ? data.sandboxData.healthStatusCode : null,
+            healthError: typeof data?.sandboxData?.healthError === 'string' ? data.sandboxData.healthError.slice(0, 200) : null,
+            shouldRecreate,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion agent log (debug)
 
       if (shouldRecreate) {
         console.log('[checkSandboxStatus] Sandbox unavailable, clearing state and creating new one');
@@ -1192,6 +1213,29 @@ Visual Features: ${uiOption.features.join(', ')}`;
     overrideSandbox?: SandboxData,
     reason: 'manual' | 'recreate' = 'manual'
   ) => {
+    // #region agent log (debug)
+    fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'preview-stuck-pre',
+        hypothesisId: 'H4',
+        location: 'app/generation/page.tsx:restoreKanbanPlanToSandbox:start',
+        message: 'restoreKanbanPlanToSandbox called',
+        data: {
+          reason,
+          restoringInFlight: Boolean(restoringSandboxRef.current),
+          overrideSandboxId: overrideSandbox?.sandboxId || null,
+          activeSandboxId: (overrideSandbox || sandboxData)?.sandboxId || null,
+          hasPlanBlueprint: Boolean(kanban.plan?.blueprint),
+          ticketsTotal: Array.isArray(kanban.tickets) ? kanban.tickets.length : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log (debug)
+
     if (restoringSandboxRef.current) return;
 
     const activeSandbox = overrideSandbox || sandboxData;
@@ -1217,6 +1261,26 @@ Visual Features: ${uiOption.features.join(', ')}`;
       addChatMessage('No ticket code found to restore. Use “Plan Build” to rebuild into this sandbox.', 'system');
       return;
     }
+
+    // #region agent log (debug)
+    fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'preview-stuck-pre',
+        hypothesisId: 'H4',
+        location: 'app/generation/page.tsx:restoreKanbanPlanToSandbox:ready',
+        message: 'restoreKanbanPlanToSandbox starting restore',
+        data: {
+          sandboxId: activeSandbox.sandboxId,
+          restorableTickets: restorableTickets.length,
+          firstTicket: restorableTickets[0]?.title ? String(restorableTickets[0].title).slice(0, 80) : null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log (debug)
 
     const planTemplate = (plan as any).templateTarget;
     const template: 'vite' | 'next' = planTemplate === 'next' || planTemplate === 'nextjs' ? 'next' : 'vite';
@@ -1263,6 +1327,17 @@ Visual Features: ${uiOption.features.join(', ')}`;
         addChatMessage(`Restoring ${i + 1}/${restorableTickets.length}: ${ticket.title}`, 'system');
         // Apply sequentially so later tickets can override earlier ones even if files shrink.
         await applyGeneratedCode(ticket.generatedCode, false, activeSandbox, { throwOnError: true });
+      }
+
+      // Sanity fix for demo reliability: remove common runtime footguns that produce blank previews (e.g. nested routers).
+      try {
+        await fetch('/api/preview-sanity-fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sandboxId: activeSandbox.sandboxId, restartVite: false }),
+        });
+      } catch {
+        // ignore
       }
 
       // Re-apply Supabase env vars if present in any ticket inputs (so the restored preview switches to Supabase mode).
@@ -1539,6 +1614,32 @@ Apply these design specifications consistently across all components.`;
   };
 
   const planBuild = async (prompt: string, uiStyle?: UIOption, context?: any) => {
+    // For demo speed + reliability, use a fast, stable planner model even if codegen uses GPT-5.
+    const planningModel = demoSpeedMode ? 'openai/gpt-4o' : aiModel;
+
+    // #region agent log (debug)
+    fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: 'debug-session',
+        runId: 'plan-stuck-pre',
+        hypothesisId: 'H1',
+        location: 'app/generation/page.tsx:planBuild:start',
+        message: 'planBuild called',
+        data: {
+          promptLen: typeof prompt === 'string' ? prompt.length : null,
+          hasContext: Boolean(context),
+          demoSpeedMode,
+          aiModel,
+          planningModel,
+          uiStyleName: uiStyle?.name || null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion agent log (debug)
+
     setIsPlanning(true);
     kanban.setTickets([]);
 
@@ -1549,6 +1650,7 @@ Apply these design specifications consistently across all components.`;
         body: JSON.stringify({ 
           prompt,
           context,
+          model: planningModel,
           uiStyle: uiStyle ? {
             name: uiStyle.name,
             description: uiStyle.description,
@@ -1559,6 +1661,22 @@ Apply these design specifications consistently across all components.`;
           } : undefined,
         }),
       });
+
+      // #region agent log (debug)
+      fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'plan-stuck-pre',
+          hypothesisId: 'H2',
+          location: 'app/generation/page.tsx:planBuild:response',
+          message: 'plan-build response headers received',
+          data: { ok: response.ok, status: response.status, hasBody: Boolean(response.body) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion agent log (debug)
 
       if (!response.ok || !response.body) {
         throw new Error('Failed to create build plan');
@@ -1593,6 +1711,43 @@ Apply these design specifications consistently across all components.`;
 
           try {
             const data = JSON.parse(payload);
+
+            // #region agent log (debug)
+            if (data && typeof data === 'object' && (data.type === 'planning_start' || data.type === 'planning_status' || data.type === 'plan_complete' || data.type === 'error')) {
+              fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sessionId: 'debug-session',
+                  runId: 'plan-stuck-pre',
+                  hypothesisId: 'H4',
+                  location: 'app/generation/page.tsx:planBuild:event',
+                  message: 'plan-build SSE event received',
+                  data: {
+                    type: data.type,
+                    model: typeof data.model === 'string' ? data.model : null,
+                    message: typeof data.message === 'string' ? data.message.slice(0, 200) : null,
+                    ticketsCount: Array.isArray(data?.plan?.tickets) ? data.plan.tickets.length : null,
+                  },
+                  timestamp: Date.now(),
+                }),
+              }).catch(() => {});
+            }
+            // #endregion agent log (debug)
+
+            if (data.type === 'planning_start') {
+              if (data.model) {
+                addChatMessage(`🧠 Planning build (${data.model})...`, 'system');
+              }
+              continue;
+            }
+
+            if (data.type === 'planning_status') {
+              if (data.message) {
+                addChatMessage(`⚠️ ${data.message}`, 'system');
+              }
+              continue;
+            }
 
             if (data.type === 'ticket') {
               kanban.setTickets(prev => [...prev, data.ticket]);
@@ -1633,7 +1788,6 @@ Apply these design specifications consistently across all components.`;
                   planIdOverride: serverPlan?.id || null,
                 });
               }
-
               continue;
             }
 
@@ -1650,6 +1804,21 @@ Apply these design specifications consistently across all components.`;
       addChatMessage(`Failed to create build plan: ${error.message}`, 'system');
     } finally {
       setIsPlanning(false);
+      // #region agent log (debug)
+      fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'plan-stuck-pre',
+          hypothesisId: 'H1',
+          location: 'app/generation/page.tsx:planBuild:finally',
+          message: 'planBuild finished (finally)',
+          data: {},
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion agent log (debug)
     }
   };
 
@@ -2106,8 +2275,8 @@ Requirements:
         onlyTicketId,
         maxConcurrency,
         // Demo speed: skip PR review + integration gate ("testing") so tickets don't bottleneck on quality gates.
-        skipPrReview: true,
-        skipIntegrationGate: true,
+        skipPrReview: demoSpeedMode,
+        skipIntegrationGate: demoSpeedMode,
       }),
     });
 
@@ -4317,6 +4486,26 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                 disabled={isRestoringSandbox}
                 onClick={async () => {
                   if (!sandboxData?.sandboxId) return;
+                  // #region agent log (debug)
+                  fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      sessionId: 'debug-session',
+                      runId: 'preview-stuck-pre',
+                      hypothesisId: 'H1',
+                      location: 'app/generation/page.tsx:preview:manualRefresh:click',
+                      message: 'Manual refresh clicked',
+                      data: {
+                        sandboxId: sandboxData.sandboxId,
+                        url: sandboxData.url || null,
+                        isRestoringSandbox,
+                        hasIframe: Boolean(iframeRef.current),
+                      },
+                      timestamp: Date.now(),
+                    }),
+                  }).catch(() => {});
+                  // #endregion agent log (debug)
 
                   // If the sandbox expired while idle, recreate it instead of just reloading the iframe.
                   try {
@@ -4324,9 +4513,46 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     const res = await fetch(statusUrl);
                     const data = await res.json().catch(() => null);
                     const code = data?.sandboxData?.healthStatusCode;
+                    const healthError = data?.sandboxData?.healthError;
+                    // #region agent log (debug)
+                    fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sessionId: 'debug-session',
+                        runId: 'preview-stuck-pre',
+                        hypothesisId: 'H2',
+                        location: 'app/generation/page.tsx:preview:manualRefresh:status',
+                        message: 'Manual refresh status result',
+                        data: {
+                          ok: Boolean(res.ok),
+                          active: Boolean(data?.active),
+                          sandboxStopped: Boolean(data?.sandboxStopped),
+                          healthStatusCode: typeof code === 'number' ? code : null,
+                          healthError: typeof healthError === 'string' ? healthError.slice(0, 200) : null,
+                        },
+                        timestamp: Date.now(),
+                      }),
+                    }).catch(() => {});
+                    // #endregion agent log (debug)
                     const isViteLikelyDown = typeof code === 'number' && (code === 404 || code >= 500);
                     if (data?.sandboxStopped || !data?.active || code === 410 || isViteLikelyDown) {
                       console.log('[Manual Refresh] Sandbox unhealthy - recovering...');
+                      // #region agent log (debug)
+                      fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          sessionId: 'debug-session',
+                          runId: 'preview-stuck-pre',
+                          hypothesisId: 'H3',
+                          location: 'app/generation/page.tsx:preview:manualRefresh:recover',
+                          message: 'Manual refresh invoking checkSandboxStatus (recover)',
+                          data: { template: (sandboxData as any)?.templateTarget || 'vite' },
+                          timestamp: Date.now(),
+                        }),
+                      }).catch(() => {});
+                      // #endregion agent log (debug)
                       await checkSandboxStatus((sandboxData as any)?.templateTarget || 'vite');
                       return;
                     }
@@ -4338,6 +4564,21 @@ Tip: I automatically detect and install npm packages from your code imports (lik
                     console.log('[Manual Refresh] Forcing iframe reload...');
                     const newSrc = `${sandboxData.url}?t=${Date.now()}&manual=true`;
                     iframeRef.current.src = newSrc;
+                    // #region agent log (debug)
+                    fetch('http://127.0.0.1:7244/ingest/c9f29500-2419-465e-93c8-b96754dedc28', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sessionId: 'debug-session',
+                        runId: 'preview-stuck-pre',
+                        hypothesisId: 'H2',
+                        location: 'app/generation/page.tsx:preview:manualRefresh:iframe',
+                        message: 'Manual refresh reloaded iframe src',
+                        data: { newSrc: newSrc.slice(0, 200) },
+                        timestamp: Date.now(),
+                      }),
+                    }).catch(() => {});
+                    // #endregion agent log (debug)
                   }
                 }}
                 className={`bg-white/90 hover:bg-white text-gray-700 p-2 rounded-lg shadow-lg transition-all duration-200 hover:scale-105 ${
@@ -6503,6 +6744,22 @@ Focus on the key sections and content, making it clean and modern.`;
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {!isPlanning && kanban.tickets.length > 0 && (
+                        <div
+                          className={`flex items-center gap-2 px-2 py-1 rounded border ${
+                            demoSpeedMode ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'
+                          }`}
+                          title="Demo speed mode: skips PR review + integration gate (testing/healing) for faster builds"
+                        >
+                          <span className="text-[10px] font-medium text-gray-700">Demo speed</span>
+                          <Switch
+                            size="sm"
+                            checked={demoSpeedMode}
+                            onCheckedChange={(v) => setDemoSpeedMode(Boolean(v))}
+                            disabled={kanbanBuildActive}
+                          />
+                        </div>
+                      )}
                       {!isPlanning && kanban.tickets.length > 0 && lastImportedRepo && sandboxData && (
                         <button
                           onClick={handleLoadImportedRepoIntoSandbox}

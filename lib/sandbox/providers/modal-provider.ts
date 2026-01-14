@@ -27,8 +27,14 @@ export class ModalProvider extends SandboxProvider {
 
       const image = this.modal.images.fromRegistry('node:22-slim');
 
+      // For demo/build runs, sandboxes need to survive longer idle periods.
+      // Default to 4 hours (configurable) to better match Vercel sandbox behavior and avoid preview disconnects.
+      const defaultTimeoutMs = 4 * 60 * 60 * 1000; // 4 hours
+      const envTimeoutMs = Number(process.env.MODAL_SANDBOX_TIMEOUT_MS);
+      const timeoutMs = Number.isFinite(envTimeoutMs) && envTimeoutMs > 0 ? envTimeoutMs : defaultTimeoutMs;
+
       this.modalSandbox = await this.modal.sandboxes.create(this.modalApp, image, {
-        timeoutMs: 30 * 60 * 1000,
+        timeoutMs,
         workdir: '/app',
         encryptedPorts: [5173],
       });

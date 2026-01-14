@@ -3,6 +3,7 @@ import type { KanbanTicket, TicketStatus } from '@/components/kanban/types';
 import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 import { SandboxFactory } from '@/lib/sandbox/factory';
 import type { SandboxProvider } from '@/lib/sandbox/types';
+import { rebasePatchFiles } from './patch-rebase';
 
 type Subscriber = (event: BuildEvent) => void;
 
@@ -32,7 +33,7 @@ interface RunInternalState {
   healHistoryByTicketId: Map<string, HealRecord[]>;
 }
 
-type HealStage = 'pr_review' | 'merge_apply' | 'integration_gate' | 'build';
+type HealStage = 'pr_review' | 'merge_conflict' | 'merge_apply' | 'integration_gate' | 'build';
 
 type HealRecord = {
   at: number;
@@ -549,8 +550,10 @@ export class BuildRunManager {
 
       const reviewConcurrency = Math.max(1, Math.min(genConcurrency, 2));
       const maxBufferedEnv = clampInt(Number(process.env.BUILD_MAX_BUFFERED_PATCHES), 1, 200);
-      const maxBufferedPatches =
-        maxBufferedEnv ?? (skipPrReview || skipIntegrationGate ? Math.max(50, genConcurrency * 10) : Math.max(24, genConcurrency * 6));
+      const defaultMaxBufferedPatches = skipPrReview || skipIntegrationGate
+        ? Math.max(50, genConcurrency * 10)
+        : Math.max(8, genConcurrency * 2);
+      const maxBufferedPatches = maxBufferedEnv ?? defaultMaxBufferedPatches;
 
       while (true) {
         await this.waitIfPaused(runId);
@@ -598,10 +601,13 @@ export class BuildRunManager {
 
         // Stage 1: Dispatch as many ready tickets as possible up to the generation concurrency.
         while (genInFlight.size < genConcurrency) {
-          // Avoid unbounded pipelining: keep generation roughly ahead of PR review, but do NOT let merge backlog stall generation.
-          // (For demos we prefer keeping the generation pool busy; stale patches are handled via rebasing/regeneration when needed.)
-          const buffered = reviewQueue.length + reviewInFlight.size;
-          if (buffered >= maxBufferedPatches) break;
+          // Avoid unbounded pipelining: keep generation ahead of downstream stages (PR review + merge),
+          // otherwise patches become stale and conflict rates explode under parallelism.
+          const bufferedReview = reviewQueue.length + reviewInFlight.size;
+          const mergeQueueLen = internal.mergeQueue.length;
+          const mergeBusy = this.mergePromises.has(runId) ? 1 : 0;
+          const bufferedTotal = bufferedReview + mergeQueueLen + mergeBusy;
+          if (bufferedTotal >= maxBufferedPatches) break;
 
           const exclude = new Set(genInFlight.keys());
           let next: KanbanTicket | null = null;
@@ -1635,41 +1641,282 @@ export class BuildRunManager {
             ? `Merge conflict: ${conflicts[0]}`
             : `Merge conflict: ${conflicts.slice(0, 3).join(', ')}${conflicts.length > 3 ? '…' : ''}`;
 
-        const maxRebaseAttempts = 3;
-        const t = run.tickets.find(x => x.id === next.ticketId) || null;
-        const currentRetries = typeof t?.retryCount === 'number' ? t!.retryCount : 0;
-
-        if (currentRetries < maxRebaseAttempts) {
-          const attempt = currentRetries + 1;
-          run.tickets = updateTicket(run.tickets, next.ticketId, { retryCount: attempt } as any);
-          this.updateTicketStatus(runId, next.ticketId, 'rebasing', 0, msg);
-          this.emit(runId, {
-            type: 'log',
-            runId,
-            at: now(),
-            level: 'warning',
-            message: `${msg}. Auto-rebasing and re-running (attempt ${attempt}/${maxRebaseAttempts})...`,
-            ticketId: next.ticketId,
-          });
-          continue;
-        }
-
-        this.updateTicketStatus(
-          runId,
-          next.ticketId,
-          'failed',
-          undefined,
-          `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`
-        );
+        // First: deterministic "3-way-ish" rebase (fast path).
         this.emit(runId, {
           type: 'log',
           runId,
           at: now(),
-          level: 'error',
-          message: `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`,
+          level: 'warning',
+          message: `${msg}. Attempting deterministic rebase (base v${next.baseVersion} → main v${state.snapshotVersion})...`,
           ticketId: next.ticketId,
         });
-        continue;
+
+        const rebase = rebasePatchFiles({
+          baseSnapshot,
+          mainSnapshot,
+          patchFiles: next.patchFiles,
+          onlyPaths: conflicts,
+        });
+
+        // Apply any successful rebases to this branch's patch set.
+        if (rebase.rebasedPaths.length > 0) {
+          this.emit(runId, {
+            type: 'log',
+            runId,
+            at: now(),
+            level: 'info',
+            message: `Deterministic rebase succeeded for: ${rebase.rebasedPaths.slice(0, 5).join(', ')}${rebase.rebasedPaths.length > 5 ? '…' : ''}`,
+            ticketId: next.ticketId,
+          });
+        }
+
+        next.patchFiles = rebase.rebasedPatchFiles;
+        next.appliedFiles = Object.keys(next.patchFiles).sort();
+        next.patchCode = buildFileBlocks(next.patchFiles);
+
+        // Surface the latest patch to the UI for debugging (view-code).
+        run.tickets = updateTicket(run.tickets, next.ticketId, {
+          generatedCode: next.patchCode,
+          actualFiles: next.appliedFiles,
+          previewAvailable: false,
+        } as any);
+        this.emit(runId, {
+          type: 'ticket_artifacts',
+          runId,
+          at: now(),
+          ticketId: next.ticketId,
+          generatedCode: next.patchCode,
+          appliedFiles: next.appliedFiles,
+        });
+
+        if (!rebase.ok) {
+          const conflictPaths = rebase.failedPaths.slice();
+          const history = this.getHealHistory(runId, next.ticketId);
+          const conflictAttemptsSoFar = history.filter(r => r.stage === 'merge_conflict').length;
+          const maxConflictAttempts = 2;
+
+          // Second: LLM merge conflict resolver (slow path) with appended context.
+          if (conflictAttemptsSoFar < maxConflictAttempts) {
+            const attempt = conflictAttemptsSoFar + 1;
+            const historyText = formatHealHistory(history);
+            const ticket = run.tickets.find(x => x.id === next.ticketId) || null;
+
+            const baseHeader = `base v${next.baseVersion}`;
+            const mainHeader = `main v${state.snapshotVersion}`;
+
+            const fileContextBlocks = conflictPaths
+              .map((p) => {
+                const baseHas = Object.prototype.hasOwnProperty.call(baseSnapshot, p);
+                const mainHas = Object.prototype.hasOwnProperty.call(mainSnapshot, p);
+                const patchHas = Object.prototype.hasOwnProperty.call(next.patchFiles, p);
+
+                const baseText = baseHas ? baseSnapshot[p] : '(file missing)';
+                const mainText = mainHas ? mainSnapshot[p] : '(file missing)';
+                const patchText = patchHas ? next.patchFiles[p] : '(file missing)';
+
+                const patchDelta = rebase.patchTextByPath?.[p] || '';
+
+                return (
+                  `\nFILE: ${p}\n` +
+                  `--- BEGIN ${baseHeader} ---\n${baseText}\n--- END ${baseHeader} ---\n\n` +
+                  `--- BEGIN ${mainHeader} ---\n${mainText}\n--- END ${mainHeader} ---\n\n` +
+                  `--- BEGIN ticket_generated ---\n${patchText}\n--- END ticket_generated ---\n\n` +
+                  (patchDelta ? `--- BEGIN base_to_ticket_patch ---\n${patchDelta}\n--- END base_to_ticket_patch ---\n` : '')
+                );
+              })
+              .join('\n');
+
+            const conflictMsg = `${msg}. Deterministic rebase failed for: ${conflictPaths.slice(0, 5).join(', ')}${conflictPaths.length > 5 ? '…' : ''}`;
+            this.pushHealRecord(runId, next.ticketId, 'merge_conflict', conflictMsg);
+
+            this.emit(runId, {
+              type: 'log',
+              runId,
+              at: now(),
+              level: 'warning',
+              message: `${conflictMsg}. Invoking AI conflict resolver (attempt ${attempt}/${maxConflictAttempts})...`,
+              ticketId: next.ticketId,
+            });
+
+            const fixPrompt =
+              `Resolve merge conflicts when integrating a ticket patch into the current application.\n\n` +
+              `Ticket:\n- Title: ${ticket?.title || next.ticketId}\n- Description: ${ticket?.description || '(unknown)'}\n\n` +
+              `Context:\n- You are merging changes generated against ${baseHeader} into ${mainHeader}.\n` +
+              `- Conflicting file(s): ${conflictPaths.join(', ')}\n\n` +
+              `Previous attempts history (do NOT repeat failed approaches; adapt):\n${historyText}\n\n` +
+              `Rules:\n` +
+              `- Output ONLY <file path="..."> blocks for the conflicting file(s) listed above.\n` +
+              `- Each <file> block MUST contain the FULL updated file content (no truncation).\n` +
+              `- Preserve all unrelated changes already present in ${mainHeader}.\n` +
+              `- Incorporate the ticket's intended changes from ticket_generated (or base_to_ticket_patch) into ${mainHeader}.\n` +
+              `- Do NOT modify any other files.\n` +
+              `- NEVER include markdown fences like \`\`\` or language tags inside files.\n\n` +
+              `You MUST output ONLY these file(s): ${conflictPaths.join(', ')}\n\n` +
+              `File contexts (authoritative):\n${fileContextBlocks}\n`;
+
+            let fixCode = '';
+            try {
+              fixCode = await this.generateTicketCode(
+                baseUrl,
+                run.input.model,
+                fixPrompt,
+                state.mainSandboxId,
+                'fix_validation'
+              );
+            } catch (e: any) {
+              fixCode = '';
+              this.pushHealRecord(runId, next.ticketId, 'merge_conflict', e?.message || 'AI conflict resolver failed');
+            }
+
+            const fixBlocks = extractFileBlocks(fixCode || '');
+            const fixedByPath = new Map<string, string>();
+            for (const b of fixBlocks) {
+              const p = normalizeSandboxPath(b.path || '');
+              if (!p) continue;
+              if (!conflictPaths.includes(p)) continue;
+              fixedByPath.set(p, (b.content || '').trim());
+            }
+
+            const missing = conflictPaths.filter(p => !fixedByPath.has(p));
+
+            if (missing.length === 0 && fixedByPath.size > 0) {
+              for (const [p, content] of fixedByPath.entries()) {
+                next.patchFiles[p] = content;
+              }
+              next.appliedFiles = Object.keys(next.patchFiles).sort();
+              next.patchCode = buildFileBlocks(next.patchFiles);
+
+              run.tickets = updateTicket(run.tickets, next.ticketId, {
+                generatedCode: next.patchCode,
+                actualFiles: next.appliedFiles,
+                previewAvailable: false,
+              } as any);
+              this.emit(runId, {
+                type: 'ticket_artifacts',
+                runId,
+                at: now(),
+                ticketId: next.ticketId,
+                generatedCode: next.patchCode,
+                appliedFiles: next.appliedFiles,
+              });
+
+              this.emit(runId, {
+                type: 'log',
+                runId,
+                at: now(),
+                level: 'info',
+                message: `AI conflict resolver succeeded for: ${conflictPaths.slice(0, 5).join(', ')}${conflictPaths.length > 5 ? '…' : ''}. Proceeding with merge.`,
+                ticketId: next.ticketId,
+              });
+            } else {
+              const failMsg =
+                missing.length > 0
+                  ? `AI conflict resolver did not return all required files (missing: ${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''})`
+                  : `AI conflict resolver returned no usable <file> blocks`;
+
+              this.pushHealRecord(runId, next.ticketId, 'merge_conflict', failMsg);
+              this.emit(runId, {
+                type: 'log',
+                runId,
+                at: now(),
+                level: 'warning',
+                message: `${msg}. ${failMsg}. Falling back to regenerate/rebase strategy...`,
+                ticketId: next.ticketId,
+              });
+
+              const maxRebaseAttempts = 3;
+              const t = run.tickets.find(x => x.id === next.ticketId) || null;
+              const currentRetries = typeof t?.retryCount === 'number' ? t!.retryCount : 0;
+
+              if (currentRetries < maxRebaseAttempts) {
+                const regenAttempt = currentRetries + 1;
+                run.tickets = updateTicket(run.tickets, next.ticketId, { retryCount: regenAttempt } as any);
+                this.updateTicketStatus(runId, next.ticketId, 'rebasing', 0, msg);
+                this.emit(runId, {
+                  type: 'log',
+                  runId,
+                  at: now(),
+                  level: 'warning',
+                  message: `${msg}. Auto-rebasing and re-running (attempt ${regenAttempt}/${maxRebaseAttempts})...`,
+                  ticketId: next.ticketId,
+                });
+                continue;
+              }
+
+              this.updateTicketStatus(
+                runId,
+                next.ticketId,
+                'failed',
+                undefined,
+                `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`
+              );
+              this.emit(runId, {
+                type: 'log',
+                runId,
+                at: now(),
+                level: 'error',
+                message: `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`,
+                ticketId: next.ticketId,
+              });
+              continue;
+            }
+          } else {
+            this.emit(runId, {
+              type: 'log',
+              runId,
+              at: now(),
+              level: 'warning',
+              message: `${msg}. AI conflict resolver attempts exhausted (${conflictAttemptsSoFar}/${maxConflictAttempts}). Falling back to regenerate/rebase strategy...`,
+              ticketId: next.ticketId,
+            });
+
+            const maxRebaseAttempts = 3;
+            const t = run.tickets.find(x => x.id === next.ticketId) || null;
+            const currentRetries = typeof t?.retryCount === 'number' ? t!.retryCount : 0;
+
+            if (currentRetries < maxRebaseAttempts) {
+              const attempt = currentRetries + 1;
+              run.tickets = updateTicket(run.tickets, next.ticketId, { retryCount: attempt } as any);
+              this.updateTicketStatus(runId, next.ticketId, 'rebasing', 0, msg);
+              this.emit(runId, {
+                type: 'log',
+                runId,
+                at: now(),
+                level: 'warning',
+                message: `${msg}. Auto-rebasing and re-running (attempt ${attempt}/${maxRebaseAttempts})...`,
+                ticketId: next.ticketId,
+              });
+              continue;
+            }
+
+            this.updateTicketStatus(
+              runId,
+              next.ticketId,
+              'failed',
+              undefined,
+              `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`
+            );
+            this.emit(runId, {
+              type: 'log',
+              runId,
+              at: now(),
+              level: 'error',
+              message: `${msg}. Auto-rebase exhausted (${currentRetries}/${maxRebaseAttempts}).`,
+              ticketId: next.ticketId,
+            });
+            continue;
+          }
+        } else {
+          // Everything was successfully rebased deterministically; proceed with merge.
+          this.emit(runId, {
+            type: 'log',
+            runId,
+            at: now(),
+            level: 'info',
+            message: `${msg}. Deterministic rebase resolved all conflicts. Proceeding with merge.`,
+            ticketId: next.ticketId,
+          });
+        }
       }
 
       // Merge apply into integration sandbox
