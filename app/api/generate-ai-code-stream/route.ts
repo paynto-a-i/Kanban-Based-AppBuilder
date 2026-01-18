@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
       isEdit = false,
       buildProfile: requestedBuildProfile
     } = await request.json();
+    const origin = request.nextUrl.origin;
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
@@ -327,7 +328,7 @@ export async function POST(request: NextRequest) {
 
             // STEP 1: Get search plan from AI
             try {
-              const intentResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/analyze-edit-intent`, {
+              const intentResponse = await fetch(`${origin}/api/analyze-edit-intent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, manifest, model })
@@ -458,7 +459,7 @@ User request: "${prompt}"`;
 
               try {
                 // Fetch files directly from sandbox
-                const filesResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/get-sandbox-files`, {
+                const filesResponse = await fetch(`${origin}/api/get-sandbox-files`, {
                   method: 'GET',
                   headers: { 'Content-Type': 'application/json' }
                 });
@@ -472,7 +473,7 @@ User request: "${prompt}"`;
 
                     // Now try to analyze edit intent with the fetched manifest
                     try {
-                      const intentResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/analyze-edit-intent`, {
+                      const intentResponse = await fetch(`${origin}/api/analyze-edit-intent`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt, manifest, model })
