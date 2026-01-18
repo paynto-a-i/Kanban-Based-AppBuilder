@@ -11,6 +11,20 @@ declare global {
   var sandboxLastHealAtBySandbox: Record<string, number> | undefined;
   // eslint-disable-next-line no-var
   var sandboxHealWindowBySandbox: Record<string, { windowStart: number; count: number }> | undefined;
+  // eslint-disable-next-line no-var
+  var sandboxHealStatsBySandbox:
+    | Record<
+        string,
+        {
+          attempts: number;
+          successes: number;
+          failures: number;
+          lastAt: number;
+          lastDurationMs: number;
+          lastError?: string;
+        }
+      >
+    | undefined;
 }
 
 const HEAL_COOLDOWN_MS = 7000;
@@ -41,6 +55,7 @@ export async function POST(request: NextRequest) {
 
   (async () => {
     let sandboxKey = 'active';
+    const startedAt = Date.now();
     try {
       const body = await request.json().catch(() => null);
       const requestedSandboxId = String(body?.sandboxId || body?.sandbox || '').trim();
@@ -69,6 +84,7 @@ export async function POST(request: NextRequest) {
           type: 'error',
           message: requestedSandboxId ? `No sandbox provider for sandboxId: ${requestedSandboxId}` : 'No active sandbox',
         });
+        console.warn('[sandbox-heal] No provider available', { requestedSandboxId });
         return;
       }
 
@@ -78,9 +94,11 @@ export async function POST(request: NextRequest) {
       if (!global.sandboxHealInProgressBySandbox) global.sandboxHealInProgressBySandbox = {};
       if (!global.sandboxLastHealAtBySandbox) global.sandboxLastHealAtBySandbox = {};
       if (!global.sandboxHealWindowBySandbox) global.sandboxHealWindowBySandbox = {};
+      if (!global.sandboxHealStatsBySandbox) global.sandboxHealStatsBySandbox = {};
 
       if (global.sandboxHealInProgressBySandbox[sandboxKey]) {
         await send({ type: 'info', message: 'Heal already in progress. Waiting for it to complete…' });
+        console.log('[sandbox-heal] Skip (in progress)', { sandboxKey });
         return;
       }
 
@@ -89,6 +107,7 @@ export async function POST(request: NextRequest) {
       if (lastAt && now - lastAt < HEAL_COOLDOWN_MS) {
         const remaining = Math.ceil((HEAL_COOLDOWN_MS - (now - lastAt)) / 1000);
         await send({ type: 'info', message: `Heal cooldown active (${remaining}s).` });
+        console.log('[sandbox-heal] Skip (cooldown)', { sandboxKey, remainingSeconds: remaining });
         return;
       }
 
@@ -100,12 +119,25 @@ export async function POST(request: NextRequest) {
           type: 'error',
           message: 'Auto-heal is rate-limited for this sandbox (too many attempts). Consider recreating the sandbox.',
         });
+        console.warn('[sandbox-heal] Rate-limited', { sandboxKey, windowStart, count });
         return;
       }
 
       global.sandboxHealInProgressBySandbox[sandboxKey] = true;
       global.sandboxLastHealAtBySandbox[sandboxKey] = now;
       global.sandboxHealWindowBySandbox[sandboxKey] = { windowStart, count: count + 1 };
+      global.sandboxHealStatsBySandbox[sandboxKey] = {
+        ...(global.sandboxHealStatsBySandbox[sandboxKey] || {
+          attempts: 0,
+          successes: 0,
+          failures: 0,
+          lastAt: 0,
+          lastDurationMs: 0,
+        }),
+        attempts: (global.sandboxHealStatsBySandbox[sandboxKey]?.attempts || 0) + 1,
+        lastAt: now,
+        lastError: undefined,
+      };
 
       await send({ type: 'start', message: 'Checking sandbox for build issues…', sandboxId: sandboxKey });
 
@@ -119,9 +151,36 @@ export async function POST(request: NextRequest) {
       ).slice(0, MAX_PACKAGES_PER_HEAL);
 
       if (pkgs.length === 0 && before.viteRunning !== false) {
-        await send({ type: 'complete', healthy: true, message: 'No healing needed.', snapshot: before });
+        await send({
+          type: 'complete',
+          healthy: true,
+          message: 'No healing needed.',
+          snapshot: before,
+          durationMs: Date.now() - startedAt,
+        });
+        const dur = Date.now() - startedAt;
+        global.sandboxHealStatsBySandbox[sandboxKey] = {
+          ...(global.sandboxHealStatsBySandbox[sandboxKey] || {
+            attempts: 1,
+            successes: 0,
+            failures: 0,
+            lastAt: now,
+            lastDurationMs: 0,
+          }),
+          successes: (global.sandboxHealStatsBySandbox[sandboxKey]?.successes || 0) + 1,
+          lastDurationMs: dur,
+          lastError: undefined,
+        };
+        console.log('[sandbox-heal] No-op (healthy)', { sandboxKey, durationMs: dur });
         return;
       }
+
+      console.log('[sandbox-heal] Starting heal', {
+        sandboxKey,
+        provider: String(info?.provider || ''),
+        missingPackages: pkgs,
+        viteRunning: before.viteRunning,
+      });
 
       if (pkgs.length > 0) {
         await send({ type: 'step', step: 1, message: `Installing ${pkgs.length} missing package(s)…`, packages: pkgs });
@@ -137,7 +196,27 @@ export async function POST(request: NextRequest) {
         }
         if (!install.success) {
           await send({ type: 'error', message: install.stderr || 'Package installation failed.' });
-          await send({ type: 'complete', healthy: false, snapshot: await getSandboxHealthSnapshot(provider) });
+          const afterFail = await getSandboxHealthSnapshot(provider);
+          const dur = Date.now() - startedAt;
+          await send({ type: 'complete', healthy: false, snapshot: afterFail, durationMs: dur });
+          global.sandboxHealStatsBySandbox[sandboxKey] = {
+            ...(global.sandboxHealStatsBySandbox[sandboxKey] || {
+              attempts: 1,
+              successes: 0,
+              failures: 0,
+              lastAt: now,
+              lastDurationMs: 0,
+            }),
+            failures: (global.sandboxHealStatsBySandbox[sandboxKey]?.failures || 0) + 1,
+            lastDurationMs: dur,
+            lastError: String(install.stderr || 'install_failed').slice(0, 300),
+          };
+          console.warn('[sandbox-heal] Install failed', {
+            sandboxKey,
+            durationMs: dur,
+            stderr: String(install.stderr || '').slice(0, 300),
+            missingAfter: afterFail.missingPackages,
+          });
           return;
         }
 
@@ -168,11 +247,51 @@ export async function POST(request: NextRequest) {
         healthy: after.healthyForPreview,
         snapshot: after,
         message: after.healthyForPreview ? 'Sandbox preview recovered.' : 'Sandbox still unhealthy after heal.',
+        durationMs: Date.now() - startedAt,
+      });
+
+      const dur = Date.now() - startedAt;
+      global.sandboxHealStatsBySandbox[sandboxKey] = {
+        ...(global.sandboxHealStatsBySandbox[sandboxKey] || {
+          attempts: 1,
+          successes: 0,
+          failures: 0,
+          lastAt: now,
+          lastDurationMs: 0,
+        }),
+        successes: (global.sandboxHealStatsBySandbox[sandboxKey]?.successes || 0) + (after.healthyForPreview ? 1 : 0),
+        failures: (global.sandboxHealStatsBySandbox[sandboxKey]?.failures || 0) + (after.healthyForPreview ? 0 : 1),
+        lastDurationMs: dur,
+        lastError: after.healthyForPreview ? undefined : 'unhealthy_after_heal',
+      };
+
+      console.log('[sandbox-heal] Completed', {
+        sandboxKey,
+        durationMs: dur,
+        healthy: after.healthyForPreview,
+        missingAfter: after.missingPackages,
       });
     } catch (error: any) {
       console.error('[sandbox-heal] Error:', error);
       try {
         await send({ type: 'error', message: error?.message || String(error) });
+      } catch {
+        // ignore
+      }
+      try {
+        if (!global.sandboxHealStatsBySandbox) global.sandboxHealStatsBySandbox = {};
+        global.sandboxHealStatsBySandbox[sandboxKey] = {
+          ...(global.sandboxHealStatsBySandbox[sandboxKey] || {
+            attempts: 1,
+            successes: 0,
+            failures: 0,
+            lastAt: Date.now(),
+            lastDurationMs: 0,
+          }),
+          failures: (global.sandboxHealStatsBySandbox[sandboxKey]?.failures || 0) + 1,
+          lastDurationMs: Date.now() - startedAt,
+          lastError: String(error?.message || error).slice(0, 300),
+        };
       } catch {
         // ignore
       }
