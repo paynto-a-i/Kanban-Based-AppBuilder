@@ -40,6 +40,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H3',location:'app/api/sandbox-health/route.ts:GET:provider-resolve',message:'sandbox-health provider resolved',data:{requestedSandboxId,hasProvider:Boolean(provider),activeSandboxId:String(activeProvider?.getSandboxInfo?.()?.sandboxId||''),providerClass:String(provider?.constructor?.name||''),providerSandboxId:String(provider?.getSandboxInfo?.()?.sandboxId||''),providerId:String(provider?.getSandboxInfo?.()?.provider||'')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (!provider || !provider.getSandboxInfo?.()) {
       return NextResponse.json(
         {
@@ -56,6 +60,10 @@ export async function GET(request: NextRequest) {
     };
 
     const snapshot = await getSandboxHealthSnapshot(provider);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'app/api/sandbox-health/route.ts:GET:snapshot',message:'sandbox-health snapshot',data:{sandboxId:String(snapshot?.sandboxId||''),provider:String(snapshot?.provider||''),viteRunning:snapshot?.viteRunning,missingCount:Array.isArray(snapshot?.missingPackages)?snapshot.missingPackages.length:0,missingTop:Array.isArray(snapshot?.missingPackages)?snapshot.missingPackages.slice(0,5):[],healthyForPreview:Boolean(snapshot?.healthyForPreview),enabled},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     return NextResponse.json({
       success: true,

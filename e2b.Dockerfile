@@ -20,14 +20,14 @@ COPY e2b/template/postcss.config.js /app/postcss.config.js
 COPY e2b/template/index.html /app/index.html
 COPY e2b/template/src /app/src
 
-# Prevent npm EACCES issues at runtime by ensuring /app and npm cache are writable for the non-root user.
-# (E2B command runner is typically non-root; if node_modules is owned by root, later installs can fail.)
+# Prevent npm EACCES issues at runtime by ensuring /app and npm cache are writable for the sandbox runtime user.
+# Note: E2B command runner often executes as uid=1001(user), not the image's default `node` user.
 RUN mkdir -p /tmp/npm-cache \
   && chown -R node:node /app /tmp/npm-cache
 
 ENV NPM_CONFIG_CACHE=/tmp/npm-cache
 
-# Install deps at build-time so sandboxes start fast (as non-root).
+# Install deps at build-time so sandboxes start fast (as non-root), then open permissions for runtime user.
 USER node
-RUN npm install
+RUN npm install && chmod -R a+rwX /app /tmp/npm-cache
 

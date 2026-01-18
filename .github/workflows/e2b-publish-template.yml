@@ -39,6 +39,17 @@ jobs:
             echo "E2B_ACCESS_TOKEN is empty after normalization. Check repo secret E2B_ACCESS_TOKEN." >&2
             exit 1
           fi
+          if [ "${token#e2b_}" != "$token" ]; then
+            echo "E2B_ACCESS_TOKEN looks like a TEAM API key (starts with 'e2b_')." >&2
+            echo "For the E2B CLI in GitHub Actions, you need your ACCOUNT access token (starts with 'sk_e2b_')." >&2
+            echo "Get it from E2B Dashboard -> Account Settings (under the Team selector) -> Access token." >&2
+            exit 1
+          fi
+          if [ "${token#sk_e2b_}" = "$token" ]; then
+            echo "E2B_ACCESS_TOKEN does not start with 'sk_e2b_'. It may be invalid." >&2
+            echo "Get it from E2B Dashboard -> Account Settings (under the Team selector) -> Access token." >&2
+            exit 1
+          fi
           echo "::add-mask::$token"
           echo "E2B_ACCESS_TOKEN=$token" >> "$GITHUB_ENV"
 

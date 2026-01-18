@@ -105,6 +105,11 @@ export async function POST(request: NextRequest) {
 
       const now = Date.now();
       const blockedUntil = global.sandboxHealBlockedUntilBySandbox[sandboxKey] || 0;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H5',location:'app/api/sandbox-heal/route.ts:POST:start',message:'sandbox-heal request',data:{requestedSandboxId,sandboxKey,hintedPkgs:Array.isArray(hintedPkgs)?hintedPkgs.slice(0,10):[],provider:String(info?.provider||''),providerSandboxId:String(info?.sandboxId||''),blockedUntil,now,autoHealEnabled:String(process.env.SANDBOX_AUTO_HEAL||'')==='true',e2bTemplateId:String(process.env.E2B_TEMPLATE_ID||process.env.E2B_TEMPLATE||'')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       if (blockedUntil && now < blockedUntil) {
         const retryAfterMs = blockedUntil - now;
         await send({
@@ -243,7 +248,13 @@ export async function POST(request: NextRequest) {
             global.sandboxHealBlockedUntilBySandbox[sandboxKey] = blockedUntil;
             global.sandboxHealBlockReasonBySandbox[sandboxKey] =
               'Sandbox npm installs are failing due to permissions (EACCES writing to /app/node_modules). ' +
-              'Publish the updated E2B template (fixes /app ownership) and recreate the sandbox.';
+              'This usually means /app/node_modules are not writable by the sandbox runtime user. ' +
+              'Publish the updated E2B template (fixes /app permissions) and recreate the sandbox.';
+
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'app/api/sandbox-heal/route.ts:POST:eacces-block',message:'sandbox-heal install failed with EACCES (blocked)',data:{sandboxKey,missingPackages:pkgs.slice(0,10),installSuccess:Boolean(install.success),stderrSnippet:String(install.stderr||'').slice(0,400),stdoutSnippet:String(install.stdout||'').slice(0,400),blockedUntil},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+
             await send({
               type: 'error',
               code: 'NPM_EACCES',

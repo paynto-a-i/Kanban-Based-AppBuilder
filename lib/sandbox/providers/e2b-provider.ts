@@ -207,12 +207,32 @@ export class E2BProvider extends SandboxProvider {
         `cd ${root} && (test -d node_modules || mkdir -p node_modules) && (test -w node_modules && echo OK || echo NO)`
       );
       const ok = /\bOK\b/.test(String(check.stdout || ''));
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'lib/sandbox/providers/e2b-provider.ts:installPackages:preflight',message:'e2b installPackages node_modules writable preflight',data:{sandboxId:String(this.sandboxInfo?.sandboxId||''),root,pkgs:pkgs.slice(0,10),checkExitCode:Number(check.exitCode??0),checkSuccess:Boolean(check.success),checkStdout:String(check.stdout||'').slice(0,200),checkStderr:String(check.stderr||'').slice(0,200),ok,e2bTemplateId:String(process.env.E2B_TEMPLATE_ID||process.env.E2B_TEMPLATE||'')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
       if (!ok) {
+        try {
+          const diag = await this.runCommand(
+            `id -a 2>/dev/null || true; ` +
+              `echo "PWD=$(pwd)" 2>/dev/null || true; ` +
+              `ls -ld /app /app/node_modules 2>/dev/null || true; ` +
+              `(test -w /app && echo APP_WRITABLE || echo APP_NOT_WRITABLE) 2>/dev/null || true; ` +
+              `(test -w /app/node_modules && echo NODE_MODULES_WRITABLE || echo NODE_MODULES_NOT_WRITABLE) 2>/dev/null || true`
+          );
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'lib/sandbox/providers/e2b-provider.ts:installPackages:preflight-diag',message:'e2b installPackages preflight diagnostics',data:{sandboxId:String(this.sandboxInfo?.sandboxId||''),diagExitCode:Number(diag.exitCode??0),diagStdout:String(diag.stdout||'').slice(0,800),diagStderr:String(diag.stderr||'').slice(0,300)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        } catch {
+          // ignore
+        }
         return {
           stdout: String(check.stdout || ''),
           stderr:
-            'npm EACCES: /app/node_modules is not writable. This usually means your E2B template was built as root. ' +
-            'Publish the updated template (e2b.Dockerfile now fixes permissions) and recreate the sandbox.',
+            'npm EACCES: /app/node_modules is not writable by the sandbox runtime user. ' +
+            'This usually means /app (or node_modules) was created/installed under a different user during template build. ' +
+            'Publish the updated template (e2b.Dockerfile fixes /app permissions) and recreate the sandbox.',
           exitCode: 13,
           success: false,
         };

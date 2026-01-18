@@ -191,7 +191,8 @@ export async function POST(request: NextRequest) {
         const stdout = String(installResult.stdout || '');
         const stderr = String(installResult.stderr || '');
 
-        // If npm fails with EACCES (common when /app/node_modules is root-owned), surface a single clear message
+        // If npm fails with EACCES (common when /app/node_modules is not writable by the sandbox runtime user),
+        // surface a single clear message
         // and avoid spamming the UI with the full npm stack trace.
         const combinedLower = `${stdout}\n${stderr}`.toLowerCase();
         const looksEacces =
@@ -204,8 +205,8 @@ export async function POST(request: NextRequest) {
             code: 'NPM_EACCES',
             message:
               'npm permission error inside the sandbox (EACCES writing to /app/node_modules). ' +
-              'This usually means the E2B template was built with root-owned node_modules. ' +
-              'Publish the updated template and recreate the sandbox.',
+              'This usually means /app/node_modules are not writable by the sandbox runtime user. ' +
+              'Publish the updated template (fixes /app permissions) and recreate the sandbox.',
           });
           return;
         }
