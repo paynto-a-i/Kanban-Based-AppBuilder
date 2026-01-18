@@ -199,6 +199,28 @@ export class E2BProvider extends SandboxProvider {
     const root = this.resolveSandboxRoot();
     const flags = String(process.env.NPM_FLAGS || '').trim();
     const cacheDir = '/tmp/npm-cache';
+
+    // Preflight: fail fast (with a clear message) if node_modules is not writable.
+    // This usually means the template was built with root-owned /app/node_modules.
+    try {
+      const check = await this.runCommand(
+        `cd ${root} && (test -d node_modules || mkdir -p node_modules) && (test -w node_modules && echo OK || echo NO)`
+      );
+      const ok = /\bOK\b/.test(String(check.stdout || ''));
+      if (!ok) {
+        return {
+          stdout: String(check.stdout || ''),
+          stderr:
+            'npm EACCES: /app/node_modules is not writable. This usually means your E2B template was built as root. ' +
+            'Publish the updated template (e2b.Dockerfile now fixes permissions) and recreate the sandbox.',
+          exitCode: 13,
+          success: false,
+        };
+      }
+    } catch {
+      // If we can't check, proceed and let npm report the underlying error.
+    }
+
     // Avoid EACCES by forcing a writable cache + HOME (some sandboxes run commands as non-root).
     const cmd = `mkdir -p ${cacheDir} && HOME=/tmp NPM_CONFIG_CACHE=${cacheDir} npm_config_cache=${cacheDir} npm install ${flags ? `${flags} ` : ''}${pkgs.join(' ')}`.trim();
 

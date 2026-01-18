@@ -1,0 +1,35 @@
+name: E2B publish base template
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "e2b.Dockerfile"
+      - "e2b/template/**"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install E2B CLI
+        run: npm i -g @e2b/cli
+
+      - name: Build and publish template
+        env:
+          E2B_ACCESS_TOKEN: ${{ secrets.E2B_ACCESS_TOKEN }}
+        run: |
+          e2b template build -n paynto-vite -d e2b.Dockerfile
+          e2b template publish -y
+

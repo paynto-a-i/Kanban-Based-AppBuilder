@@ -25,12 +25,17 @@ declare global {
         }
       >
     | undefined;
+  // eslint-disable-next-line no-var
+  var sandboxHealBlockedUntilBySandbox: Record<string, number> | undefined;
+  // eslint-disable-next-line no-var
+  var sandboxHealBlockReasonBySandbox: Record<string, string> | undefined;
 }
 
 const HEAL_COOLDOWN_MS = 7000;
 const HEAL_WINDOW_MS = 2 * 60_000;
 const HEAL_MAX_PER_WINDOW = 6;
 const MAX_PACKAGES_PER_HEAL = 25;
+const HEAL_EACCES_BLOCK_MS = 15 * 60_000;
 
 function jsonSse(data: any): string {
   return `data: ${JSON.stringify(data)}\n\n`;
@@ -95,18 +100,47 @@ export async function POST(request: NextRequest) {
       if (!global.sandboxLastHealAtBySandbox) global.sandboxLastHealAtBySandbox = {};
       if (!global.sandboxHealWindowBySandbox) global.sandboxHealWindowBySandbox = {};
       if (!global.sandboxHealStatsBySandbox) global.sandboxHealStatsBySandbox = {};
+      if (!global.sandboxHealBlockedUntilBySandbox) global.sandboxHealBlockedUntilBySandbox = {};
+      if (!global.sandboxHealBlockReasonBySandbox) global.sandboxHealBlockReasonBySandbox = {};
+
+      const now = Date.now();
+      const blockedUntil = global.sandboxHealBlockedUntilBySandbox[sandboxKey] || 0;
+      if (blockedUntil && now < blockedUntil) {
+        const retryAfterMs = blockedUntil - now;
+        await send({
+          type: 'complete',
+          healthy: false,
+          code: 'AUTO_HEAL_BLOCKED',
+          retryAfterMs,
+          message: global.sandboxHealBlockReasonBySandbox[sandboxKey] || 'Auto-heal is temporarily blocked.',
+        });
+        console.warn('[sandbox-heal] Blocked', { sandboxKey, retryAfterMs });
+        return;
+      }
 
       if (global.sandboxHealInProgressBySandbox[sandboxKey]) {
-        await send({ type: 'info', message: 'Heal already in progress. Waiting for it to complete…' });
+        await send({
+          type: 'complete',
+          healthy: false,
+          code: 'AUTO_HEAL_IN_PROGRESS',
+          retryAfterMs: 2000,
+          message: 'Heal already in progress. Waiting for it to complete…',
+        });
         console.log('[sandbox-heal] Skip (in progress)', { sandboxKey });
         return;
       }
 
-      const now = Date.now();
       const lastAt = global.sandboxLastHealAtBySandbox[sandboxKey] || 0;
       if (lastAt && now - lastAt < HEAL_COOLDOWN_MS) {
-        const remaining = Math.ceil((HEAL_COOLDOWN_MS - (now - lastAt)) / 1000);
-        await send({ type: 'info', message: `Heal cooldown active (${remaining}s).` });
+        const retryAfterMs = HEAL_COOLDOWN_MS - (now - lastAt);
+        const remaining = Math.ceil(retryAfterMs / 1000);
+        await send({
+          type: 'complete',
+          healthy: false,
+          code: 'AUTO_HEAL_COOLDOWN',
+          retryAfterMs,
+          message: `Heal cooldown active (${remaining}s).`,
+        });
         console.log('[sandbox-heal] Skip (cooldown)', { sandboxKey, remainingSeconds: remaining });
         return;
       }
@@ -116,7 +150,10 @@ export async function POST(request: NextRequest) {
       const count = windowStart === windowRec.windowStart ? windowRec.count : 0;
       if (count >= HEAL_MAX_PER_WINDOW) {
         await send({
-          type: 'error',
+          type: 'complete',
+          healthy: false,
+          code: 'AUTO_HEAL_RATE_LIMITED',
+          retryAfterMs: Math.max(5_000, HEAL_WINDOW_MS - (now - windowStart)),
           message: 'Auto-heal is rate-limited for this sandbox (too many attempts). Consider recreating the sandbox.',
         });
         console.warn('[sandbox-heal] Rate-limited', { sandboxKey, windowStart, count });
@@ -195,7 +232,26 @@ export async function POST(request: NextRequest) {
           await send({ type: 'install-output', message: install.stdout.slice(0, 2000) });
         }
         if (!install.success) {
-          await send({ type: 'error', message: install.stderr || 'Package installation failed.' });
+          const combined = `${String(install.stderr || '')}\n${String(install.stdout || '')}`.toLowerCase();
+          const looksEacces =
+            combined.includes('eacces') ||
+            combined.includes('permission denied') ||
+            combined.includes('errno -13');
+
+          if (looksEacces) {
+            const blockedUntil = Date.now() + HEAL_EACCES_BLOCK_MS;
+            global.sandboxHealBlockedUntilBySandbox[sandboxKey] = blockedUntil;
+            global.sandboxHealBlockReasonBySandbox[sandboxKey] =
+              'Sandbox npm installs are failing due to permissions (EACCES writing to /app/node_modules). ' +
+              'Publish the updated E2B template (fixes /app ownership) and recreate the sandbox.';
+            await send({
+              type: 'error',
+              code: 'NPM_EACCES',
+              message: global.sandboxHealBlockReasonBySandbox[sandboxKey],
+            });
+          } else {
+            await send({ type: 'error', message: install.stderr || 'Package installation failed.' });
+          }
           const afterFail = await getSandboxHealthSnapshot(provider);
           const dur = Date.now() - startedAt;
           await send({ type: 'complete', healthy: false, snapshot: afterFail, durationMs: dur });
@@ -209,7 +265,7 @@ export async function POST(request: NextRequest) {
             }),
             failures: (global.sandboxHealStatsBySandbox[sandboxKey]?.failures || 0) + 1,
             lastDurationMs: dur,
-            lastError: String(install.stderr || 'install_failed').slice(0, 300),
+            lastError: looksEacces ? 'npm_eacces' : String(install.stderr || 'install_failed').slice(0, 300),
           };
           console.warn('[sandbox-heal] Install failed', {
             sandboxKey,
