@@ -84,11 +84,43 @@ export async function tailViteLog(provider: SandboxProvider, lines: number = 200
 }
 
 export async function checkViteRunning(provider: SandboxProvider): Promise<boolean | null> {
+  // Prefer an actual HTTP probe on 127.0.0.1:5173. This is more reliable than pgrep/ps
+  // because some sandbox images may not include procps.
+  const nodeProbe =
+    `node -e "const http=require('http');` +
+    `const req=http.get('http://127.0.0.1:5173/',res=>{res.resume();});` +
+    `req.on('response',()=>process.exit(0));` +
+    `req.on('error',()=>process.exit(1));` +
+    `req.setTimeout(1000,()=>{try{req.destroy();}catch{};process.exit(1)});" ` +
+    `>/dev/null 2>&1 && echo OK || echo NO`;
+
   try {
-    const res = await provider.runCommand('pgrep -f vite || true');
+    const res = await provider.runCommand(nodeProbe);
     const out = String(res.stdout || '').trim();
-    if (!out) return false;
-    return true;
+    if (/\bOK\b/.test(out)) return true;
+    if (/\bNO\b/.test(out)) return false;
+  } catch {
+    // ignore and try fallbacks
+  }
+
+  // Fallback: curl probe (present in our E2B template; may exist elsewhere too).
+  try {
+    const res = await provider.runCommand(
+      'curl -sSf --max-time 1 http://127.0.0.1:5173/ >/dev/null 2>&1 && echo OK || echo NO'
+    );
+    const out = String(res.stdout || '').trim();
+    if (/\bOK\b/.test(out)) return true;
+    if (/\bNO\b/.test(out)) return false;
+  } catch {
+    // ignore
+  }
+
+  // Last resort: process grep (best-effort; may not exist).
+  try {
+    const res = await provider.runCommand(`ps aux 2>/dev/null | grep -i '[v]ite' | head -n 1 || true`);
+    const out = String(res.stdout || '').trim();
+    if (out) return true;
+    return false;
   } catch {
     return null;
   }
