@@ -526,12 +526,6 @@ function AISandboxPage() {
       if (isPreviewRefreshing) return;
 
       try {
-        // Optimistically show a short “Checking…” overlay; this prevents users from ever seeing Vite’s raw overlay.
-        setPreviewGuardOverlay(prev => {
-          if (prev.visible) return prev;
-          return { visible: true, phase: 'checking', message: 'Checking preview…', packages: [] };
-        });
-
         const res = await fetch(`/api/sandbox-health?sandboxId=${encodeURIComponent(sid)}`, { cache: 'no-store' });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data?.success) return;
@@ -543,24 +537,27 @@ function AISandboxPage() {
         const healthy = Boolean(data?.healthy);
         const missingPkgs = Array.isArray(data?.snapshot?.missingPackages) ? data.snapshot.missingPackages : [];
 
-        // If we aren't configured to hide Vite overlays, don't keep our overlay up unless we're actively healing.
-        if (!enabledHide && !previewHealInFlightRef.current) {
+        // IMPORTANT:
+        // Don't flash the overlay during normal polling (it causes visible flicker).
+        // Only show it when we are actively healing, or when we are configured to hide Vite overlays
+        // AND the preview is unhealthy (or about to be healed).
+        const shouldShowOverlay =
+          previewHealInFlightRef.current || (!healthy && (enabledHide || enabledHeal));
+
+        if (!shouldShowOverlay) {
           setPreviewGuardOverlay(prev => (prev.visible ? { ...prev, visible: false } : prev));
         } else {
-          // Hide overlay when healthy and not healing.
-          if (healthy && !previewHealInFlightRef.current) {
-            setPreviewGuardOverlay(prev => (prev.visible ? { ...prev, visible: false } : prev));
-          } else {
-            setPreviewGuardOverlay(prev => ({
-              visible: true,
-              phase: previewHealInFlightRef.current ? 'healing' : 'checking',
-              message:
-                missingPkgs.length > 0
-                  ? `Missing dependencies detected (${missingPkgs.length})…`
-                  : (prev.message || 'Fixing preview…'),
-              packages: missingPkgs.length > 0 ? missingPkgs : prev.packages,
-            }));
-          }
+          setPreviewGuardOverlay(prev => ({
+            visible: true,
+            phase: previewHealInFlightRef.current ? 'healing' : enabledHeal ? 'checking' : 'blocked',
+            message:
+              missingPkgs.length > 0
+                ? `Missing dependencies detected (${missingPkgs.length})…`
+                : enabledHeal
+                  ? 'Preparing preview…'
+                  : 'Preview auto-heal is disabled.',
+            packages: missingPkgs.length > 0 ? missingPkgs : prev.packages,
+          }));
         }
 
         if (!healthy && enabledHeal) {
@@ -4498,7 +4495,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               !sandboxExpired &&
               !isPreviewRefreshing &&
               !(codeApplicationState.stage && codeApplicationState.stage !== 'complete') && (
-                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-25">
+                <div className="absolute inset-0 bg-white/95 backdrop-blur-sm flex items-center justify-center z-20">
                   <div className="text-center max-w-md px-6">
                     <div className="w-10 h-10 mx-auto mb-3 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm font-medium text-gray-800">
