@@ -1,11 +1,11 @@
-# Open Lovable - Start All Services (cross-platform)
+# Paynto AI - Start All Services (cross-platform)
 # Usage:
 #   Windows (PowerShell): .\start-all-services.ps1
 #   macOS/Linux (PowerShell 7+): pwsh ./start-all-services.ps1
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Open Lovable - Starting Services" -ForegroundColor Cyan
+Write-Host "  Paynto AI - Starting Services" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -46,7 +46,7 @@ if ($IsWindows) {
     $psExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
 
     Start-Process $psExe -ArgumentList "-NoExit", "-Command", @"
-`$Host.UI.RawUI.WindowTitle = 'Open Lovable - Dev Server'
+`$Host.UI.RawUI.WindowTitle = 'Paynto AI - Dev Server'
 Set-Location '$scriptPath'
 Write-Host 'Starting Next.js dev server with Turbopack on port $port...' -ForegroundColor Green
 Write-Host 'Press Ctrl+C to stop the server' -ForegroundColor DarkGray

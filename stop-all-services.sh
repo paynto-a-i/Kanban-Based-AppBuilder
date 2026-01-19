@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Open Lovable - Stop All Services (macOS/Linux shell)
+# Paynto AI - Stop All Services (macOS/Linux shell)
 # Usage: ./stop-all-services.sh
 
 set -e
@@ -8,7 +8,7 @@ PORT=3002
 
 echo ""
 echo "========================================"
-echo "  Open Lovable - Stopping Services"
+echo "  Paynto AI - Stopping Services"
 echo "========================================"
 echo ""
 

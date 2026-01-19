@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Open Lovable - Start All Services (macOS/Linux shell)
+# Paynto AI - Start All Services (macOS/Linux shell)
 # Usage: ./start-all-services.sh
 
 set -e
@@ -10,7 +10,7 @@ DEV_CMD="npx next dev --turbopack --port ${PORT}"
 
 echo ""
 echo "========================================"
-echo "  Open Lovable - Starting Services"
+echo "  Paynto AI - Starting Services"
 echo "========================================"
 echo ""
 

@@ -339,6 +339,11 @@ function AISandboxPage() {
     lastAttemptAt: number;
     attemptsBySig: Record<string, number>;
   }>({ inFlight: false, lastAttemptAt: 0, attemptsBySig: {} });
+  const previewViteOverlayAutoFixRef = useRef<{
+    inFlight: boolean;
+    lastAttemptAt: number;
+    attemptsBySig: Record<string, number>;
+  }>({ inFlight: false, lastAttemptAt: 0, attemptsBySig: {} });
 
   // Listen for sandbox client-side errors (blank white page often = runtime crash with overlays disabled).
   useEffect(() => {
@@ -394,12 +399,91 @@ function AISandboxPage() {
             }));
             void previewHealFnRef.current?.([pkg]);
           } else if (msg) {
-            setPreviewGuardOverlay(prev => ({
-              visible: true,
-              phase: 'blocked',
-              message: `Preview error: ${msg}`,
-              packages: prev.packages,
-            }));
+            const exportMismatch = msg.match(/does not provide an export named ['"]([^'"]+)['"]/i);
+            const missingExportName = exportMismatch?.[1] ? String(exportMismatch[1]).trim() : '';
+
+            const quotedPath =
+              msg.match(/['"]([^'"]*\/src\/[^'"]+\.(?:jsx|tsx|js|ts))['"]/)?.[1] ||
+              msg.match(/['"]([^'"]*src\/[^'"]+\.(?:jsx|tsx|js|ts))['"]/)?.[1] ||
+              '';
+            const barePath =
+              msg.match(/\/src\/[^\s'"]+\.(?:jsx|tsx|js|ts)/)?.[0] ||
+              msg.match(/\bsrc\/[^\s'"]+\.(?:jsx|tsx|js|ts)/)?.[0] ||
+              '';
+            const rawPath = String(quotedPath || barePath || '').trim();
+            const modulePath = rawPath ? (rawPath.startsWith('/') ? rawPath.slice(1) : rawPath) : '';
+
+            const maybeFixExportMismatch = async () => {
+              const state = previewViteOverlayAutoFixRef.current;
+              const now = Date.now();
+              if (state.inFlight) return;
+              if (now - state.lastAttemptAt < 5000) return; // avoid thrashing
+
+              const sig = `vite-overlay-export:${missingExportName}:${modulePath}`.slice(0, 240);
+              const attempts = state.attemptsBySig[sig] || 0;
+              if (attempts >= 2) return; // hard cap per signature
+
+              state.inFlight = true;
+              state.lastAttemptAt = now;
+              state.attemptsBySig[sig] = attempts + 1;
+
+              setPreviewGuardOverlay(prev => ({
+                visible: true,
+                phase: 'healing',
+                message: 'Fixing export mismatch…',
+                packages: prev.packages,
+              }));
+
+              try {
+                const detRes = await fetch('/api/sandbox-fix-exports', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ sandboxId: sid, modulePath, missingExportName }),
+                });
+                const detJson = await detRes.json().catch(() => null);
+
+                if (!detRes.ok || !detJson?.success || !detJson?.applied) {
+                  const reason = String(detJson?.error || detJson?.reason || `HTTP ${detRes.status}`).trim();
+                  throw new Error(reason || 'Export fix failed');
+                }
+
+                setPreviewGuardOverlay(prev => ({
+                  visible: true,
+                  phase: 'checking',
+                  message: 'Applied export fix. Refreshing preview…',
+                  packages: prev.packages,
+                }));
+
+                if (iframeRef.current && sandboxData?.url) {
+                  const t = Date.now();
+                  if (t - lastPreviewReloadAtRef.current > 1500) {
+                    lastPreviewReloadAtRef.current = t;
+                    iframeRef.current.src = `${sandboxData.url}?t=${t}&exportfix=true`;
+                  }
+                }
+              } catch (e: any) {
+                const errMsg = String(e?.message || 'Export fix failed').trim();
+                setPreviewGuardOverlay(prev => ({
+                  visible: true,
+                  phase: 'blocked',
+                  message: `Preview error: ${msg}\n\nExport auto-fix failed: ${errMsg}`,
+                  packages: prev.packages,
+                }));
+              } finally {
+                previewViteOverlayAutoFixRef.current.inFlight = false;
+              }
+            };
+
+            if (missingExportName && modulePath) {
+              void maybeFixExportMismatch();
+            } else {
+              setPreviewGuardOverlay(prev => ({
+                visible: true,
+                phase: 'blocked',
+                message: `Preview error: ${msg}`,
+                packages: prev.packages,
+              }));
+            }
           }
           return;
         }
@@ -520,7 +604,12 @@ function AISandboxPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  error: { type: errorType, message: msg, file },
+                  error: {
+                    type: errorType,
+                    message: msg,
+                    file,
+                    stack: typeof payload?.stack === 'string' ? String(payload.stack).slice(0, 2000) : undefined,
+                  },
                   sandboxId: sid,
                   attemptNumber: attempts + 1,
                 }),
@@ -2862,22 +2951,84 @@ Requirements:
     }
 
     // Deterministic scaffold step (guarantees routes/nav/data are present before AI edits)
-    if (blueprintBuildsEnabled && planBlueprint) {
+    // NOTE: Some older plans in localStorage may not have a blueprint. In that case, the sandbox can
+    // remain on the default E2B template (showing "E2B Sandbox Ready") until a ticket touches App.jsx.
+    // To keep early-preview useful, we detect the template app and scaffold a minimal shell.
+    if (blueprintBuildsEnabled) {
       try {
         const alreadyScaffoldedForSandbox =
           Boolean((kanban.plan as any)?.scaffolded) &&
           Boolean((kanban.plan as any)?.scaffoldedSandboxId) &&
           (kanban.plan as any)?.scaffoldedSandboxId === activeSandbox.sandboxId;
 
-        if (!alreadyScaffoldedForSandbox) {
-          addChatMessage('Scaffolding project from blueprint...', 'system');
+        const detectE2BTemplateApp = async (): Promise<boolean> => {
+          // Only bother checking for Vite template content (it's the common "E2B Sandbox Ready" case).
+          if (effectiveTemplate !== 'vite') return false;
+          const sid = String(activeSandbox?.sandboxId || '').trim();
+          if (!sid) return false;
+
+          try {
+            const cmdRes = await fetch('/api/run-command', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sandboxId: sid,
+                command: 'sh -c "cat src/App.jsx 2>/dev/null || cat App.jsx 2>/dev/null || true"',
+              }),
+            });
+            const cmdData = await cmdRes.json().catch(() => ({}));
+            const out = String(cmdData?.output || '').toLowerCase();
+            // E2B template signature strings
+            return out.includes('e2b sandbox ready') || out.includes('start building your react app with vite');
+          } catch {
+            return false;
+          }
+        };
+
+        const minimalBlueprint = {
+          templateTarget: effectiveTemplate,
+          dataMode: (kanban.plan as any)?.dataMode || 'real_optional',
+          theme: { preset: 'modern_light', accent: 'indigo' },
+          routes: [
+            {
+              id: 'home',
+              kind: 'page',
+              path: '/',
+              title: 'Home',
+              navLabel: 'Home',
+            },
+          ],
+          navigation: { items: [{ label: 'Home', routeId: 'home' }] },
+          entities: [],
+          flows: [],
+        };
+
+        const looksLikeTemplate = await detectE2BTemplateApp();
+
+        // Choose scaffold blueprint:
+        // - Prefer the plan's blueprint if present
+        // - Otherwise, only scaffold the minimal shell if the sandbox still looks like the template app
+        const blueprintForScaffold = planBlueprint || (looksLikeTemplate ? minimalBlueprint : null);
+
+        // If the plan says "scaffolded" but the sandbox is clearly the template app, force re-scaffold.
+        const shouldForceRescaffold = Boolean(alreadyScaffoldedForSandbox && looksLikeTemplate && blueprintForScaffold);
+        const shouldScaffold = Boolean(blueprintForScaffold && (!alreadyScaffoldedForSandbox || shouldForceRescaffold));
+
+        if (shouldScaffold) {
+          addChatMessage(
+            planBlueprint
+              ? 'Scaffolding project from blueprint...'
+              : 'No blueprint found; scaffolding a minimal app shell for early preview...',
+            'system'
+          );
+
           const scaffoldRes = await fetch('/api/scaffold-project', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               sandboxId: activeSandbox.sandboxId,
               template: effectiveTemplate,
-              blueprint: planBlueprint,
+              blueprint: blueprintForScaffold,
               uiStyle: (kanban.plan as any)?.uiStyle,
             }),
           });
@@ -2887,13 +3038,41 @@ Requirements:
           }
           addChatMessage(`Scaffolded ${scaffoldData.filesWritten?.length || 0} file(s)`, 'system');
 
+          // Persist scaffold status (and the generated minimal blueprint, if we had to synthesize it).
           if (kanban.plan) {
-            kanban.setPlan({
+            const nextPlan: any = {
               ...kanban.plan,
               scaffolded: true,
               scaffoldedSandboxId: activeSandbox.sandboxId,
-            } as any);
+            };
+            if (!planBlueprint && blueprintForScaffold) {
+              nextPlan.blueprint = blueprintForScaffold;
+              nextPlan.templateTarget = effectiveTemplate;
+              nextPlan.dataMode = (blueprintForScaffold as any)?.dataMode || nextPlan.dataMode;
+            }
+            kanban.setPlan(nextPlan);
           }
+
+          // Best-effort: refresh preview so users don't stay on the template screen.
+          try {
+            const url = String((activeSandbox as any)?.url || (sandboxData as any)?.url || '').trim();
+            if (url && iframeRef.current && (activeTab === 'preview' || activeTab === 'split')) {
+              setIsPreviewRefreshing(true);
+              iframeRef.current.src = `${url}?t=${Date.now()}&scaffolded=true`;
+              setTimeout(() => setIsPreviewRefreshing(false), 1200);
+            } else {
+              setPreviewHasUpdate(true);
+            }
+          } catch {
+            setPreviewHasUpdate(true);
+          }
+        } else if (planBlueprint) {
+          // Plan has a blueprint but we already scaffolded this sandbox.
+        } else if (!looksLikeTemplate) {
+          // Avoid overwriting an existing project when we don't have a blueprint (e.g. imported repo).
+          addChatMessage('No blueprint found; skipping scaffold step to avoid overwriting the current project.', 'system');
+        } else {
+          addChatMessage('No blueprint found; skipping scaffold step.', 'system');
         }
       } catch (e: any) {
         setKanbanBuildActive(false);

@@ -134,7 +134,7 @@ async function copyMainProject(mainProjectPath, projectPath) {
 }
 
 async function createEnvFile(projectPath, answers) {
-  let envContent = '# Open Lovable Configuration\n\n';
+  let envContent = '# Paynto AI Configuration\n\n';
   
   // Required keys
   envContent += `# REQUIRED - Web scraping for cloning websites\n`;
@@ -182,7 +182,7 @@ async function createEnvFile(projectPath, answers) {
 }
 
 async function createEnvExample(projectPath) {
-  let envContent = '# Open Lovable Configuration\n\n';
+  let envContent = '# Paynto AI Configuration\n\n';
   
   envContent += `# REQUIRED - Web scraping for cloning websites\n`;
   envContent += `# Get yours at https://firecrawl.dev\n`;

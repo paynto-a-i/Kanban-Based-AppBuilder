@@ -1,11 +1,11 @@
-# Open Lovable - Stop All Services (cross-platform)
+# Paynto AI - Stop All Services (cross-platform)
 # Usage:
 #   Windows (PowerShell): .\stop-all-services.ps1
 #   macOS/Linux (PowerShell 7+): pwsh ./stop-all-services.ps1
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Open Lovable - Stopping Services" -ForegroundColor Cyan
+Write-Host "  Paynto AI - Stopping Services" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 

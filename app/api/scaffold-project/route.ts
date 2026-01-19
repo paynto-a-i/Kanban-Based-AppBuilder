@@ -523,7 +523,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `  ...props\n` +
           `}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }) {\n` +
           `  return <button className={buttonClasses({ variant, size, className })} {...props} />;\n` +
-          `}\n`,
+          `}\n\nexport default Button;\n`,
       },
       {
         filePath: 'components/ui/Card.tsx',
@@ -543,7 +543,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `      <div className=\"p-4\">{children}</div>\n` +
           `    </section>\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default Card;\n`,
       },
       {
         filePath: 'components/ui/Input.tsx',
@@ -561,7 +561,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `      {...props}\n` +
           `    />\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default Input;\n`,
       },
       {
         filePath: 'components/ui/Badge.tsx',
@@ -579,7 +579,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `      {...props}\n` +
           `    />\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default Badge;\n`,
       },
       {
         filePath: 'components/ui/Skeleton.tsx',
@@ -589,7 +589,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {\n` +
           `  return <div className={cn('animate-pulse rounded-md ${skeletonBgClass}', className)} {...props} />;\n` +
-          `}\n`,
+          `}\n\nexport default Skeleton;\n`,
       },
       {
         filePath: 'components/ui/EmptyState.tsx',
@@ -630,7 +630,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `      </div>\n` +
           `    </div>\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default EmptyState;\n`,
       },
       {
         filePath: 'components/ui/DataTable.tsx',
@@ -704,7 +704,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `      </table>\n` +
           `    </div>\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default DataTable;\n`,
       },
       {
         filePath: 'components/ui/Tabs.tsx',
@@ -781,7 +781,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `  if (!ctx) throw new Error('TabsContent must be used within Tabs');\n` +
           `  if (ctx.value !== value) return null;\n` +
           `  return <div className={cn('mt-4', className)}>{children}</div>;\n` +
-          `}\n`,
+          `}\n\nexport default Tabs;\n`,
       },
       {
         filePath: 'components/ui/Modal.tsx',
@@ -854,7 +854,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `    </div>,\n` +
           `    document.body\n` +
           `  );\n` +
-          `}\n`,
+          `}\n\nexport default Modal;\n`,
       },
     ];
   }
@@ -899,7 +899,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `}\n\n` +
         `export function Button({ variant = 'primary', size = 'md', className, ...props }) {\n` +
         `  return <button className={buttonClasses({ variant, size, className })} {...props} />;\n` +
-        `}\n`,
+        `}\n\nexport default Button;\n`,
     },
     {
       filePath: 'src/components/ui/Card.jsx',
@@ -917,7 +917,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `      <div className=\"p-4\">{children}</div>\n` +
         `    </section>\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default Card;\n`,
     },
     {
       filePath: 'src/components/ui/Input.jsx',
@@ -933,7 +933,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `      {...props}\n` +
         `    />\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default Input;\n`,
     },
     {
       filePath: 'src/components/ui/Badge.jsx',
@@ -949,7 +949,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `      {...props}\n` +
         `    />\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default Badge;\n`,
     },
     {
       filePath: 'src/components/ui/Skeleton.jsx',
@@ -957,7 +957,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `import { cn } from '../../lib/cn.js';\n\n` +
         `export function Skeleton({ className, ...props }) {\n` +
         `  return <div className={cn('animate-pulse rounded-md ${skeletonBgClass}', className)} {...props} />;\n` +
-        `}\n`,
+        `}\n\nexport default Skeleton;\n`,
     },
     {
       filePath: 'src/components/ui/EmptyState.jsx',
@@ -984,7 +984,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `      </div>\n` +
         `    </div>\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default EmptyState;\n`,
     },
     {
       filePath: 'src/components/ui/DataTable.jsx',
@@ -1036,7 +1036,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `      </table>\n` +
         `    </div>\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default DataTable;\n`,
     },
     {
       filePath: 'src/components/ui/Tabs.jsx',
@@ -1096,7 +1096,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `  if (!ctx) throw new Error('TabsContent must be used within Tabs');\n` +
         `  if (ctx.value !== value) return null;\n` +
         `  return <div className={cn('mt-4', className)}>{children}</div>;\n` +
-        `}\n`,
+        `}\n\nexport default Tabs;\n`,
     },
     {
       filePath: 'src/components/ui/Modal.jsx',
@@ -1141,7 +1141,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `    </div>,\n` +
         `    document.body\n` +
         `  );\n` +
-        `}\n`,
+        `}\n\nexport default Modal;\n`,
     },
   ];
 }

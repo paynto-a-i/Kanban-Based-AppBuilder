@@ -614,13 +614,13 @@ GitHub Actions secrets required:
 
 ## Phase 6: Competitive Metrics & Benchmarks
 
-### 6.1 Speed Metrics (vs Lovable, Bolt, v0)
+### 6.1 Speed Metrics (benchmarks)
 | Metric | Target | How to Measure | Competitor Baseline |
 |--------|--------|----------------|---------------------|
-| Time to First Preview | < 30 seconds | From prompt submit to live preview | Lovable: ~45s, Bolt: ~60s |
-| Full App Generation | < 5 minutes | Simple CRUD app (5-10 components) | Lovable: ~8min, Bolt: ~10min |
+| Time to First Preview | < 30 seconds | From prompt submit to live preview | Peers: ~45-60s |
+| Full App Generation | < 5 minutes | Simple CRUD app (5-10 components) | Peers: ~8-10min |
 | Error Recovery Time | < 10 seconds | From error detection to auto-fix | Manual: 2-5min |
-| Iteration Speed | < 15 seconds | Edit request to updated preview | Lovable: ~20s |
+| Iteration Speed | < 15 seconds | Edit request to updated preview | Peers: ~20s |
 | Cold Start | < 3 seconds | Initial page load to interactive | Industry: 3-5s |
 
 ### 6.2 Quality Metrics
@@ -634,23 +634,23 @@ GitHub Actions secrets required:
 | Test Coverage | > 70% | Auto-generated tests passing | Maintainability |
 
 ### 6.3 Capability Metrics (Feature Parity+)
-| Capability | Paynto | Lovable | Bolt | v0 |
-|------------|--------|---------|------|-----|
-| Frontend Generation | ✅ | ✅ | ✅ | ✅ |
-| API Route Generation | 🎯 | ✅ | 🟡 | ❌ |
-| Database Integration | 🎯 | ✅ | ❌ | ❌ |
-| Authentication | 🎯 | ✅ | ❌ | ❌ |
-| GitHub Import | ✅ | ❌ | ❌ | ❌ |
-| Website Cloning | ✅ | ❌ | ❌ | ❌ |
-| Visual Kanban Workflow | ✅ | ❌ | ❌ | ❌ |
-| Human-in-the-Loop Control | ✅ | 🟡 | ❌ | ❌ |
-| Auto Error Correction | ✅ | 🟡 | ❌ | ❌ |
-| Code Review (Bugbot) | ✅ | ❌ | ❌ | ❌ |
-| Version History/Rollback | ✅ | ✅ | 🟡 | ❌ |
-| One-Click Deploy | ✅ | ✅ | ✅ | ❌ |
-| Real-time Collaboration | 🎯 | ❌ | ❌ | ❌ |
-| Multi-file Editing | ✅ | ✅ | ✅ | 🟡 |
-| Design System Enforcement | 🎯 | ❌ | ❌ | ❌ |
+| Capability | Paynto | Bolt | v0 |
+|------------|--------|------|-----|
+| Frontend Generation | ✅ | ✅ | ✅ |
+| API Route Generation | 🎯 | 🟡 | ❌ |
+| Database Integration | 🎯 | ❌ | ❌ |
+| Authentication | 🎯 | ❌ | ❌ |
+| GitHub Import | ✅ | ❌ | ❌ |
+| Website Cloning | ✅ | ❌ | ❌ |
+| Visual Kanban Workflow | ✅ | ❌ | ❌ |
+| Human-in-the-Loop Control | ✅ | ❌ | ❌ |
+| Auto Error Correction | ✅ | ❌ | ❌ |
+| Code Review (Bugbot) | ✅ | ❌ | ❌ |
+| Version History/Rollback | ✅ | 🟡 | ❌ |
+| One-Click Deploy | ✅ | ✅ | ❌ |
+| Real-time Collaboration | 🎯 | ❌ | ❌ |
+| Multi-file Editing | ✅ | ✅ | 🟡 |
+| Design System Enforcement | 🎯 | ❌ | ❌ |
 
 **Legend**: ✅ = Has, 🎯 = Planned, 🟡 = Partial, ❌ = Missing
 

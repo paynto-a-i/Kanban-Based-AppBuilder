@@ -1,17 +1,17 @@
 {
-  "name": "create-open-lovable",
+  "name": "create-paynto-ai",
   "version": "1.0.0",
-  "description": "CLI to bootstrap Open Lovable with your choice of sandbox provider",
+  "description": "CLI to bootstrap Paynto AI with your choice of sandbox provider",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "create-open-lovable": "./index.js"
+    "create-paynto-ai": "./index.js"
   },
   "scripts": {
     "test": "node index.js --dry-run"
   },
   "keywords": [
-    "lovable",
+    "paynto",
     "sandbox",
     "e2b",
     "vercel",

@@ -1197,6 +1197,33 @@ import { everything } from 'massive-lib';
 // ✅ Import only what you need
 import debounce from 'lodash/debounce';
 import { Menu, X } from 'lucide-react';
+
+
+/* EXPORT/IMPORT COMPATIBILITY (SANDBOX UI KIT) */
+
+// In this system, scaffolded UI-kit components live at:
+// - Vite: src/components/ui/*
+// - Next: components/ui/*
+//
+// ✅ If you CREATE/EDIT a UI-kit component, export BOTH named + default for the primary component.
+// This prevents early-preview crashes when other files use default imports.
+//
+// Example:
+// export function Card(props) { ... }
+// export default Card;
+//
+// ✅ When importing UI-kit components, prefer named imports when available:
+// import { Card } from '@/components/ui/Card';
+// import { Card } from '../components/ui/Card.jsx';
+
+
+/* RENDERING SAFETY */
+
+// ❌ Never render plain objects as React children
+// <div>{user}</div>  // user is { id, name }
+// ✅ Render a stable field or a string
+// <div>{user.name}</div>
+// <div>{String(user.name ?? '')}</div>
 \`\`\``;
 
 // ============================================================================

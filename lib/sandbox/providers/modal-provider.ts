@@ -21,7 +21,8 @@ export class ModalProvider extends SandboxProvider {
 
       this.existingFiles.clear();
 
-      this.modalApp = await this.modal.apps.fromName('open-lovable-sandbox', {
+      const modalAppName = process.env.MODAL_APP_NAME || 'paynto-ai-sandbox';
+      this.modalApp = await this.modal.apps.fromName(modalAppName, {
         createIfMissing: true,
       });
 
