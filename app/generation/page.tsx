@@ -333,6 +333,11 @@ function AISandboxPage() {
   const previewGuardPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPreviewReloadAtRef = useRef(0);
   const previewGuardInjectOnceRef = useRef<Record<string, boolean>>({});
+  const previewClientAutoFixRef = useRef<{
+    inFlight: boolean;
+    lastAttemptAt: number;
+    attemptsBySig: Record<string, number>;
+  }>({ inFlight: false, lastAttemptAt: 0, attemptsBySig: {} });
 
   // Listen for sandbox client-side errors (blank white page often = runtime crash with overlays disabled).
   useEffect(() => {
@@ -363,12 +368,141 @@ function AISandboxPage() {
 
         if (type === 'PAYNTO_SANDBOX_CLIENT_ERROR' || type === 'PAYNTO_SANDBOX_CLIENT_REJECTION') {
           const msg = String(payload?.message || 'Sandbox app crashed').trim();
+          const signature = msg.slice(0, 220);
+
+          const maybeAutoFix = async () => {
+            const state = previewClientAutoFixRef.current;
+            const now = Date.now();
+            if (state.inFlight) return;
+            if (now - state.lastAttemptAt < 5000) return; // avoid thrashing on repeated errors
+
+            const attempts = state.attemptsBySig[signature] || 0;
+            if (attempts >= 2) return; // hard cap per unique error signature
+
+            state.inFlight = true;
+            state.lastAttemptAt = now;
+            state.attemptsBySig[signature] = attempts + 1;
+
+            const lower = msg.toLowerCase();
+            const errorType =
+              lower.includes('failed to resolve import') ||
+              lower.includes('requested module') ||
+              lower.includes('does not provide an export named') ||
+              (lower.includes('export') && lower.includes('import'))
+                ? 'import'
+                : lower.includes('syntaxerror') || lower.includes('unexpected token') || lower.includes('unterminated')
+                  ? 'syntax'
+                  : lower.includes('referenceerror') || lower.includes('typeerror')
+                    ? 'runtime'
+                    : 'unknown';
+
+            const quotedPath =
+              msg.match(/['"]([^'"]*\/src\/[^'"]+\.(?:jsx|tsx|js|ts))['"]/)?.[1] ||
+              msg.match(/['"]([^'"]*src\/[^'"]+\.(?:jsx|tsx|js|ts))['"]/)?.[1] ||
+              '';
+            const barePath =
+              msg.match(/\/src\/[^\s'"]+\.(?:jsx|tsx|js|ts)/)?.[0] ||
+              msg.match(/\bsrc\/[^\s'"]+\.(?:jsx|tsx|js|ts)/)?.[0] ||
+              '';
+            const rawPath = String(quotedPath || barePath || '').trim();
+            const file =
+              rawPath ? (rawPath.startsWith('/') ? rawPath.slice(1) : rawPath) : undefined;
+
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H12',location:'app/generation/page.tsx:client-auto-fix:start',message:'triggering client error auto-fix',data:{sandboxId:sid,signature:signature.slice(0,80),attempt:attempts+1,errorType,file:typeof file==='string'?file.slice(0,160):''},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+
+            setPreviewGuardOverlay(prev => ({
+              visible: true,
+              phase: 'healing',
+              message: 'Auto-fixing preview error…',
+              packages: prev.packages,
+            }));
+
+            try {
+              const fixRes = await fetch('/api/auto-fix-error', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  error: { type: errorType, message: msg, file },
+                  sandboxId: sid,
+                  attemptNumber: attempts + 1,
+                }),
+              });
+              const fixJson = await fixRes.json().catch(() => null);
+              if (!fixRes.ok || !fixJson?.success || !fixJson?.fix?.path || !fixJson?.fix?.content) {
+                const errMsg = String(fixJson?.error || `Auto-fix failed (HTTP ${fixRes.status})`).trim();
+                throw new Error(errMsg || 'Auto-fix failed');
+              }
+
+              const fixPath = String(fixJson.fix.path || '').trim();
+              const fixContent = String(fixJson.fix.content || '');
+
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H12',location:'app/generation/page.tsx:client-auto-fix:got-fix',message:'auto-fix generated',data:{sandboxId:sid,path:fixPath.slice(0,200),contentLength:Number(fixContent.length)},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+
+              const applyRes = await fetch('/api/apply-ai-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  response: `<file path="${fixPath}">\n${fixContent}\n</file>`,
+                  isEdit: true,
+                  sandboxId: sid,
+                }),
+              });
+              const applyJson = await applyRes.json().catch(() => null);
+              if (!applyRes.ok || !applyJson?.success) {
+                const errMsg = String(applyJson?.error || `Failed to apply fix (HTTP ${applyRes.status})`).trim();
+                throw new Error(errMsg || 'Failed to apply fix');
+              }
+
+              // Restart Vite so the preview refreshes immediately.
+              await fetch('/api/restart-vite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sandboxId: sid }),
+              }).catch(() => {});
+
+              setPreviewGuardOverlay(prev => ({
+                visible: true,
+                phase: 'checking',
+                message: 'Fix applied. Refreshing preview…',
+                packages: prev.packages,
+              }));
+
+              if (iframeRef.current && sandboxData?.url) {
+                const t = Date.now();
+                if (t - lastPreviewReloadAtRef.current > 1500) {
+                  lastPreviewReloadAtRef.current = t;
+                  iframeRef.current.src = `${sandboxData.url}?t=${t}&autofixed=true`;
+                }
+              }
+            } catch (e: any) {
+              const errMsg = String(e?.message || 'Auto-fix failed').trim();
+              setPreviewGuardOverlay(prev => ({
+                visible: true,
+                phase: 'blocked',
+                message: msg ? `Preview crashed: ${msg}\n\nAuto-fix failed: ${errMsg}` : `Preview crashed (client error)\n\nAuto-fix failed: ${errMsg}`,
+                packages: prev.packages,
+              }));
+
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H12',location:'app/generation/page.tsx:client-auto-fix:error',message:'auto-fix failed',data:{sandboxId:sid,error:String(errMsg).slice(0,200)},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+            } finally {
+              previewClientAutoFixRef.current.inFlight = false;
+            }
+          };
+
+          // Show the error immediately, and opportunistically auto-fix in the background.
           setPreviewGuardOverlay(prev => ({
             visible: true,
             phase: 'blocked',
             message: msg ? `Preview crashed: ${msg}` : 'Preview crashed (client error)',
             packages: prev.packages,
           }));
+          void maybeAutoFix();
         }
       } catch {
         // ignore

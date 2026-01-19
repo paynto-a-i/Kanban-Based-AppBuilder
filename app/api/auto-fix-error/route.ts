@@ -3,6 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGroq } from '@ai-sdk/groq';
 import { streamText } from 'ai';
 import '@/types/sandbox';
+import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,10 @@ export async function POST(request: NextRequest) {
   try {
     const { error, sandboxId, attemptNumber = 1 } = await request.json();
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H10',location:'app/api/auto-fix-error/route.ts:POST',message:'auto-fix-error request',data:{hasSandboxId:typeof sandboxId==='string'&&sandboxId.trim().length>0,attemptNumber:Number(attemptNumber||0),errorType:String(error?.type||'').slice(0,24),hasFile:typeof error?.file==='string'&&error.file.length>0,messagePreview:String(error?.message||'').slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     console.log('[auto-fix-error] Received error:', {
       type: error?.type,
       message: error?.message?.substring(0, 100),
@@ -61,7 +66,8 @@ export async function POST(request: NextRequest) {
       stack: error.stack
     };
     
-    const affectedFile = await getAffectedFileContent(errorDetails);
+    const sid = typeof sandboxId === 'string' ? sandboxId.trim() : '';
+    const affectedFile = await getAffectedFileContent(errorDetails, sid);
     
     if (!affectedFile) {
       console.log('[auto-fix-error] Could not find affected file content');
@@ -127,7 +133,30 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function getAffectedFileContent(error: ErrorDetails): Promise<FileContent | null> {
+async function getProviderForSandbox(sandboxId: string): Promise<any | null> {
+  const id = String(sandboxId || '').trim();
+  if (!id) return null;
+
+  const activeProvider = sandboxManager.getActiveProvider() || (global as any).activeSandboxProvider;
+  let provider: any =
+    sandboxManager.getProvider(id) ||
+    (activeProvider?.getSandboxInfo?.()?.sandboxId === id ? activeProvider : null);
+
+  if (!provider) {
+    try {
+      provider = await sandboxManager.getOrCreateProvider(id);
+      const info = provider?.getSandboxInfo?.();
+      if (!info || info.sandboxId !== id) provider = null;
+    } catch {
+      provider = null;
+    }
+  }
+
+  if (!provider || !provider.getSandboxInfo?.()) return null;
+  return provider;
+}
+
+async function getAffectedFileContent(error: ErrorDetails, sandboxId?: string): Promise<FileContent | null> {
   if (!error.file) {
     if (error.stack) {
       const fileMatch = error.stack.match(/\/([^\/]+\.(jsx?|tsx?|css))[:@]/);
@@ -158,10 +187,7 @@ async function getAffectedFileContent(error: ErrorDetails): Promise<FileContent 
   }
   
   const fileCache = global.sandboxState?.fileCache?.files;
-  if (!fileCache) {
-    console.log('[auto-fix-error] No file cache available');
-    return null;
-  }
+  const cacheAvailable = Boolean(fileCache);
   
   const possiblePaths = [
     normalizedPath,
@@ -170,23 +196,52 @@ async function getAffectedFileContent(error: ErrorDetails): Promise<FileContent 
     normalizedPath.replace('.jsx', '.tsx').replace('.js', '.ts')
   ];
   
-  for (const path of possiblePaths) {
-    if (fileCache[path]) {
-      return {
-        path,
-        content: fileCache[path].content
-      };
+  if (cacheAvailable) {
+    for (const path of possiblePaths) {
+      if (fileCache[path]) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H10',location:'app/api/auto-fix-error/route.ts:getAffectedFileContent:cache-hit',message:'affected file loaded from cache',data:{sandboxId:String(sandboxId||'').slice(0,32),path,contentLength:Number(String(fileCache[path].content||'').length)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return {
+          path,
+          content: fileCache[path].content
+        };
+      }
     }
   }
   
   const fileName = normalizedPath.split('/').pop()?.toLowerCase();
-  if (fileName) {
+  if (cacheAvailable && fileName) {
     for (const [path, data] of Object.entries(fileCache)) {
       if (path.toLowerCase().endsWith(fileName)) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H10',location:'app/api/auto-fix-error/route.ts:getAffectedFileContent:cache-fuzzy-hit',message:'affected file fuzzy-matched from cache',data:{sandboxId:String(sandboxId||'').slice(0,32),path,contentLength:Number(String((data as any)?.content||'').length)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return {
           path,
-          content: data.content
+          content: (data as any).content
         };
+      }
+    }
+  }
+
+  // Fallback: if cache is missing/stale, read directly from the sandbox.
+  const sid = String(sandboxId || '').trim();
+  if (sid) {
+    const provider = await getProviderForSandbox(sid);
+    if (provider) {
+      for (const path of possiblePaths) {
+        try {
+          const content = await provider.readFile(path);
+          if (typeof content === 'string' && content.length > 0) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H10',location:'app/api/auto-fix-error/route.ts:getAffectedFileContent:sandbox-hit',message:'affected file read from sandbox',data:{sandboxId:sid.slice(0,32),path,contentLength:Number(content.length)},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            return { path, content };
+          }
+        } catch {
+          // try next path
+        }
       }
     }
   }

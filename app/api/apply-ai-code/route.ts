@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseMorphEdits, applyMorphEditToFile } from '@/lib/morph-fast-apply';
 import type { SandboxState } from '@/types/sandbox';
 import type { ConversationState } from '@/types/conversation';
+import { sandboxManager } from '@/lib/sandbox/sandbox-manager';
 
 declare global {
   var conversationState: ConversationState | null;
@@ -136,8 +137,10 @@ declare global {
 
 export async function POST(request: NextRequest) {
   try {
-    const { response, isEdit = false, packages = [] } = await request.json();
+    const { response: rawResponse, code: rawCode, sandboxId: rawSandboxId, isEdit = false, packages = [] } = await request.json();
     const origin = request.nextUrl.origin;
+    const response = rawResponse ?? rawCode;
+    const requestedSandboxId = typeof rawSandboxId === 'string' ? rawSandboxId.trim() : '';
     
     if (!response) {
       return NextResponse.json({
@@ -160,7 +163,21 @@ export async function POST(request: NextRequest) {
     }
     
     // Get the active sandbox or provider
-    const sandbox = global.activeSandbox || global.activeSandboxProvider;
+    let sandbox: any = global.activeSandbox || global.activeSandboxProvider;
+
+    // If a sandboxId was provided, prefer the matching provider when available.
+    if (requestedSandboxId) {
+      const activeProvider =
+        sandboxManager.getActiveProvider() || global.activeSandbox || global.activeSandboxProvider;
+      const provider =
+        sandboxManager.getProvider(requestedSandboxId) ||
+        (activeProvider?.getSandboxInfo?.()?.sandboxId === requestedSandboxId ? activeProvider : null);
+      if (provider) sandbox = provider;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H11',location:'app/api/apply-ai-code/route.ts:POST:sandbox-select',message:'apply-ai-code sandbox selection',data:{requestedSandboxId:requestedSandboxId.slice(0,32),chosenSandboxId:String(provider?.getSandboxInfo?.()?.sandboxId||'').slice(0,32),chosenProvider:String(provider?.getSandboxInfo?.()?.provider||'').slice(0,16),fallbackUsed:!provider},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    }
     
     // If no active sandbox, just return parsed results
     if (!sandbox) {
