@@ -51,6 +51,12 @@ function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
+function looksLikeE2BTemplateApp(appSource: string): boolean {
+  const s = String(appSource || '').toLowerCase();
+  // Signature strings from `e2b/template/src/App.jsx`
+  return s.includes('e2b sandbox ready') || s.includes('start building your react app with vite');
+}
+
 function fingerprintFailure(text: string): string {
   const t = String(text || '')
     .replace(/\r\n/g, '\n')
@@ -488,6 +494,13 @@ export class BuildRunManager {
         at: now(),
         level: 'system',
         message: `Generation pool size: ${genConcurrency}${requested ? ' (request override)' : env ? ' (env override)' : ' (default)'} (cap ${genConcurrencyCap})`,
+      });
+
+      // Ensure the integration sandbox is not still the default E2B/Vite template before we
+      // snapshot conventions + start generating patches. This is critical for "time to first preview"
+      // in production, where the client-side scaffold step may be skipped due to stale plans.
+      await this.ensureIntegrationScaffolded(runId, run.input.sandboxId).catch(() => {
+        // non-fatal; run can still proceed, but preview quality may degrade
       });
 
       // Initialize merge state + snapshot v0 (integration as source of truth).
@@ -1775,6 +1788,117 @@ export class BuildRunManager {
     }
 
     return out;
+  }
+
+  private async readFirstFileFromSandbox(
+    sandboxId: string,
+    paths: string[]
+  ): Promise<{ path: string; content: string } | null> {
+    const provider =
+      sandboxManager.getProvider(sandboxId) ||
+      (await sandboxManager.getOrCreateProvider(sandboxId));
+
+    if (!provider || !provider.getSandboxInfo?.()) return null;
+    if (typeof (provider as any).readFile !== 'function') return null;
+
+    for (const p of paths) {
+      try {
+        const content = await (provider as any).readFile(p);
+        if (typeof content === 'string' && content.trim().length > 0) {
+          return { path: p, content };
+        }
+      } catch {
+        // ignore and try next
+      }
+    }
+    return null;
+  }
+
+  private async detectE2BTemplateInSandbox(sandboxId: string): Promise<boolean> {
+    // Vite sandboxes: check App source (most reliable; avoids cross-origin fetching)
+    const app = await this.readFirstFileFromSandbox(sandboxId, [
+      'src/App.jsx',
+      'src/App.tsx',
+      'App.jsx',
+      'App.tsx',
+    ]);
+    if (!app?.content) return false;
+    return looksLikeE2BTemplateApp(app.content);
+  }
+
+  private async ensureIntegrationScaffolded(runId: string, sandboxId: string): Promise<void> {
+    const run = this.runs.get(runId);
+    if (!run) return;
+
+    const baseUrl = run.baseUrl;
+    if (!baseUrl) return;
+
+    const plan: any = run.input.plan as any;
+    const planBlueprint: any = plan?.blueprint || null;
+    const desiredTemplate: 'vite' | 'next' =
+      plan?.templateTarget || planBlueprint?.templateTarget || 'vite';
+
+    // Only needed for Vite template sandboxes.
+    if (desiredTemplate !== 'vite') return;
+
+    const looksLikeTemplate = await this.detectE2BTemplateInSandbox(sandboxId);
+    if (!looksLikeTemplate) return;
+
+    const minimalBlueprint: any = {
+      templateTarget: 'vite',
+      dataMode: plan?.dataMode || 'real_optional',
+      theme: { preset: 'modern_light', accent: 'indigo' },
+      routes: [
+        { id: 'home', kind: 'page', path: '/', title: 'Home', navLabel: 'Home' },
+      ],
+      navigation: { items: [{ label: 'Home', routeId: 'home' }] },
+      entities: [],
+      flows: [],
+    };
+
+    const blueprintForScaffold = planBlueprint || minimalBlueprint;
+
+    this.emit(runId, {
+      type: 'log',
+      runId,
+      at: now(),
+      level: 'system',
+      message: planBlueprint
+        ? 'Scaffolding project from blueprint (server-side) for early preview...'
+        : 'No blueprint on plan; scaffolding a minimal app shell (server-side) for early preview...',
+    });
+
+    const res = await fetch(`${baseUrl}/api/scaffold-project`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sandboxId,
+        template: 'vite',
+        blueprint: blueprintForScaffold,
+        uiStyle: run.input.uiStyle,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data?.success) {
+      const msg = data?.error || `Scaffold failed (HTTP ${res.status})`;
+      this.emit(runId, {
+        type: 'log',
+        runId,
+        at: now(),
+        level: 'warning',
+        message: `Scaffold attempt failed (non-fatal): ${msg}`,
+      });
+      return;
+    }
+
+    this.emit(runId, {
+      type: 'log',
+      runId,
+      at: now(),
+      level: 'system',
+      message: `Scaffolded ${data?.filesWritten?.length || 0} file(s) (early preview enabled).`,
+    });
   }
 
   private enqueueMerge(runId: string, branch: VirtualBranch) {
