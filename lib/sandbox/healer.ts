@@ -15,6 +15,16 @@ export interface SandboxHealthSnapshot {
   missingPackages: string[];
   issues: SandboxHealIssue[];
   healthyForPreview: boolean;
+  previewHtmlProbe?: {
+    ok: boolean;
+    status?: number;
+    length?: number;
+    hasHtmlTag?: boolean;
+    hasRootDiv?: boolean;
+    hasViteClient?: boolean;
+    hasMainModule?: boolean;
+    error?: string;
+  };
 }
 
 function normalizeImportToPackageName(raw: string): string | null {
@@ -156,6 +166,76 @@ function extractNotableViteErrors(logTail: string): string[] {
   return out;
 }
 
+async function probeViteHtml(provider: SandboxProvider): Promise<SandboxHealthSnapshot['previewHtmlProbe']> {
+  // We can't access the browser console from the server; best-effort is to verify that Vite is serving a sane HTML shell.
+  // This catches cases like an empty/invalid index.html (which renders as a blank white page with no errors shown).
+  const cmd =
+    `node -e ${JSON.stringify(
+      [
+        "const http=require('http');",
+        "const req=http.get('http://127.0.0.1:5173/',res=>{",
+        "let body='';",
+        "res.setEncoding('utf8');",
+        "res.on('data',c=>{ if(body.length<12000) body+=c; });",
+        "res.on('end',()=>{",
+        "const head=String(body||'').slice(0,4000);",
+        "const out={status:res.statusCode||0,length:String(body||'').length,head};",
+        "console.log(JSON.stringify(out));",
+        "});",
+        "});",
+        "req.on('error',e=>{console.log(JSON.stringify({error:String(e&&e.message||e)}));process.exit(1);});",
+        "req.setTimeout(1500,()=>{try{req.destroy();}catch{};console.log(JSON.stringify({error:'timeout'}));process.exit(1);});",
+      ].join('')
+    )} 2>/dev/null || true`;
+
+  try {
+    const res = await provider.runCommand(cmd);
+    const stdout = String(res.stdout || '').trim();
+    let parsed: any = null;
+    try {
+      parsed = stdout ? JSON.parse(stdout.split('\n').pop() || '') : null;
+    } catch {
+      parsed = null;
+    }
+
+    const status = Number(parsed?.status || 0) || undefined;
+    const length = Number(parsed?.length || 0) || undefined;
+    const head = String(parsed?.head || '');
+    const error = parsed?.error ? String(parsed.error) : undefined;
+
+    const hasHtmlTag = head.includes('<html') || head.includes('<!DOCTYPE html');
+    const hasRootDiv = head.includes('id="root"') || head.includes("id='root'");
+    const hasViteClient = head.includes('/@vite/client');
+    const hasMainModule =
+      head.includes('src="/src/main.jsx"') ||
+      head.includes("src='/src/main.jsx'") ||
+      head.includes('src="/src/main.tsx"') ||
+      head.includes("src='/src/main.tsx'") ||
+      head.includes('src="/src/main.js"') ||
+      head.includes("src='/src/main.js'") ||
+      head.includes('src="/src/main.ts"') ||
+      head.includes("src='/src/main.ts'");
+
+    const ok =
+      Boolean(status && status >= 200 && status < 400) &&
+      Boolean(length && length > 50) &&
+      (hasHtmlTag || hasRootDiv || hasViteClient);
+
+    return {
+      ok,
+      status,
+      length,
+      hasHtmlTag,
+      hasRootDiv,
+      hasViteClient,
+      hasMainModule,
+      error,
+    };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
 export async function getSandboxHealthSnapshot(provider: SandboxProvider): Promise<SandboxHealthSnapshot> {
   const info: any = provider?.getSandboxInfo?.() || null;
   const sandboxId = String(info?.sandboxId || '').trim();
@@ -165,6 +245,12 @@ export async function getSandboxHealthSnapshot(provider: SandboxProvider): Promi
   const viteLogTail = await tailViteLog(provider, 220);
   const missingPackages = extractMissingPackagesFromText(viteLogTail);
   const viteRunning = await checkViteRunning(provider);
+
+  const previewHtmlProbe = await probeViteHtml(provider);
+
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/c77dad7d-5856-4f46-a321-cf824026609f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H6',location:'lib/sandbox/healer.ts:getSandboxHealthSnapshot:html-probe',message:'sandbox preview HTML probe',data:{sandboxId,provider:providerId,viteRunning,missingCount:missingPackages.length,probe:previewHtmlProbe},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   const issues: SandboxHealIssue[] = [];
   if (missingPackages.length > 0) issues.push({ kind: 'missing_packages', packages: missingPackages });
@@ -185,6 +271,7 @@ export async function getSandboxHealthSnapshot(provider: SandboxProvider): Promi
     missingPackages,
     issues,
     healthyForPreview,
+    previewHtmlProbe,
   };
 }
 
