@@ -146,17 +146,17 @@ export interface KanbanColumn {
 }
 
 export const COLUMN_CONFIG: { id: TicketStatus; title: string; color: string }[] = [
-  { id: 'planning', title: 'Planning', color: '#8B5CF6' },
-  { id: 'backlog', title: 'Backlog', color: '#6B7280' },
-  { id: 'awaiting_input', title: 'Awaiting Input', color: '#F97316' },
-  { id: 'generating', title: 'Generating', color: '#3B82F6' },
-  { id: 'applying', title: 'Applying', color: '#F59E0B' },
-  { id: 'pr_review', title: 'PR Review', color: '#6366F1' },
-  { id: 'merge_queued', title: 'Merge Queued', color: '#A855F7' },
-  { id: 'rebasing', title: 'Rebasing', color: '#9333EA' },
-  { id: 'merging', title: 'Merging', color: '#7C3AED' },
-  { id: 'testing', title: 'Testing', color: '#8B5CF6' },
-  { id: 'done', title: 'Done', color: '#22C55E' },
+  { id: 'planning', title: 'Planning', color: '#639C74' }, // Sage 500
+  { id: 'backlog', title: 'Backlog', color: '#9C8A70' }, // Comfort Beige 700
+  { id: 'awaiting_input', title: 'Awaiting Input', color: '#D98B6A' }, // Terracotta 500
+  { id: 'generating', title: 'Generating', color: '#4A7D54' }, // Sage 700
+  { id: 'applying', title: 'Applying', color: '#C47352' }, // Terracotta 600
+  { id: 'pr_review', title: 'Review', color: '#5E9A6A' }, // Sage 600
+  { id: 'merge_queued', title: 'Queued', color: '#7FB589' }, // Sage 500
+  { id: 'rebasing', title: 'Rebasing', color: '#9AC4A3' }, // Sage 400
+  { id: 'merging', title: 'Merging', color: '#3C6444' }, // Sage 800
+  { id: 'testing', title: 'Testing', color: '#B8A68E' }, // Comfort Beige 600
+  { id: 'done', title: 'Done', color: '#2F4E35' }, // Sage 900
   // Always render these so tickets don't "disappear" when they fail/block/skip.
   { id: 'blocked', title: 'Blocked', color: '#EF4444' },
   { id: 'failed', title: 'Failed', color: '#DC2626' },
@@ -164,13 +164,13 @@ export const COLUMN_CONFIG: { id: TicketStatus; title: string; color: string }[]
 ];
 
 export const TYPE_COLORS: Record<TicketType, string> = {
-  component: '#3B82F6',
-  feature: '#8B5CF6',
-  layout: '#10B981',
-  styling: '#F59E0B',
-  integration: '#EF4444',
-  config: '#6B7280',
-  database: '#06B6D4',
+  component: '#4A7D54', // Sage 700
+  feature: '#639C74', // Sage 500
+  layout: '#5E9A6A', // Sage 600
+  styling: '#D98B6A', // Terracotta 500
+  integration: '#B8A68E', // Beige 600
+  config: '#9C8A70', // Beige 700
+  database: '#7A6B57', // Beige 800
 };
 
 export const PRIORITY_COLORS: Record<TicketPriority, string> = {

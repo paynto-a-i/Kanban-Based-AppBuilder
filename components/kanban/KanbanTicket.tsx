@@ -63,11 +63,9 @@ export default function KanbanTicket({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-200 p-3 shadow-sm transition-all ${
-        isDragging ? 'shadow-lg scale-105 rotate-2' : 'hover:shadow-md'
-      } ${ticket.status === 'failed' ? 'border-red-300 bg-red-50' : ''} ${
-        ticket.status === 'awaiting_input' ? 'border-orange-300 bg-orange-50' : ''
-      }`}
+      className={`bg-white rounded-lg border border-gray-200 p-3 shadow-sm transition-all ${isDragging ? 'shadow-lg scale-105 rotate-2' : 'hover:shadow-md'
+        } ${ticket.status === 'failed' ? 'border-red-300 bg-red-50' : ''} ${ticket.status === 'awaiting_input' ? 'border-comfort-terracotta-300 bg-comfort-terracotta-50' : ''
+        }`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -83,11 +81,10 @@ export default function KanbanTicket({
             {[...Array(3)].map((_, i) => (
               <div
                 key={i}
-                className={`w-1.5 h-1.5 rounded-full ${
-                  i < priorityDots[ticket.priority]
+                className={`w-1.5 h-1.5 rounded-full ${i < priorityDots[ticket.priority]
                     ? ''
                     : 'bg-gray-200'
-                }`}
+                  }`}
                 style={i < priorityDots[ticket.priority] ? { backgroundColor: PRIORITY_COLORS[ticket.priority] } : {}}
               />
             ))}
@@ -152,7 +149,7 @@ export default function KanbanTicket({
         <div className="mb-2">
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 transition-all duration-300"
+              className="h-full bg-comfort-sage-500 transition-all duration-300"
               style={{ width: `${ticket.progress}%` }}
             />
           </div>
@@ -167,7 +164,7 @@ export default function KanbanTicket({
       )}
 
       {ticket.status === 'awaiting_input' && ticket.inputRequests && ticket.inputRequests.length > 0 && (
-        <div className="text-[10px] text-orange-600 bg-orange-100 px-2 py-1.5 rounded mb-2 flex items-center gap-1.5">
+        <div className="text-[10px] text-comfort-terracotta-800 bg-comfort-terracotta-100 px-2 py-1.5 rounded mb-2 flex items-center gap-1.5">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />

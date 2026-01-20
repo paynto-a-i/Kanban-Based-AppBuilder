@@ -135,8 +135,8 @@ export default function KanbanBoard({
           {tickets.length > 0 && (
             <div className="flex items-center gap-1.5 sm:gap-2">
               <div className="w-16 sm:w-32 h-1.5 sm:h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500"
+                <div
+                  className="h-full bg-gradient-to-r from-comfort-sage-500 to-comfort-sage-600 transition-all duration-500"
                   style={{ width: `${totalProgress}%` }}
                 />
               </div>
@@ -156,7 +156,7 @@ export default function KanbanBoard({
               {!blueprintResult.ok ? (
                 <span className="text-[11px] text-red-600 font-medium">Blueprint issues</span>
               ) : (
-                <span className="text-[11px] text-green-700 font-medium">Blueprint OK</span>
+                <span className="text-[11px] text-comfort-sage-700 font-medium">Blueprint OK</span>
               )}
             </div>
           )}
@@ -164,15 +164,15 @@ export default function KanbanBoard({
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           {isPlanning && (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-100 text-purple-700">
-              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-comfort-sage-100 text-comfort-sage-700">
+              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-comfort-sage-600 border-t-transparent rounded-full animate-spin" />
               <span className="text-[10px] sm:text-xs font-medium hidden sm:inline">Planning...</span>
             </div>
           )}
 
           {isBuilding && !isPaused && (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-100 text-blue-700">
-              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-comfort-sage-100 text-comfort-sage-700">
+              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-comfort-sage-600 border-t-transparent rounded-full animate-spin" />
               <span className="text-[10px] sm:text-xs font-medium hidden sm:inline">Building...</span>
             </div>
           )}
@@ -183,7 +183,7 @@ export default function KanbanBoard({
           </div>
 
           {analytics.completed > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-100 text-green-700">
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md bg-comfort-sage-100 text-comfort-sage-700">
               <span className="text-xs font-medium">{analytics.completed} Done</span>
             </div>
           )}
@@ -210,16 +210,15 @@ export default function KanbanBoard({
               <button
                 key={column.id}
                 onClick={() => setSelectedColumn(column.id)}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium whitespace-nowrap transition-all ${
-                  isSelected
-                    ? 'bg-blue-600 text-white'
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium whitespace-nowrap transition-all ${isSelected
+                    ? 'bg-comfort-sage-600 text-white'
                     : 'bg-gray-100 text-gray-600'
-                }`}
+                  }`}
               >
                 <span>{COLUMN_EMOJIS[column.id]}</span>
                 <span className="hidden xs:inline">{column.title}</span>
                 {count > 0 && (
-                  <span className={`px-1 rounded text-[9px] ${isSelected ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                  <span className={`px-1 rounded text-[9px] ${isSelected ? 'bg-comfort-sage-500' : 'bg-gray-200'}`}>
                     {count}
                   </span>
                 )}
@@ -235,14 +234,13 @@ export default function KanbanBoard({
           <div className="flex items-center gap-2 overflow-x-auto">
             <button
               onClick={() => setActiveFilter(null)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
-                activeFilter === null 
-                  ? 'bg-blue-600 text-white' 
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all whitespace-nowrap ${activeFilter === null
+                  ? 'bg-comfort-sage-600 text-white'
                   : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-              }`}
+                }`}
             >
               All
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === null ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === null ? 'bg-comfort-sage-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {tickets.length}
               </span>
             </button>
@@ -250,18 +248,17 @@ export default function KanbanBoard({
               <button
                 key={type}
                 onClick={() => setActiveFilter(activeFilter === type ? null : type)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 whitespace-nowrap ${
-                  activeFilter === type
-                    ? 'bg-blue-600 text-white'
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 whitespace-nowrap ${activeFilter === type
+                    ? 'bg-comfort-sage-600 text-white'
                     : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full"
                   style={{ backgroundColor: TYPE_COLORS[type] }}
                 />
                 {label}
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === type ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${activeFilter === type ? 'bg-comfort-sage-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
                   {typeCounts[type] || 0}
                 </span>
               </button>
@@ -279,7 +276,7 @@ export default function KanbanBoard({
               {displayColumns.map((column) => {
                 const isSelected = selectedColumn === column.id || (!selectedColumn && column.id === displayColumns[0]?.id);
                 if (!isSelected) return null;
-                
+
                 const filteredTickets = activeFilter
                   ? ticketsByColumn[column.id].filter(t => t.type === activeFilter)
                   : ticketsByColumn[column.id];

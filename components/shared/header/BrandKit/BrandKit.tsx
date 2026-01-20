@@ -44,11 +44,11 @@ export default function HeaderBrandKit() {
         }}
       >
         {/* Logo Icon with amber gradient */}
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-comfort-sage-400 to-comfort-sage-600 flex items-center justify-center shadow-lg shadow-comfort-sage-500/20 group-hover:shadow-comfort-sage-500/40 transition-shadow">
           <span className="text-black font-bold text-sm">P</span>
         </div>
         {/* Brand text with gradient */}
-        <span className="font-semibold text-lg bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 bg-clip-text text-transparent">
+        <span className="font-semibold text-lg bg-gradient-to-r from-comfort-sage-400 via-comfort-sage-500 to-comfort-sage-600 bg-clip-text text-transparent">
           Paynto A.I.
         </span>
       </Link>
