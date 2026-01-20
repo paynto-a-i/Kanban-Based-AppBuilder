@@ -33,8 +33,6 @@ const plusJakarta = Plus_Jakarta_Sans({
   weight: ["200", "300", "400", "500", "600", "700", "800"],
 });
 
-export const dynamic = 'force-dynamic';
-
 export const metadata: Metadata = {
   title: "Paynto A.I.",
   description: "Re-imagine any website in seconds with AI-powered website builder.",
