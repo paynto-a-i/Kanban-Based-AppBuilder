@@ -1,168 +1,241 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { GlowingCard } from '@/components/ui/moving-border'
+import { motion, useInView } from 'framer-motion'
+import { useRef, useState } from 'react'
+import Link from 'next/link'
+
+const plans = [
+  {
+    name: 'Free',
+    description: 'For exploring and personal projects',
+    price: { monthly: 0, annual: 0 },
+    credits: '100 Credits/mo',
+    features: [
+      '3 projects',
+      'Basic AI agents',
+      'Community support',
+      'Public deployments',
+    ],
+    cta: 'Get Started',
+    href: '/generation',
+    highlighted: false,
+  },
+  {
+    name: 'Pro',
+    description: 'For serious builders and small teams',
+    price: { monthly: 29, annual: 24 },
+    credits: '500 Credits/mo',
+    features: [
+      'Unlimited projects',
+      'All AI agents',
+      'Priority support',
+      'Private deployments',
+      'Custom domains',
+      'Team collaboration',
+    ],
+    cta: 'Start Free Trial',
+    href: '/generation',
+    highlighted: true,
+  },
+  {
+    name: 'Ultra',
+    description: 'For power users and growing teams',
+    price: { monthly: 80, annual: 66 },
+    credits: '1,000 Credits/mo',
+    features: [
+      'Everything in Pro',
+      'Dedicated AI capacity',
+      'Advanced analytics',
+      'API access',
+      'White-label options',
+      'Priority queue',
+    ],
+    cta: 'Start Free Trial',
+    href: '/generation',
+    highlighted: false,
+  },
+  {
+    name: 'Enterprise',
+    description: 'Custom solutions for organizations',
+    price: { monthly: null, annual: null },
+    credits: 'Unlimited',
+    features: [
+      'Everything in Ultra',
+      'Dedicated support',
+      'On-premise option',
+      'Custom integrations',
+      'SLA guarantees',
+      'Security compliance',
+    ],
+    cta: 'Contact Us',
+    href: '#contact',
+    highlighted: false,
+  },
+]
 
 export default function PricingSection() {
-  const handleGetStarted = () => {
-    document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const plans = [
-    {
-      name: "Starter",
-      description: "Perfect for individuals and small projects",
-      price: "Free",
-      period: "",
-      features: [
-        "3 projects per month",
-        "Basic AI agents",
-        "Community support",
-        "Public deployments",
-        "Basic analytics"
-      ],
-      cta: "Get Started Free",
-      popular: false,
-    },
-    {
-      name: "Pro",
-      description: "For professional developers and teams",
-      price: "$29",
-      period: "/month",
-      features: [
-        "Unlimited projects",
-        "Advanced AI agents",
-        "Priority support",
-        "Private deployments",
-        "Advanced analytics",
-        "Custom domains",
-        "Team collaboration"
-      ],
-      cta: "Start Pro Trial",
-      popular: true,
-    },
-    {
-      name: "Enterprise",
-      description: "Custom solutions for large organizations",
-      price: "Custom",
-      period: "",
-      features: [
-        "Everything in Pro",
-        "Dedicated AI instances",
-        "24/7 premium support",
-        "On-premise deployment",
-        "Custom integrations",
-        "SLA guarantees",
-        "Security compliance"
-      ],
-      cta: "Contact Sales",
-      popular: false,
-    }
-  ]
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: "-100px" })
+  const [isAnnual, setIsAnnual] = useState(false)
 
   return (
-    <section id="pricing" className="py-20 md:py-28 bg-comfort-sage-100">
-      <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12">
+    <section id="pricing" className="py-32 md:py-40 bg-white relative overflow-hidden" ref={containerRef}>
+      {/* Subtle background pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.02] pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
+          backgroundSize: '40px 40px',
+        }}
+      />
+
+      <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 relative">
+        {/* Section Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
+          initial={{ opacity: 0, y: 40 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center max-w-2xl mx-auto mb-16"
         >
-          <div className="inline-flex items-center px-5 py-2 mb-6 text-sm font-medium text-comfort-sage-700 bg-comfort-sage-100 rounded-full">
+          <motion.span
+            initial={{ opacity: 0, y: 20 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="inline-block text-sm font-medium tracking-[0.2em] uppercase text-comfort-sage-600 mb-4"
+          >
             Pricing
-          </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-5 text-comfort-charcoal-800 tracking-tight">
-            Simple, Transparent Pricing
+          </motion.span>
+          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-medium text-comfort-charcoal-800 tracking-tight leading-[1.1] mb-6">
+            Simple, transparent pricing
           </h2>
-          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto leading-relaxed">
-            Choose the plan that fits your needs. Start free and scale as you grow.
+          <p className="text-xl text-comfort-charcoal-400 leading-relaxed">
+            Start free. Scale as you grow. No hidden fees.
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+        {/* Billing Toggle */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="flex items-center justify-center gap-4 mb-12"
+        >
+          <span className={`text-sm font-medium transition-colors duration-200 ${!isAnnual ? 'text-comfort-charcoal-800' : 'text-comfort-charcoal-400'}`}>
+            Monthly
+          </span>
+          <button
+            onClick={() => setIsAnnual(!isAnnual)}
+            className="relative w-14 h-7 rounded-full bg-comfort-sage-100 transition-colors duration-200 hover:bg-comfort-sage-200"
+          >
+            <motion.div
+              animate={{ x: isAnnual ? 28 : 2 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="absolute top-1 w-5 h-5 rounded-full bg-comfort-sage-500 shadow-sm"
+            />
+          </button>
+          <span className={`text-sm font-medium transition-colors duration-200 ${isAnnual ? 'text-comfort-charcoal-800' : 'text-comfort-charcoal-400'}`}>
+            Annual
+            <span className="ml-2 px-2 py-0.5 text-xs font-medium text-comfort-sage-700 bg-comfort-sage-100 rounded-full">
+              Save 17%
+            </span>
+          </span>
+        </motion.div>
+
+        {/* Pricing Cards */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map((plan, index) => (
             <motion.div
               key={plan.name}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.1, duration: 0.6 }}
-              whileHover={{ y: -8, transition: { duration: 0.2 } }}
-            >
-            <GlowingCard
-              className={`relative rounded-[24px] overflow-hidden h-full ${
-                plan.popular
-                  ? 'shadow-xl shadow-comfort-sage-500/10 ring-2 ring-comfort-sage-400 animate-glow-pulse'
-                  : 'shadow-lg shadow-comfort-charcoal-800/5'
+              initial={{ opacity: 0, y: 40 }}
+              animate={isInView ? { opacity: 1, y: 0 } : {}}
+              transition={{
+                duration: 0.6,
+                delay: 0.1 + index * 0.1,
+                ease: [0.22, 1, 0.36, 1]
+              }}
+              className={`relative rounded-2xl p-6 transition-all duration-300 ${
+                plan.highlighted
+                  ? 'bg-comfort-charcoal-800 text-white ring-2 ring-comfort-charcoal-800 shadow-xl shadow-comfort-charcoal-800/20'
+                  : 'bg-comfort-sage-50 hover:bg-comfort-sage-100/80'
               }`}
-              glowColor={plan.popular ? "rgba(127, 181, 137, 0.4)" : "rgba(127, 181, 137, 0.2)"}
             >
-              {plan.popular && (
-                <div className="absolute top-0 left-0 right-0">
-                  <div className="bg-gradient-to-r from-comfort-sage-500 to-comfort-sage-600 text-white text-center py-2.5 text-sm font-medium">
-                    Most Popular
-                  </div>
+              {plan.highlighted && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-xs font-medium bg-comfort-sage-400 text-white rounded-full">
+                  Most Popular
                 </div>
               )}
 
-              <div className={`p-8 ${plan.popular ? 'pt-14' : ''}`}>
-                <h3 className="text-xl font-bold text-comfort-charcoal-800 mb-2">{plan.name}</h3>
-                <p className="text-comfort-charcoal-400 text-sm mb-6">{plan.description}</p>
-
-                <div className="mb-8">
-                  <span className="text-4xl font-bold text-comfort-charcoal-800">{plan.price}</span>
-                  {plan.period && (
-                    <span className="text-comfort-charcoal-400 ml-1">{plan.period}</span>
-                  )}
-                </div>
-
-                <ul className="space-y-4 mb-8">
-                  {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start text-sm">
-                      <svg
-                        className={`w-5 h-5 mr-3 flex-shrink-0 ${plan.popular ? 'text-comfort-sage-500' : 'text-comfort-charcoal-300'}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-comfort-charcoal-600">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleGetStarted}
-                  className={`w-full py-4 px-6 rounded-[16px] font-semibold transition-all duration-300 ${
-                    plan.popular
-                      ? 'bg-comfort-sage-500 hover:bg-comfort-sage-600 text-white shadow-lg shadow-comfort-sage-500/25 hover:shadow-xl'
-                      : 'bg-comfort-sage-100 hover:bg-comfort-sage-200 text-comfort-charcoal-700'
-                  }`}
-                >
-                  {plan.cta}
-                </motion.button>
+              <div className="mb-6">
+                <h3 className={`text-lg font-semibold mb-1 ${plan.highlighted ? 'text-white' : 'text-comfort-charcoal-800'}`}>
+                  {plan.name}
+                </h3>
+                <p className={`text-sm ${plan.highlighted ? 'text-comfort-charcoal-300' : 'text-comfort-charcoal-400'}`}>
+                  {plan.description}
+                </p>
               </div>
-            </GlowingCard>
+
+              <div className="mb-6">
+                {plan.price.monthly !== null ? (
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-4xl font-semibold ${plan.highlighted ? 'text-white' : 'text-comfort-charcoal-800'}`}>
+                      ${isAnnual ? plan.price.annual : plan.price.monthly}
+                    </span>
+                    <span className={`text-sm ${plan.highlighted ? 'text-comfort-charcoal-400' : 'text-comfort-charcoal-400'}`}>
+                      /mo
+                    </span>
+                  </div>
+                ) : (
+                  <span className={`text-4xl font-semibold ${plan.highlighted ? 'text-white' : 'text-comfort-charcoal-800'}`}>
+                    Custom
+                  </span>
+                )}
+                <p className={`text-sm mt-1 ${plan.highlighted ? 'text-comfort-charcoal-400' : 'text-comfort-charcoal-500'}`}>
+                  {plan.credits}
+                </p>
+              </div>
+
+              <ul className="space-y-3 mb-8">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm">
+                    <svg
+                      className={`w-5 h-5 flex-shrink-0 ${plan.highlighted ? 'text-comfort-sage-400' : 'text-comfort-sage-500'}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className={plan.highlighted ? 'text-comfort-charcoal-200' : 'text-comfort-charcoal-600'}>
+                      {feature}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href={plan.href}
+                className={`block w-full py-3 px-4 text-center text-sm font-medium rounded-xl transition-all duration-200 ${
+                  plan.highlighted
+                    ? 'bg-white text-comfort-charcoal-800 hover:bg-comfort-sage-50'
+                    : 'bg-comfort-charcoal-800 text-white hover:bg-comfort-charcoal-700'
+                }`}
+              >
+                {plan.cta}
+              </Link>
             </motion.div>
           ))}
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.4 }}
-          className="mt-12 text-center"
+        {/* Bottom note */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={isInView ? { opacity: 1 } : {}}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="text-center text-sm text-comfort-charcoal-400 mt-12"
         >
-          <p className="text-comfort-charcoal-400 text-sm">
-            All plans include a 14-day free trial. No credit card required.
-          </p>
-        </motion.div>
+          All plans include a 14-day free trial. No credit card required.
+        </motion.p>
       </div>
     </section>
   )

@@ -1,9 +1,11 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { motion, useInView } from 'framer-motion'
+import { useState, useRef } from 'react'
 
 export default function ContactForm() {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: "-100px" })
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -53,19 +55,24 @@ export default function ContactForm() {
 
   if (isSubmitted) {
     return (
-      <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-comfort-sage-100 to-comfort-sage-50">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="py-32 md:py-40 bg-white">
+        <div className="max-w-2xl mx-auto px-6 sm:px-8 lg:px-12 text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white border border-comfort-sage-300 rounded-2xl p-12"
+            className="bg-comfort-sage-50 border border-comfort-sage-200 rounded-2xl p-12"
           >
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-comfort-sage-500 to-comfort-sage-600 mb-6">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+              className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-comfort-sage-500 flex items-center justify-center"
+            >
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-            </div>
-            <h2 className="text-3xl font-bold text-comfort-charcoal-800 mb-4">You&apos;re on the list!</h2>
+            </motion.div>
+            <h2 className="text-3xl font-medium text-comfort-charcoal-800 mb-4">You&apos;re on the list!</h2>
             <p className="text-comfort-charcoal-500">We&apos;ll be in touch soon with early access to Paynto.AI.</p>
           </motion.div>
         </div>
@@ -74,38 +81,46 @@ export default function ContactForm() {
   }
 
   return (
-    <section id="contact" className="py-12 md:py-16 bg-gradient-to-b from-comfort-sage-100 to-comfort-sage-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="py-32 md:py-40 bg-white relative" ref={containerRef}>
+      {/* Background decoration */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-b from-comfort-sage-50 to-transparent rounded-full opacity-60" />
+      </div>
+
+      <div className="max-w-4xl mx-auto px-6 sm:px-8 lg:px-12 relative">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-8"
+          initial={{ opacity: 0, y: 40 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center mb-12"
         >
-          <div className="inline-flex items-center px-3 py-1.5 mb-4 text-sm font-medium text-comfort-terracotta-600 bg-comfort-terracotta-100 rounded-full border border-comfort-terracotta-300">
+          <motion.span
+            initial={{ opacity: 0, y: 20 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="inline-block text-sm font-medium tracking-[0.2em] uppercase text-comfort-terracotta-500 mb-4"
+          >
             Early Access
-          </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
-            Start Building Today
+          </motion.span>
+          <h2 className="text-4xl sm:text-5xl font-medium text-comfort-charcoal-800 tracking-tight leading-[1.1] mb-6">
+            Start building today
           </h2>
-          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
+          <p className="text-xl text-comfort-charcoal-400 leading-relaxed max-w-xl mx-auto">
             Join the waitlist to be among the first to build with AI agents.
           </p>
         </motion.div>
 
         <motion.form
           initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.2, duration: 0.8 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ delay: 0.2, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           onSubmit={handleSubmit}
-          className="bg-comfort-sage-50 border border-comfort-sage-300 rounded-2xl p-8 md:p-10 max-w-2xl mx-auto shadow-sm"
+          className="bg-white border border-comfort-sage-200 rounded-2xl p-8 md:p-10 max-w-2xl mx-auto shadow-xl shadow-comfort-charcoal-800/5"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
-                Name *
+                Name <span className="text-comfort-terracotta-500">*</span>
               </label>
               <input
                 type="text"
@@ -114,14 +129,14 @@ export default function ContactForm() {
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-200 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-300 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="Your name"
               />
             </div>
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
-                Email *
+                Email <span className="text-comfort-terracotta-500">*</span>
               </label>
               <input
                 type="email"
@@ -130,7 +145,7 @@ export default function ContactForm() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-200 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-300 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="you@company.com"
               />
             </div>
@@ -147,7 +162,7 @@ export default function ContactForm() {
                 name="company"
                 value={formData.company}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-200 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-300 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
                 placeholder="Your company"
               />
             </div>
@@ -161,7 +176,7 @@ export default function ContactForm() {
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-300 bg-white text-comfort-charcoal-800 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
+                className="w-full px-4 py-3 rounded-xl border border-comfort-sage-200 bg-white text-comfort-charcoal-800 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
               >
                 <option value="">Select role</option>
                 <option value="founder">Founder / CEO</option>
@@ -177,7 +192,7 @@ export default function ContactForm() {
 
           <div className="mb-8">
             <label htmlFor="message" className="block text-sm font-medium text-comfort-charcoal-700 mb-2">
-              What would you build with AI?
+              What would you build?
             </label>
             <textarea
               id="message"
@@ -185,7 +200,7 @@ export default function ContactForm() {
               rows={4}
               value={formData.message}
               onChange={handleChange}
-              className="w-full px-4 py-3 rounded-xl border border-comfort-sage-300 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-400 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200"
+              className="w-full px-4 py-3 rounded-xl border border-comfort-sage-200 bg-white text-comfort-charcoal-800 placeholder-comfort-charcoal-300 focus:ring-2 focus:ring-comfort-sage-500 focus:border-transparent transition-all duration-200 resize-none"
               placeholder="Tell us about your dream project..."
             />
           </div>
@@ -194,23 +209,21 @@ export default function ContactForm() {
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-4 p-4 rounded-xl bg-comfort-terracotta-100 border border-comfort-terracotta-300 text-comfort-terracotta-700 text-sm"
+              className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm"
             >
               {error}
             </motion.div>
           )}
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full px-8 py-4 bg-gradient-to-r from-comfort-sage-500 to-comfort-sage-600 text-white font-semibold text-lg rounded-xl shadow-lg shadow-comfort-sage-500/25 hover:shadow-xl hover:shadow-comfort-sage-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-8 py-4 bg-comfort-charcoal-800 hover:bg-comfort-charcoal-700 text-white font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Joining...' : 'Join the Waitlist'}
-          </motion.button>
+          </button>
 
-          <p className="text-center text-comfort-charcoal-500 text-sm mt-4">
+          <p className="text-center text-comfort-charcoal-400 text-sm mt-4">
             No spam. We&apos;ll only contact you about early access.
           </p>
         </motion.form>

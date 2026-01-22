@@ -4,16 +4,20 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import Image from 'next/image'
 
+const footerLinks = {
+  product: [
+    { label: 'Problem', href: '#problem' },
+    { label: 'Solution', href: '#solution' },
+    { label: 'Pricing', href: '#pricing' },
+    { label: 'FAQ', href: '#faq' },
+  ],
+  legal: [
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
+  ],
+}
+
 const socialLinks = [
-  {
-    name: 'Twitter',
-    href: 'https://twitter.com/payntoai',
-    icon: (
-      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-      </svg>
-    ),
-  },
   {
     name: 'GitHub',
     href: 'https://github.com/payntoai',
@@ -24,11 +28,11 @@ const socialLinks = [
     ),
   },
   {
-    name: 'Discord',
-    href: 'https://discord.gg/payntoai',
+    name: 'X',
+    href: 'https://twitter.com/payntoai',
     icon: (
       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
       </svg>
     ),
   },
@@ -44,64 +48,50 @@ const socialLinks = [
 ]
 
 export default function Footer() {
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href.startsWith('#')) {
+      e.preventDefault()
+      const element = document.querySelector(href)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+  }
+
   return (
-    <footer className="bg-comfort-sage-50 border-t border-comfort-sage-200">
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.8 }}
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16"
-      >
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-          <div className="lg:col-span-2">
-            <div className="mb-6">
-              <Link href="/" className="flex items-center gap-2">
-                <Image
-                  src="/paynto-logo.png"
-                  alt="Paynto.AI Logo"
-                  width={40}
-                  height={40}
-                  className="w-10 h-10 rounded-xl"
-                />
-                <span className="text-2xl font-bold text-comfort-charcoal-800">
-                  Paynto<span className="text-comfort-sage-600">.</span>AI
-                </span>
-              </Link>
-            </div>
-            <p className="text-comfort-charcoal-500 max-w-md leading-relaxed mb-6">
-              The Kanban Command Centre for AI-Powered App Development.
-              Don&apos;t write code &mdash; direct it.
+    <footer className="bg-white border-t border-comfort-sage-100">
+      <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 py-16">
+        <div className="grid md:grid-cols-4 gap-12 mb-12">
+          {/* Brand */}
+          <div className="md:col-span-2">
+            <Link href="/" className="flex items-center gap-2.5 mb-4">
+              <Image
+                src="/paynto-logo.png"
+                alt="Paynto.AI Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 rounded-lg"
+              />
+              <span className="text-lg font-semibold text-comfort-charcoal-800">
+                Paynto<span className="text-comfort-sage-500">.</span>AI
+              </span>
+            </Link>
+            <p className="text-comfort-charcoal-400 text-sm leading-relaxed max-w-sm mb-6">
+              Build production-ready applications with visual AI agents.
+              No code required.
             </p>
-            <div className="flex items-center gap-4 mb-6">
-              <motion.div
-                className="flex items-center gap-2 text-sm text-comfort-charcoal-500"
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <motion.div
-                  className="w-2 h-2 bg-comfort-sage-500 rounded-full"
-                  animate={{ scale: [1, 1.5, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                />
-                Building the future
-              </motion.div>
-            </div>
+
             {/* Social Links */}
-            <div className="flex items-center gap-3">
-              {socialLinks.map((social, i) => (
+            <div className="flex items-center gap-2">
+              {socialLinks.map((social) => (
                 <motion.a
                   key={social.name}
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  whileHover={{ scale: 1.2, rotate: 10 }}
-                  whileTap={{ scale: 0.9 }}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="w-10 h-10 rounded-xl bg-white border border-comfort-sage-200 flex items-center justify-center text-comfort-charcoal-600 hover:text-comfort-charcoal-800 hover:bg-comfort-sage-100 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-9 h-9 rounded-lg bg-comfort-sage-50 hover:bg-comfort-sage-100 flex items-center justify-center text-comfort-charcoal-400 hover:text-comfort-charcoal-600 transition-colors duration-200"
                   aria-label={social.name}
                 >
                   {social.icon}
@@ -110,63 +100,64 @@ export default function Footer() {
             </div>
           </div>
 
+          {/* Product Links */}
           <div>
-            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Product</h3>
-            <ul className="space-y-3 text-sm">
-              <li><Link href="/generation" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Get Started</Link></li>
-              <li><Link href="/#features" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Features</Link></li>
-              <li><Link href="/#pricing" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Pricing</Link></li>
-              <li><Link href="/#how-it-works" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">How It Works</Link></li>
+            <h3 className="text-sm font-semibold text-comfort-charcoal-800 uppercase tracking-wider mb-4">
+              Product
+            </h3>
+            <ul className="space-y-3">
+              {footerLinks.product.map((link) => (
+                <li key={link.label}>
+                  <a
+                    href={link.href}
+                    onClick={(e) => handleNavClick(e, link.href)}
+                    className="text-sm text-comfort-charcoal-400 hover:text-comfort-charcoal-700 transition-colors duration-200"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
+          {/* Legal Links */}
           <div>
-            <h3 className="font-semibold text-comfort-charcoal-800 mb-4">Company</h3>
-            <ul className="space-y-3 text-sm">
-              <li><Link href="/careers" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Careers</Link></li>
-              <li><Link href="/terms" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Terms of Service</Link></li>
-              <li><Link href="/privacy" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Privacy Policy</Link></li>
-              <li><Link href="/#contact" className="text-comfort-charcoal-500 hover:text-comfort-charcoal-800 transition-colors duration-200">Contact</Link></li>
+            <h3 className="text-sm font-semibold text-comfort-charcoal-800 uppercase tracking-wider mb-4">
+              Legal
+            </h3>
+            <ul className="space-y-3">
+              {footerLinks.legal.map((link) => (
+                <li key={link.label}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-comfort-charcoal-400 hover:text-comfort-charcoal-700 transition-colors duration-200"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
 
-        {/* Fun animated divider */}
-        <div className="relative py-4 mb-4">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-comfort-sage-200" />
-          </div>
-          <div className="relative flex justify-center">
-            <motion.span
-              className="px-4 bg-comfort-sage-50 text-2xl"
-              animate={{ rotate: [0, 360] }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        {/* Bottom bar */}
+        <div className="pt-8 border-t border-comfort-sage-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <p className="text-sm text-comfort-charcoal-400">
+            &copy; {new Date().getFullYear()} Paynto.AI. All rights reserved.
+          </p>
+          <p className="text-sm text-comfort-charcoal-400">
+            Part of{' '}
+            <a
+              href="https://www.conceptionx.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-comfort-sage-600 hover:text-comfort-sage-700 transition-colors duration-200"
             >
-              ⚡
-            </motion.span>
-          </div>
+              ConceptionX
+            </a>
+          </p>
         </div>
-
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-comfort-charcoal-500">
-            &copy; 2026 Paynto.AI. All rights reserved.
-          </div>
-          <motion.div
-            className="text-sm text-comfort-charcoal-500 flex items-center gap-2"
-            whileHover={{ scale: 1.05 }}
-          >
-            <span>Made with</span>
-            <motion.span
-              animate={{ scale: [1, 1.3, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
-              ❤️
-            </motion.span>
-            <span>by AI + Humans</span>
-          </motion.div>
-        </div>
-      </motion.div>
+      </div>
     </footer>
   )
 }
-

@@ -1,130 +1,155 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { motion, useInView, AnimatePresence } from 'framer-motion'
+import { useRef, useState } from 'react'
+
+const faqs = [
+  {
+    question: "What is Paynto.AI?",
+    answer: "Paynto.AI is a visual development platform powered by AI agents. You create cards describing what you want to build, and our coordinated team of AI agents—Architect, Coder, Tester, DevOps—work together to build production-ready applications for you."
+  },
+  {
+    question: "Do I need coding experience?",
+    answer: "Not at all. The entire platform is designed for non-technical users. You describe features in plain language, and our AI handles all the technical implementation. Of course, if you do code, you'll have full access to the generated codebase."
+  },
+  {
+    question: "Is my code secure and private?",
+    answer: "Yes. Your code is yours completely. We use enterprise-grade encryption, never train on your data, and you can export your entire codebase at any time. For Enterprise customers, we also offer on-premise deployment options."
+  },
+  {
+    question: "Can I use my own API keys?",
+    answer: "Yes. Pro and higher plans allow you to bring your own API keys for AI models, giving you more control over costs and rate limits. Free tier users work with our shared infrastructure."
+  },
+  {
+    question: "What technologies do you support?",
+    answer: "We generate modern, production-ready code using React, Next.js, TypeScript, and Tailwind CSS. Our DevOps agent handles deployment to Vercel, and we're continuously adding support for more frameworks and deployment targets."
+  },
+  {
+    question: "How does the credit system work?",
+    answer: "Credits are consumed when AI agents work on your tasks. Simple tasks use fewer credits, while complex multi-step features use more. Unused credits don't roll over, but you can always upgrade your plan for more capacity."
+  },
+]
+
+function FAQItem({ faq, index, isOpen, onToggle }: {
+  faq: typeof faqs[0]
+  index: number
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay: index * 0.05, duration: 0.5 }}
+      className="border-b border-comfort-sage-200 last:border-0"
+    >
+      <button
+        onClick={onToggle}
+        className="w-full py-6 flex items-center justify-between text-left group"
+      >
+        <h3 className="text-lg font-medium text-comfort-charcoal-800 pr-8 group-hover:text-comfort-sage-700 transition-colors duration-200">
+          {faq.question}
+        </h3>
+        <motion.div
+          animate={{ rotate: isOpen ? 45 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="w-8 h-8 rounded-full bg-comfort-sage-100 flex items-center justify-center flex-shrink-0 group-hover:bg-comfort-sage-200 transition-colors duration-200"
+        >
+          <svg
+            className="w-4 h-4 text-comfort-sage-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </motion.div>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <p className="pb-6 text-comfort-charcoal-500 leading-relaxed max-w-3xl">
+              {faq.answer}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
 
 export default function FAQSection() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null)
-
-  const faqs = [
-    {
-      question: "How is this different from other AI code generators?",
-      answer: "Most AI tools help you write code faster. Paynto.AI builds complete applications from start to finish. You describe what you want, and our multi-agent system architects, codes, tests, and deploys your entire app. No coding required."
-    },
-    {
-      question: "Can I really build production apps without coding?",
-      answer: "Yes! Our AI agents handle everything from system architecture to deployment. You stay in control by reviewing progress, adjusting requirements, and approving changes. The result is production-ready code that follows best practices."
-    },
-    {
-      question: "What kind of apps can I build?",
-      answer: "You can build web applications, dashboards, SaaS products, e-commerce sites, internal tools, and more. Our agents work with React, Next.js, TypeScript, and modern web technologies. If you can describe it, we can build it."
-    },
-    {
-      question: "How does the real-time preview work?",
-      answer: "As our AI agents write code, you see your app update live in a sandboxed preview environment. You can interact with your app, test features, and see exactly what's being built — all before it's deployed."
-    },
-    {
-      question: "What if something goes wrong?",
-      answer: "Our AI automatically detects and fixes most errors. If an issue needs your input, you'll be notified and can chat directly with the agents to provide guidance. You're always in control of the final product."
-    },
-    {
-      question: "Can I export and own my code?",
-      answer: "Absolutely! You own 100% of the code we generate. Export your entire codebase anytime — it's clean, well-documented, and follows industry best practices. No vendor lock-in, ever."
-    },
-    {
-      question: "How do I deploy my app?",
-      answer: "One click. Seriously. When you're ready, click deploy and your app goes live. We handle builds, optimizations, and CDN distribution automatically. Your app is production-ready in seconds."
-    },
-    {
-      question: "What's the pricing?",
-      answer: "We offer a free tier to get started, plus paid plans for serious builders. Contact us for enterprise pricing. During early access, you'll get special founding member rates."
-    }
-  ]
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isInView = useInView(containerRef, { once: true, margin: "-100px" })
+  const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   return (
-    <section id="faq" className="py-12 md:py-16 bg-comfort-sage-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="faq" className="py-32 md:py-40 bg-comfort-sage-50 relative" ref={containerRef}>
+      <div className="max-w-4xl mx-auto px-6 sm:px-8 lg:px-12">
+        {/* Section Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-10"
+          initial={{ opacity: 0, y: 40 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center mb-16"
         >
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 text-comfort-charcoal-800 tracking-tight">
-            Questions?
+          <motion.span
+            initial={{ opacity: 0, y: 20 }}
+            animate={isInView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="inline-block text-sm font-medium tracking-[0.2em] uppercase text-comfort-sage-600 mb-4"
+          >
+            FAQ
+          </motion.span>
+          <h2 className="text-4xl sm:text-5xl font-medium text-comfort-charcoal-800 tracking-tight leading-[1.1] mb-6">
+            Questions & Answers
           </h2>
-          <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto">
+          <p className="text-xl text-comfort-charcoal-400 leading-relaxed max-w-2xl mx-auto">
             Everything you need to know about building with Paynto.AI
           </p>
         </motion.div>
 
-        <div className="space-y-4">
+        {/* FAQ Items */}
+        <div className="bg-white rounded-2xl border border-comfort-sage-200 px-8">
           {faqs.map((faq, index) => (
-            <motion.div
+            <FAQItem
               key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.05 }}
-              className="bg-comfort-sage-100 rounded-2xl overflow-hidden border border-comfort-sage-300 hover:border-comfort-sage-300 transition-colors duration-300"
-            >
-              <button
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full px-6 py-5 text-left flex items-center justify-between hover:bg-comfort-sage-200 transition-colors duration-200"
-              >
-                <h3 className="text-lg font-semibold text-comfort-charcoal-800 pr-4">
-                  {faq.question}
-                </h3>
-                <motion.svg
-                  animate={{ rotate: openIndex === index ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="w-5 h-5 text-comfort-charcoal-400 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </motion.svg>
-              </button>
-
-              <motion.div
-                initial={false}
-                animate={{
-                  height: openIndex === index ? 'auto' : 0,
-                  opacity: openIndex === index ? 1 : 0
-                }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="overflow-hidden"
-              >
-                <div className="px-6 pb-5">
-                  <p className="text-comfort-charcoal-500 leading-relaxed">
-                    {faq.answer}
-                  </p>
-                </div>
-              </motion.div>
-            </motion.div>
+              faq={faq}
+              index={index}
+              isOpen={openIndex === index}
+              onToggle={() => setOpenIndex(openIndex === index ? null : index)}
+            />
           ))}
         </div>
 
+        {/* Contact CTA */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.4 }}
-          className="mt-12 text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="text-center mt-12"
         >
-          <p className="text-comfort-charcoal-500 mb-4">
-            More questions? We&apos;d love to chat.
+          <p className="text-comfort-charcoal-400 mb-4">
+            Still have questions?
           </p>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
-            className="px-6 py-3 bg-comfort-sage-200 hover:bg-comfort-sage-300 text-comfort-charcoal-800 font-medium rounded-xl transition-colors duration-300"
+          <a
+            href="#contact"
+            className="inline-flex items-center gap-2 text-comfort-sage-600 font-medium hover:text-comfort-sage-700 transition-colors duration-200"
           >
-            Contact Us
-          </motion.button>
+            Get in touch
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+            </svg>
+          </a>
         </motion.div>
       </div>
     </section>

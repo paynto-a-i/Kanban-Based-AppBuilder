@@ -312,10 +312,10 @@ export default function MockUI() {
             Interactive Demo
           </div>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-5 text-comfort-charcoal-800 tracking-tight">
-            Your Command Centre
+            Create anything with AI agents
           </h2>
           <p className="text-lg text-comfort-charcoal-500 max-w-2xl mx-auto leading-relaxed">
-            Drag cards between columns, click to select, and watch live updates
+            Drag cards between columns, click to select, and watch your app come to life
           </p>
         </motion.div>
 
