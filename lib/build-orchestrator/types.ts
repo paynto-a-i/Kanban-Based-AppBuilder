@@ -91,6 +91,9 @@ export type BuildEvent =
       ticketId: string;
       generatedCode?: string;
       appliedFiles?: string[];
+      createdFiles?: string[];
+      modifiedFiles?: string[];
+      baseVersion?: number;
       applyDurationMs?: number;
       reviewDurationMs?: number;
       validationDurationMs?: number;

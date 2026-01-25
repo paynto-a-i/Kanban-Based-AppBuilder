@@ -50,7 +50,14 @@ ONLY return valid JSON.`;
 
 interface RefactorRequest {
   sandboxId: string;
-  affectedFiles: string[];
+  /**
+   * Files to analyze and refactor. (Preferred key.)
+   */
+  affectedFiles?: string[];
+  /**
+   * Backward-compatible alias for affectedFiles.
+   */
+  deletedFiles?: string[];
   ticketId?: string;
 }
 
@@ -66,6 +73,44 @@ interface RefactorResult {
   summary: string;
 }
 
+function extractLikelyFilePathsFromText(text: string): string[] {
+  const t = String(text || '');
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  // Matches common build error formats:
+  // - src/foo/bar.jsx:12:34
+  // - ./src/foo/bar.tsx(12,34)
+  // - /vercel/sandbox/src/foo/bar.css:12:34
+  const re = /(?:^|[\s(])([A-Za-z0-9_./-]+?\.(?:tsx|ts|jsx|js|css|json))(?:[:)\s]|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) {
+    let p = (m[1] || '').trim();
+    if (!p) continue;
+
+    // Normalize sandbox absolute prefixes and relative noise.
+    p = p
+      .replace(/^\/vercel\/sandbox\//, '')
+      .replace(/^\/home\/user\/app\//, '')
+      .replace(/^\.\//, '')
+      .replace(/\\/g, '/');
+
+    if (!p) continue;
+    if (p.includes('node_modules/')) continue;
+    if (!p.startsWith('src/') && !p.startsWith('app/') && !p.startsWith('components/') && !p.startsWith('pages/')) {
+      // Keep only likely project-relative files.
+      continue;
+    }
+
+    if (!seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  }
+
+  return out.slice(0, 12);
+}
+
 export async function POST(request: NextRequest) {
   const validation = validateAIProvider();
   if (!validation.valid) {
@@ -74,13 +119,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: RefactorRequest = await request.json();
-    const { sandboxId, affectedFiles, ticketId } = body;
+    const { sandboxId, ticketId } = body;
+    const seedFiles =
+      (Array.isArray(body.affectedFiles) && body.affectedFiles.length > 0)
+        ? body.affectedFiles
+        : (Array.isArray(body.deletedFiles) ? body.deletedFiles : []);
 
     if (!sandboxId) {
       return NextResponse.json({ error: 'Sandbox ID required' }, { status: 400 });
     }
 
-    if (!affectedFiles || affectedFiles.length === 0) {
+    if (!seedFiles || seedFiles.length === 0) {
       return NextResponse.json({ success: true, changes: [], summary: 'No files to refactor' });
     }
 
@@ -89,8 +138,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No active sandbox found' }, { status: 400 });
     }
 
+    // Best-effort: run a quick build to discover additional failing importer files,
+    // so we can refactor the *actual* breakpoints (not just the deleted files themselves).
+    let discoveredFromDiagnostics: string[] = [];
+    try {
+      const diag = await provider.runCommand('npm run build');
+      discoveredFromDiagnostics = extractLikelyFilePathsFromText(`${diag.stdout}\n${diag.stderr}`);
+    } catch {
+      // ignore diagnostics failures
+    }
+
+    const allAffectedFiles = Array.from(
+      new Set(
+        [...seedFiles, ...discoveredFromDiagnostics]
+          .map(p => String(p || '').trim())
+          .filter(Boolean)
+      )
+    ).slice(0, 25);
+
     const fileContents: Array<{ path: string; content: string }> = [];
-    for (const filePath of affectedFiles) {
+    for (const filePath of allAffectedFiles) {
       try {
         const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
         const content = await provider.readFile(normalizedPath);
@@ -114,7 +181,13 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: AUTO_REFACTOR_PROMPT },
         {
           role: 'user',
-          content: `Analyze and refactor the following files after soft-deletion${ticketId ? ` (Ticket: ${ticketId})` : ''}:\n\n${filesContent}`,
+          content:
+            `Analyze and refactor the following files after soft-deletion${ticketId ? ` (Ticket: ${ticketId})` : ''}.\n\n` +
+            `Soft-deleted (seed) files:\n${seedFiles.map(f => `- ${f}`).join('\n')}\n\n` +
+            (discoveredFromDiagnostics.length > 0
+              ? `Build/typecheck diagnostics referenced these files:\n${discoveredFromDiagnostics.map(f => `- ${f}`).join('\n')}\n\n`
+              : '') +
+            `Files (full contents):\n\n${filesContent}`,
         },
       ],
       temperature: 0.2,
@@ -151,8 +224,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      analyzedFiles: affectedFiles.length,
+      analyzedFiles: allAffectedFiles.length,
       changesApplied: appliedChanges.length,
+      filesModified: Array.from(new Set(appliedChanges.map(c => c.file))).sort(),
       changes: appliedChanges,
       summary: result.summary,
     });

@@ -141,6 +141,18 @@ export default function KanbanTicketModal({
                       <span className="text-gray-500">Actual Files:</span>
                       <span className="ml-2 font-medium">{ticket.actualFiles.length}</span>
                     </div>
+                    {typeof ticket.baseVersion === 'number' && (
+                      <div>
+                        <span className="text-gray-500">Base snapshot:</span>
+                        <span className="ml-2 font-medium">v{ticket.baseVersion}</span>
+                      </div>
+                    )}
+                    {ticket.buildRunId && (
+                      <div>
+                        <span className="text-gray-500">Build run:</span>
+                        <span className="ml-2 font-medium font-mono">{String(ticket.buildRunId).slice(0, 12)}</span>
+                      </div>
+                    )}
                     {ticket.duration && (
                       <div>
                         <span className="text-gray-500">Duration:</span>
@@ -155,18 +167,69 @@ export default function KanbanTicketModal({
                     )}
                   </div>
 
-                  {ticket.actualFiles.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Generated Files</h4>
-                      <div className="space-y-1">
-                        {ticket.actualFiles.map(file => (
-                          <div key={file} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
-                            {file}
+                  {(() => {
+                    const created = Array.isArray(ticket.createdFiles) ? ticket.createdFiles : [];
+                    const modified = Array.isArray(ticket.modifiedFiles) ? ticket.modifiedFiles : [];
+                    const hasTrace = created.length + modified.length > 0;
+
+                    if (hasTrace) {
+                      return (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Files changed</h4>
+                          <div className="space-y-3">
+                            {created.length > 0 && (
+                              <div>
+                                <div className="text-xs font-medium text-green-700 mb-1">
+                                  Created ({created.length})
+                                </div>
+                                <div className="space-y-1">
+                                  {created.map(file => (
+                                    <div key={`c-${file}`} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
+                                      {file}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {modified.length > 0 && (
+                              <div>
+                                <div className="text-xs font-medium text-amber-700 mb-1">
+                                  Modified ({modified.length})
+                                </div>
+                                <div className="space-y-1">
+                                  {modified.map(file => (
+                                    <div key={`m-${file}`} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
+                                      {file}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                          <p className="mt-3 text-[11px] text-gray-500">
+                            Reverts will soft-delete created files by default. Modified/shared files may require a follow-up cleanup ticket.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    if (ticket.actualFiles.length > 0) {
+                      return (
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Generated Files</h4>
+                          <div className="space-y-1">
+                            {ticket.actualFiles.map(file => (
+                              <div key={file} className="text-sm text-gray-600 font-mono bg-gray-50 px-2 py-1 rounded">
+                                {file}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })()}
 
                   {ticket.dependencies.length > 0 && (
                     <div>

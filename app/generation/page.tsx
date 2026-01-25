@@ -37,6 +37,7 @@ import { UserMenu, LoginButton } from '@/components/auth';
 import UIOptionsSelector, { UIOption } from '@/components/ui-options/UIOptionsSelector';
 import { useBugbot, ReviewResult } from '@/hooks/useBugbot';
 import { CodeReviewPanel, RegressionWarningModal } from '@/components/kanban';
+import TicketEditor from '@/components/kanban/TicketEditor';
 import { useSoftDelete } from '@/hooks/useSoftDelete';
 import { useAutoRefactor } from '@/hooks/useAutoRefactor';
 import { useGitHubImport } from '@/hooks/useGitHubImport';
@@ -81,6 +82,20 @@ interface ChatMessage {
   };
 }
 
+type ChatTicketDraft = {
+  tempId: string;
+  title: string;
+  description: string;
+  type: KanbanTicketType['type'];
+  priority: KanbanTicketType['priority'];
+  complexity: KanbanTicketType['complexity'];
+  estimatedFiles: number;
+  dependencies: string[];
+  blueprintRefs?: KanbanTicketType['blueprintRefs'];
+  requiresInput?: boolean;
+  inputRequests?: KanbanTicketType['inputRequests'];
+};
+
 interface ScrapeData {
   success: boolean;
   content?: string;
@@ -103,6 +118,17 @@ function AISandboxPage() {
   const [promptInput, setPromptInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
+  const [isCreatingTicketsFromChat, setIsCreatingTicketsFromChat] = useState(false);
+  const [chatTicketCreateError, setChatTicketCreateError] = useState<string | null>(null);
+  const [pendingChatTicketDrafts, setPendingChatTicketDrafts] = useState<ChatTicketDraft[] | null>(null);
+  const [ticketEditorDraft, setTicketEditorDraft] = useState<Partial<KanbanTicketType> | null>(null);
+  const [verifyingTicketId, setVerifyingTicketId] = useState<string | null>(null);
+  const [pendingVerifySplit, setPendingVerifySplit] = useState<{
+    ticketId: string;
+    primaryTempId: string;
+    drafts: ChatTicketDraft[];
+    rationale?: string;
+  } | null>(null);
   const [aiEnabled] = useState(true);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -2140,6 +2166,14 @@ Apply these design specifications consistently across all components.`;
       return;
     }
 
+    // Hybrid DnD: dropping a backlog ticket into "Generating" means "build this ticket now".
+    // The server BuildRun will emit the true ticket_status progression via SSE.
+    if (ticket.status === 'backlog' && newStatus === 'generating') {
+      addChatMessage(`▶️ Building ticket: ${ticket.title}`, 'system');
+      void handleStartKanbanBuild({ onlyTicketId: ticketId });
+      return;
+    }
+
     if (isRegressionMove(ticket.status, newStatus) && ticket.actualFiles.length > 0) {
       setRegressionWarning({
         isOpen: true,
@@ -2167,12 +2201,32 @@ Apply these design specifications consistently across all components.`;
       return;
     }
 
+    // Snapshot the plan before reverting so users can restore the pre-revert state.
+    try {
+      await planVersions.createSnapshot({
+        source: 'manual',
+        name: `🧯 Pre-revert: ${ticket.title}`,
+        description: `Snapshot captured before reverting ${ticket.title} (${ticket.id}) from ${ticket.status} → ${regressionWarning.newStatus}`,
+        tickets: kanban.tickets,
+        planIdOverride: kanban.plan?.id || null,
+      });
+    } catch {
+      // Best-effort only (local fallback can also fail in private browsing, etc.)
+    }
+
+    // Safety-first revert: if we know which files were created vs modified, prefer soft-deleting
+    // created files only. (Modified/shared files are more likely to contain unrelated code.)
+    const softDeleteTargets =
+      Array.isArray(ticket.createdFiles) && ticket.createdFiles.length > 0
+        ? ticket.createdFiles
+        : ticket.actualFiles;
+
     addChatMessage(`🔄 Reverting ticket: ${ticket.title}...`, 'system');
 
     const result = await softDelete.softDeleteTicketCode(sandboxData.sandboxId, {
       id: ticket.id,
       title: ticket.title,
-      actualFiles: ticket.actualFiles,
+      actualFiles: softDeleteTargets,
     });
 
     if (result && result.success) {
@@ -2193,6 +2247,35 @@ Apply these design specifications consistently across all components.`;
     } else {
       addChatMessage(`⚠️ Soft delete had issues, but proceeding with move.`, 'system');
       kanban.moveTicket(regressionWarning.ticketId, regressionWarning.newStatus);
+    }
+
+    // Snapshot the plan after reverting so users can restore the post-revert state as well.
+    try {
+      const nextTickets = kanban.tickets.map(t =>
+        t.id === regressionWarning.ticketId
+          ? (() => {
+            const next = { ...t, status: regressionWarning.newStatus };
+            if (regressionWarning.newStatus === 'backlog') {
+              (next as any).progress = 0;
+              (next as any).error = undefined;
+              (next as any).warnings = undefined;
+            }
+            if (regressionWarning.newStatus === 'skipped') {
+              (next as any).progress = 0;
+            }
+            return next as any;
+          })()
+          : t
+      );
+      await planVersions.createSnapshot({
+        source: 'manual',
+        name: `🧹 Post-revert: ${ticket.title}`,
+        description: `Snapshot captured after reverting ${ticket.title} (${ticket.id}) to ${regressionWarning.newStatus}`,
+        tickets: nextTickets,
+        planIdOverride: kanban.plan?.id || null,
+      });
+    } catch {
+      // Best-effort only
     }
 
     setRegressionWarning(null);
@@ -2842,6 +2925,18 @@ Requirements:
         }
         if (Array.isArray(evt.appliedFiles) && evt.appliedFiles.length > 0) {
           kanban.updateTicketFiles(evt.ticketId, evt.appliedFiles);
+        }
+        if (
+          Array.isArray((evt as any).createdFiles) ||
+          Array.isArray((evt as any).modifiedFiles) ||
+          typeof (evt as any).baseVersion === 'number'
+        ) {
+          kanban.editTicket(evt.ticketId, {
+            createdFiles: Array.isArray((evt as any).createdFiles) ? (evt as any).createdFiles : undefined,
+            modifiedFiles: Array.isArray((evt as any).modifiedFiles) ? (evt as any).modifiedFiles : undefined,
+            baseVersion: typeof (evt as any).baseVersion === 'number' ? (evt as any).baseVersion : undefined,
+            buildRunId: typeof (evt as any).runId === 'string' ? (evt as any).runId : undefined,
+          } as any);
         }
         if (typeof evt.applyDurationMs === 'number') {
           addChatMessage(`⏱️ Apply: ${(evt.applyDurationMs / 1000).toFixed(1)}s`, 'system');
@@ -5598,6 +5693,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
           onPauseBuild={pauseServerBuildRun}
           onResumeBuild={resumeServerBuildRun}
           onEditTicket={kanban.editTicket}
+          onVerifyTicket={handleVerifyTicket}
           onSkipTicket={kanban.skipTicket}
           onRetryTicket={kanban.retryTicket}
           onDeleteTicket={kanban.deleteTicket}
@@ -5634,6 +5730,7 @@ Tip: I automatically detect and install npm packages from your code imports (lik
               onPauseBuild={pauseServerBuildRun}
               onResumeBuild={resumeServerBuildRun}
               onEditTicket={kanban.editTicket}
+              onVerifyTicket={handleVerifyTicket}
               onSkipTicket={kanban.skipTicket}
               onRetryTicket={kanban.retryTicket}
               onDeleteTicket={kanban.deleteTicket}
@@ -5706,6 +5803,321 @@ Tip: I automatically detect and install npm packages from your code imports (lik
     }
     return null;
   };
+
+  const requestTicketsFromChat = useCallback(async (rawMessage: string) => {
+    const message = String(rawMessage || '').trim();
+    if (!message) return;
+
+    setChatTicketCreateError(null);
+    setIsCreatingTicketsFromChat(true);
+
+    try {
+      const existingTickets = kanban.tickets.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        type: t.type,
+        status: t.status,
+      }));
+
+      const blueprint = (kanban.plan as any)?.blueprint;
+      const uiStyle = (kanban.plan as any)?.uiStyle;
+
+      const res = await fetch('/api/tickets/from-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          blueprint,
+          uiStyle,
+          existingTickets,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Ticket generation failed (HTTP ${res.status})`);
+      }
+
+      const drafts = Array.isArray(data?.tickets) ? (data.tickets as ChatTicketDraft[]) : [];
+      if (drafts.length === 0) {
+        throw new Error('No tickets returned');
+      }
+
+      // If a single ticket is returned, open TicketEditor prefilled (per plan).
+      if (drafts.length === 1) {
+        const d = drafts[0] as ChatTicketDraft;
+        const requiresInput = Boolean(d?.requiresInput) || (Array.isArray(d?.inputRequests) && d.inputRequests.length > 0);
+        setPendingChatTicketDrafts(null);
+        setTicketEditorDraft({
+          title: d.title,
+          description: d.description,
+          type: d.type,
+          priority: d.priority,
+          complexity: d.complexity,
+          estimatedFiles: d.estimatedFiles,
+          dependencies: Array.isArray(d.dependencies) ? d.dependencies : [],
+          requiresInput: requiresInput,
+          inputRequests: d.inputRequests,
+          status: requiresInput ? 'awaiting_input' : 'backlog',
+          blueprintRefs: d.blueprintRefs,
+        });
+        return;
+      }
+
+      // Multi-ticket: show preview modal and let user confirm insertion.
+      setTicketEditorDraft(null);
+      setPendingChatTicketDrafts(drafts);
+    } catch (e: any) {
+      setChatTicketCreateError(e?.message || 'Failed to generate ticket(s)');
+    } finally {
+      setIsCreatingTicketsFromChat(false);
+    }
+  }, [kanban]);
+
+  const addChatTicketDraftsToBoard = useCallback((drafts: ChatTicketDraft[]) => {
+    const safeDrafts = Array.isArray(drafts) ? drafts.filter(Boolean) : [];
+    if (safeDrafts.length === 0) return;
+
+    const existingIds = new Set(kanban.tickets.map(t => t.id));
+    const tempIds = new Set(safeDrafts.map(d => d.tempId));
+    const tempIdToNewId = new Map<string, string>();
+
+    // Pass 1: add all tickets (deps resolved later).
+    for (const d of safeDrafts) {
+      const requiresInput =
+        Boolean(d?.requiresInput) || (Array.isArray(d?.inputRequests) && d.inputRequests.length > 0);
+      const created = kanban.addTicket({
+        title: d.title,
+        description: d.description,
+        type: d.type,
+        status: requiresInput ? 'awaiting_input' : 'backlog',
+        priority: d.priority,
+        complexity: d.complexity,
+        estimatedFiles: d.estimatedFiles,
+        actualFiles: [],
+        dependencies: [],
+        blockedBy: [],
+        progress: 0,
+        previewAvailable: false,
+        retryCount: 0,
+        warnings: [],
+        userModified: true,
+        requiresInput: requiresInput || undefined,
+        inputRequests: d.inputRequests,
+        blueprintRefs: d.blueprintRefs,
+      });
+
+      tempIdToNewId.set(d.tempId, created.id);
+      existingIds.add(created.id);
+    }
+
+    // Pass 2: wire dependencies (support tempId references).
+    for (const d of safeDrafts) {
+      const newId = tempIdToNewId.get(d.tempId);
+      if (!newId) continue;
+
+      const deps = Array.isArray(d.dependencies) ? d.dependencies : [];
+      const mapped = deps
+        .map(dep => {
+          const depKey = String(dep || '').trim();
+          if (!depKey) return null;
+          // Map intra-response dependencies (tempIds) → real ids.
+          if (tempIds.has(depKey)) return tempIdToNewId.get(depKey) || null;
+          // Keep existing ticket ids.
+          return existingIds.has(depKey) ? depKey : null;
+        })
+        .filter(Boolean) as string[];
+
+      if (mapped.length > 0) {
+        kanban.editTicket(newId, { dependencies: mapped });
+      }
+    }
+
+    addChatMessage(`📌 Added ${safeDrafts.length} ticket(s) to your board.`, 'system');
+  }, [kanban, addChatMessage]);
+
+  const handleVerifyTicket = useCallback(async (ticketId: string) => {
+    const ticket = kanban.tickets.find(t => t.id === ticketId);
+    if (!ticket) return;
+
+    if (!aiEnabled) {
+      addChatMessage('AI is disabled. Please enable it first.', 'system');
+      return;
+    }
+
+    setVerifyingTicketId(ticketId);
+    addChatMessage(`🔎 Verifying ticket: ${ticket.title}`, 'system');
+
+    try {
+      const existingTickets = kanban.tickets.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+      }));
+
+      const blueprint = (kanban.plan as any)?.blueprint;
+      const uiStyle = (kanban.plan as any)?.uiStyle;
+
+      const res = await fetch('/api/tickets/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket: {
+            id: ticket.id,
+            title: ticket.title,
+            description: ticket.description,
+            type: ticket.type,
+            priority: ticket.priority,
+            complexity: ticket.complexity,
+            estimatedFiles: ticket.estimatedFiles,
+            dependencies: ticket.dependencies,
+          },
+          blueprint,
+          uiStyle,
+          existingTickets,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || `Ticket verify failed (HTTP ${res.status})`);
+      }
+
+      if (data?.decision === 'ok') {
+        const updates = data?.updates && typeof data.updates === 'object' ? data.updates : {};
+        const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+        const requiresInput =
+          Boolean((updates as any)?.requiresInput) ||
+          (Array.isArray((updates as any)?.inputRequests) && (updates as any).inputRequests.length > 0);
+
+        kanban.editTicket(ticketId, {
+          ...(updates as any),
+          ...(requiresInput ? { status: 'awaiting_input', requiresInput: true } : {}),
+          ...(warnings.length > 0 ? { warnings } : {}),
+        } as any);
+
+        addChatMessage(`✅ Ticket verified${warnings.length > 0 ? ' (with warnings)' : ''}: ${ticket.title}`, 'system');
+        return;
+      }
+
+      if (data?.decision === 'split') {
+        const drafts = Array.isArray(data?.tickets) ? (data.tickets as ChatTicketDraft[]) : [];
+        const primaryTempId = String(data?.primaryTempId || '').trim();
+        if (drafts.length < 2 || !primaryTempId || !drafts.some(d => d.tempId === primaryTempId)) {
+          throw new Error('Split response was invalid (missing primaryTempId or tickets)');
+        }
+
+        setPendingVerifySplit({
+          ticketId,
+          primaryTempId,
+          drafts,
+          rationale: typeof data?.rationale === 'string' ? data.rationale : undefined,
+        });
+        return;
+      }
+
+      if (data?.decision === 'reject') {
+        const reason = String(data?.reason || 'Ticket not eligible').trim();
+        addChatMessage(`⚠️ Ticket not eligible: ${reason}`, 'system');
+        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+        if (suggestions.length > 0) {
+          addChatMessage(`Suggestions:\n${suggestions.map((s: string) => `- ${s}`).join('\n')}`, 'system');
+        }
+        return;
+      }
+
+      throw new Error('Unknown verify decision');
+    } catch (e: any) {
+      addChatMessage(`❌ Ticket verify failed: ${e?.message || 'unknown error'}`, 'error');
+    } finally {
+      setVerifyingTicketId(prev => (prev === ticketId ? null : prev));
+    }
+  }, [aiEnabled, kanban, addChatMessage]);
+
+  const applyVerifySplitToBoard = useCallback((payload: {
+    ticketId: string;
+    primaryTempId: string;
+    drafts: ChatTicketDraft[];
+  }) => {
+    const ticketId = payload.ticketId;
+    const primaryTempId = payload.primaryTempId;
+    const drafts = Array.isArray(payload.drafts) ? payload.drafts : [];
+    if (!ticketId || !primaryTempId || drafts.length < 2) return;
+
+    const tempIds = new Set(drafts.map(d => d.tempId));
+    const tempIdToRealId = new Map<string, string>();
+    tempIdToRealId.set(primaryTempId, ticketId);
+
+    const existingIds = new Set(kanban.tickets.map(t => t.id));
+    existingIds.add(ticketId);
+
+    // Pass 1: update the existing ticket to match the primary draft, and add the rest.
+    for (const d of drafts) {
+      const requiresInput =
+        Boolean(d?.requiresInput) || (Array.isArray(d?.inputRequests) && d.inputRequests.length > 0);
+
+      if (d.tempId === primaryTempId) {
+        kanban.editTicket(ticketId, {
+          title: d.title,
+          description: d.description,
+          type: d.type,
+          priority: d.priority,
+          complexity: d.complexity,
+          estimatedFiles: d.estimatedFiles,
+          status: requiresInput ? 'awaiting_input' : 'backlog',
+          requiresInput: requiresInput || undefined,
+          inputRequests: d.inputRequests,
+          blueprintRefs: d.blueprintRefs,
+        } as any);
+        continue;
+      }
+
+      const created = kanban.addTicket({
+        title: d.title,
+        description: d.description,
+        type: d.type,
+        status: requiresInput ? 'awaiting_input' : 'backlog',
+        priority: d.priority,
+        complexity: d.complexity,
+        estimatedFiles: d.estimatedFiles,
+        actualFiles: [],
+        dependencies: [],
+        blockedBy: [],
+        progress: 0,
+        previewAvailable: false,
+        retryCount: 0,
+        warnings: [],
+        userModified: true,
+        requiresInput: requiresInput || undefined,
+        inputRequests: d.inputRequests,
+        blueprintRefs: d.blueprintRefs,
+      });
+
+      tempIdToRealId.set(d.tempId, created.id);
+      existingIds.add(created.id);
+    }
+
+    // Pass 2: wire dependencies for all involved tickets.
+    for (const d of drafts) {
+      const targetId = tempIdToRealId.get(d.tempId);
+      if (!targetId) continue;
+
+      const deps = Array.isArray(d.dependencies) ? d.dependencies : [];
+      const mapped = deps
+        .map(dep => {
+          const depKey = String(dep || '').trim();
+          if (!depKey) return null;
+          if (tempIds.has(depKey)) return tempIdToRealId.get(depKey) || null;
+          return existingIds.has(depKey) ? depKey : null;
+        })
+        .filter(Boolean) as string[];
+
+      kanban.editTicket(targetId, { dependencies: mapped });
+    }
+
+    addChatMessage(`🧩 Ticket split into ${drafts.length} ticket(s).`, 'system');
+  }, [kanban, addChatMessage]);
 
   const sendChatMessage = async () => {
     const message = aiChatInput.trim();
@@ -8208,6 +8620,28 @@ Focus on the key sections and content, making it clean and modern.`;
 
             {hasInitialSubmission && (
               <div className="p-4 border-t border-border bg-background-base">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="min-w-0">
+                    {chatTicketCreateError && (
+                      <div className="text-xs text-red-600 truncate" title={chatTicketCreateError}>
+                        {chatTicketCreateError}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void requestTicketsFromChat(aiChatInput)}
+                    disabled={!aiChatInput.trim() || isCreatingTicketsFromChat}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      !aiChatInput.trim() || isCreatingTicketsFromChat
+                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
+                    title="Generate Kanban ticket(s) from this message"
+                  >
+                    {isCreatingTicketsFromChat ? 'Creating…' : 'Create ticket'}
+                  </button>
+                </div>
                 <HeroInput
                   value={aiChatInput}
                   onChange={setAiChatInput}
@@ -8517,6 +8951,174 @@ Focus on the key sections and content, making it clean and modern.`;
             onConfirm={handleRegressionConfirm}
             onCancel={handleRegressionCancel}
           />
+        )}
+
+        {/* Create ticket(s) from chat */}
+        {ticketEditorDraft && (
+          <TicketEditor
+            initialData={ticketEditorDraft}
+            existingTickets={kanban.tickets}
+            onCancel={() => setTicketEditorDraft(null)}
+            onSave={(ticket) => {
+              const created = kanban.addTicket(ticket);
+              addChatMessage(`📌 Ticket added: ${created.title}`, 'system');
+              setTicketEditorDraft(null);
+            }}
+          />
+        )}
+
+        {pendingChatTicketDrafts && pendingChatTicketDrafts.length > 1 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900 truncate">Proposed tickets</div>
+                  <div className="text-xs text-gray-500 truncate">
+                    Review and add {pendingChatTicketDrafts.length} ticket(s) to the board
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPendingChatTicketDrafts(null)}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-600"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3">
+                {pendingChatTicketDrafts.map((t, idx) => (
+                  <div key={`${t.tempId}-${idx}`} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{t.title}</div>
+                        <div className="text-xs text-gray-600 mt-1 line-clamp-2">{t.description}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-600">
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.type}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.priority}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.complexity}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.estimatedFiles} files</span>
+                          {Array.isArray(t.dependencies) && t.dependencies.length > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-gray-100">{t.dependencies.length} deps</span>
+                          )}
+                          {(t.requiresInput || (Array.isArray(t.inputRequests) && t.inputRequests.length > 0)) && (
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">needs input</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-mono">#{idx + 1}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setPendingChatTicketDrafts(null)}
+                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    addChatTicketDraftsToBoard(pendingChatTicketDrafts);
+                    setPendingChatTicketDrafts(null);
+                  }}
+                  className="px-4 py-2 text-sm bg-comfort-sage-600 text-white rounded-md hover:bg-comfort-sage-500 transition-colors"
+                >
+                  Add tickets
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Verify & split backlog ticket */}
+        {pendingVerifySplit && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900 truncate">Split ticket into subtasks?</div>
+                  <div className="text-xs text-gray-500 truncate">
+                    This will update the current ticket and add {pendingVerifySplit.drafts.length - 1} new ticket(s)
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPendingVerifySplit(null)}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-600"
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3">
+                {pendingVerifySplit.rationale && (
+                  <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap">
+                    {pendingVerifySplit.rationale}
+                  </div>
+                )}
+                {pendingVerifySplit.drafts.map((t, idx) => (
+                  <div
+                    key={`${t.tempId}-${idx}`}
+                    className={`border rounded-lg p-3 ${
+                      t.tempId === pendingVerifySplit.primaryTempId ? 'border-comfort-sage-300 bg-comfort-sage-50' : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {t.title}{' '}
+                          {t.tempId === pendingVerifySplit.primaryTempId && (
+                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-comfort-sage-600 text-white">
+                              replaces current
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1 line-clamp-2">{t.description}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-600">
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.type}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.priority}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.complexity}</span>
+                          <span className="px-2 py-0.5 rounded bg-gray-100">{t.estimatedFiles} files</span>
+                          {Array.isArray(t.dependencies) && t.dependencies.length > 0 && (
+                            <span className="px-2 py-0.5 rounded bg-gray-100">{t.dependencies.length} deps</span>
+                          )}
+                          {(t.requiresInput || (Array.isArray(t.inputRequests) && t.inputRequests.length > 0)) && (
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">needs input</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-mono">#{idx + 1}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setPendingVerifySplit(null)}
+                  className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    applyVerifySplitToBoard({
+                      ticketId: pendingVerifySplit.ticketId,
+                      primaryTempId: pendingVerifySplit.primaryTempId,
+                      drafts: pendingVerifySplit.drafts,
+                    });
+                    setPendingVerifySplit(null);
+                  }}
+                  className="px-4 py-2 text-sm bg-comfort-sage-600 text-white rounded-md hover:bg-comfort-sage-500 transition-colors"
+                >
+                  Apply split
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Deploy Modal */}

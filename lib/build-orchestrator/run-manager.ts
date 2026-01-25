@@ -1299,9 +1299,16 @@ export class BuildRunManager {
     const appliedFiles = Object.keys(patchFiles).sort();
     const patchCode = buildFileBlocks(patchFiles);
 
+    const baseSnapshot = state.snapshotsByVersion.get(baseVersion) || {};
+    const createdFiles = appliedFiles.filter(p => !(p in baseSnapshot));
+    const modifiedFiles = appliedFiles.filter(p => (p in baseSnapshot));
+
     run.tickets = updateTicket(run.tickets, ticketId, {
       generatedCode: patchCode,
       actualFiles: appliedFiles,
+      createdFiles,
+      modifiedFiles,
+      baseVersion,
       previewAvailable: false,
     } as any);
 
@@ -1312,6 +1319,9 @@ export class BuildRunManager {
       ticketId,
       generatedCode: patchCode,
       appliedFiles,
+      createdFiles,
+      modifiedFiles,
+      baseVersion,
     });
 
     if (!skipPrReview) {
@@ -1353,7 +1363,7 @@ export class BuildRunManager {
       throw new Error('Missing baseUrl for BuildRun (cannot call internal APIs)');
     }
 
-    let patchFiles = { ...patch.patchFiles };
+    const patchFiles = { ...patch.patchFiles };
     let patchCode = patch.patchCode;
     let appliedFiles = patch.appliedFiles.slice();
 
@@ -1438,9 +1448,16 @@ export class BuildRunManager {
       appliedFiles = Object.keys(patchFiles).sort();
       patchCode = buildFileBlocks(patchFiles);
 
+      const baseSnapshot = state.snapshotsByVersion.get(patch.baseVersion) || {};
+      const createdFiles = appliedFiles.filter(p => !(p in baseSnapshot));
+      const modifiedFiles = appliedFiles.filter(p => (p in baseSnapshot));
+
       run.tickets = updateTicket(run.tickets, patch.ticketId, {
         generatedCode: patchCode,
         actualFiles: appliedFiles,
+        createdFiles,
+        modifiedFiles,
+        baseVersion: patch.baseVersion,
         previewAvailable: false,
       } as any);
 
@@ -1451,6 +1468,9 @@ export class BuildRunManager {
         ticketId: patch.ticketId,
         generatedCode: patchCode,
         appliedFiles,
+        createdFiles,
+        modifiedFiles,
+        baseVersion: patch.baseVersion,
       });
 
       currentReview = await this.reviewCode(baseUrl, patch.ticketId, ticket.title, extractFileBlocks(patchCode));
@@ -1462,6 +1482,7 @@ export class BuildRunManager {
       runId,
       at: now(),
       ticketId: patch.ticketId,
+      baseVersion: patch.baseVersion,
       reviewDurationMs: reviewMs,
       reviewIssuesCount: currentReview?.issues?.length ?? 0,
     });
@@ -1647,9 +1668,20 @@ export class BuildRunManager {
     let patchFiles = await this.captureFilesFromSandbox(sandboxId, appliedFiles);
     let patchCode = buildFileBlocks(patchFiles);
 
+    const state = this.internalState.get(runId);
+    const baseSnapshot =
+      state && typeof baseVersion === 'number'
+        ? (state.snapshotsByVersion.get(baseVersion) || {})
+        : (state?.snapshotsByVersion.get(state?.snapshotVersion ?? 0) || {});
+    const createdFiles = appliedFiles.filter(p => !(p in baseSnapshot));
+    const modifiedFiles = appliedFiles.filter(p => (p in baseSnapshot));
+
     run.tickets = updateTicket(run.tickets, ticketId, {
       generatedCode: patchCode,
       actualFiles: appliedFiles,
+      createdFiles,
+      modifiedFiles,
+      baseVersion,
       // Only mark preview available after the merge applies to the integration sandbox.
       previewAvailable: isWorkerBranch ? false : true,
     } as any);
@@ -1661,6 +1693,9 @@ export class BuildRunManager {
       ticketId,
       generatedCode: patchCode,
       appliedFiles,
+      createdFiles,
+      modifiedFiles,
+      baseVersion,
       applyDurationMs: applyRes.durationMs,
     });
 
@@ -1739,9 +1774,15 @@ export class BuildRunManager {
       patchFiles = await this.captureFilesFromSandbox(sandboxId, appliedFiles);
       patchCode = buildFileBlocks(patchFiles);
 
+      const createdFilesAfterFix = appliedFiles.filter(p => !(p in baseSnapshot));
+      const modifiedFilesAfterFix = appliedFiles.filter(p => (p in baseSnapshot));
+
       run.tickets = updateTicket(run.tickets, ticketId, {
         generatedCode: patchCode,
         actualFiles: appliedFiles,
+        createdFiles: createdFilesAfterFix,
+        modifiedFiles: modifiedFilesAfterFix,
+        baseVersion,
         previewAvailable: isWorkerBranch ? false : true,
       } as any);
 
@@ -1752,6 +1793,9 @@ export class BuildRunManager {
         ticketId,
         generatedCode: patchCode,
         appliedFiles,
+        createdFiles: createdFilesAfterFix,
+        modifiedFiles: modifiedFilesAfterFix,
+        baseVersion,
       });
 
       currentReview = await this.reviewCode(baseUrl, ticketId, ticket.title, extractFileBlocks(patchCode));
@@ -1763,6 +1807,7 @@ export class BuildRunManager {
       runId,
       at: now(),
       ticketId,
+      baseVersion,
       reviewDurationMs: reviewMs,
       reviewIssuesCount: currentReview?.issues?.length ?? 0,
     });
@@ -1809,6 +1854,7 @@ export class BuildRunManager {
       runId,
       at: now(),
       ticketId,
+      baseVersion,
       validationDurationMs: validateMs,
     });
 
@@ -2359,9 +2405,15 @@ export class BuildRunManager {
         next.patchCode = buildFileBlocks(next.patchFiles);
 
         // Surface the latest patch to the UI for debugging (view-code).
+        const createdFiles = next.appliedFiles.filter(p => !Object.prototype.hasOwnProperty.call(baseSnapshot, p));
+        const modifiedFiles = next.appliedFiles.filter(p => Object.prototype.hasOwnProperty.call(baseSnapshot, p));
+
         run.tickets = updateTicket(run.tickets, next.ticketId, {
           generatedCode: next.patchCode,
           actualFiles: next.appliedFiles,
+          createdFiles,
+          modifiedFiles,
+          baseVersion: next.baseVersion,
           previewAvailable: false,
         } as any);
         this.emit(runId, {
@@ -2371,6 +2423,9 @@ export class BuildRunManager {
           ticketId: next.ticketId,
           generatedCode: next.patchCode,
           appliedFiles: next.appliedFiles,
+          createdFiles,
+          modifiedFiles,
+          baseVersion: next.baseVersion,
         });
 
         if (!rebase.ok) {
@@ -2471,9 +2526,15 @@ export class BuildRunManager {
               next.appliedFiles = Object.keys(next.patchFiles).sort();
               next.patchCode = buildFileBlocks(next.patchFiles);
 
+              const createdFiles = next.appliedFiles.filter(p => !Object.prototype.hasOwnProperty.call(baseSnapshot, p));
+              const modifiedFiles = next.appliedFiles.filter(p => Object.prototype.hasOwnProperty.call(baseSnapshot, p));
+
               run.tickets = updateTicket(run.tickets, next.ticketId, {
                 generatedCode: next.patchCode,
                 actualFiles: next.appliedFiles,
+                createdFiles,
+                modifiedFiles,
+                baseVersion: next.baseVersion,
                 previewAvailable: false,
               } as any);
               this.emit(runId, {
@@ -2483,6 +2544,9 @@ export class BuildRunManager {
                 ticketId: next.ticketId,
                 generatedCode: next.patchCode,
                 appliedFiles: next.appliedFiles,
+                createdFiles,
+                modifiedFiles,
+                baseVersion: next.baseVersion,
               });
 
               this.emit(runId, {

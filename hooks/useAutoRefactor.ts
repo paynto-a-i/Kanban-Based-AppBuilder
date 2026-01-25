@@ -59,6 +59,8 @@ export function useAutoRefactor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sandboxId,
+          // Backward compatible: server accepts either key.
+          affectedFiles: deletedFiles,
           deletedFiles,
           ticketId,
         }),

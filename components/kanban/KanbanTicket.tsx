@@ -6,6 +6,7 @@ import { KanbanTicket as TicketType, TYPE_COLORS, PRIORITY_COLORS, TICKET_ACTION
 interface KanbanTicketProps {
   ticket: TicketType;
   onEdit: (ticketId: string) => void;
+  onVerifySplit?: (ticketId: string) => void;
   onSkip: (ticketId: string) => void;
   onRetry: (ticketId: string) => void;
   onDelete: (ticketId: string) => void;
@@ -21,6 +22,7 @@ interface KanbanTicketProps {
 export default function KanbanTicket({
   ticket,
   onEdit,
+  onVerifySplit,
   onSkip,
   onRetry,
   onDelete,
@@ -35,6 +37,19 @@ export default function KanbanTicket({
   const [showActions, setShowActions] = useState(false);
   const actions = TICKET_ACTIONS[ticket.status];
 
+  const actionLabel = (action: string) => {
+    const labels: Record<string, string> = {
+      'verify-split': 'Verify & split',
+      'build-now': 'Build now',
+      'view-code': 'View code',
+      'view-error': 'View error',
+      'view-blockers': 'View blockers',
+      'move-up': 'Move up',
+      'move-down': 'Move down',
+    };
+    return labels[action] || action.replace('-', ' ');
+  };
+
   const priorityDots = {
     critical: 3,
     high: 2,
@@ -45,6 +60,7 @@ export default function KanbanTicket({
   const handleAction = (action: string) => {
     switch (action) {
       case 'edit': onEdit(ticket.id); break;
+      case 'verify-split': onVerifySplit?.(ticket.id); break;
       case 'skip': onSkip(ticket.id); break;
       case 'retry': onRetry(ticket.id); break;
       case 'delete': onDelete(ticket.id); break;
@@ -182,7 +198,7 @@ export default function KanbanTicket({
               onClick={() => handleAction(action)}
               className="text-[10px] px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
             >
-              {action.replace('-', ' ')}
+              {actionLabel(action)}
             </button>
           ))}
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { KanbanTicket, TicketType, TicketPriority, TicketComplexity, TYPE_COLORS, PRIORITY_COLORS } from './types';
+import { KanbanTicket, TicketType, TicketPriority, TicketComplexity, TicketStatus, TYPE_COLORS, PRIORITY_COLORS } from './types';
 
 interface TicketEditorProps {
   onSave: (ticket: Omit<KanbanTicket, 'id' | 'order'>) => void;
@@ -29,11 +29,18 @@ export default function TicketEditor({
     
     if (!title.trim()) return;
 
+    const inferredRequiresInput =
+      Boolean(initialData?.requiresInput) ||
+      (Array.isArray(initialData?.inputRequests) && initialData!.inputRequests!.length > 0);
+    const inferredStatus: TicketStatus =
+      (initialData?.status as TicketStatus) ||
+      (inferredRequiresInput ? 'awaiting_input' : 'backlog');
+
     onSave({
       title: title.trim(),
       description: description.trim(),
       type,
-      status: 'backlog',
+      status: inferredStatus,
       priority,
       complexity,
       estimatedFiles,
@@ -45,6 +52,11 @@ export default function TicketEditor({
       retryCount: 0,
       warnings: [],
       userModified: true,
+      requiresInput: inferredRequiresInput || undefined,
+      inputRequests: initialData?.inputRequests,
+      userInputs: initialData?.userInputs,
+      databaseConfig: initialData?.databaseConfig,
+      blueprintRefs: initialData?.blueprintRefs,
     });
   };
 

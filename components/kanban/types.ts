@@ -68,6 +68,18 @@ export interface KanbanTicket {
   complexity: TicketComplexity;
   estimatedFiles: number;
   actualFiles: string[];
+  /**
+   * Traceability metadata (optional; emitted by server BuildRuns).
+   * - createdFiles: files that did not exist at the patch base snapshot
+   * - modifiedFiles: files that existed and were changed by this ticket
+   */
+  createdFiles?: string[];
+  modifiedFiles?: string[];
+  /**
+   * BuildRun context (optional).
+   */
+  buildRunId?: string;
+  baseVersion?: number;
   dependencies: string[];
   blockedBy: string[];
   progress: number;
@@ -190,7 +202,7 @@ export const COMPLEXITY_ESTIMATES: Record<TicketComplexity, number> = {
 
 export const TICKET_ACTIONS: Record<TicketStatus, string[]> = {
   planning: [],
-  backlog: ['edit', 'skip', 'delete', 'move-up', 'move-down', 'build-now'],
+  backlog: ['edit', 'verify-split', 'skip', 'delete', 'move-up', 'move-down', 'build-now'],
   awaiting_input: ['provide-input', 'skip', 'edit'],
   generating: ['view-code'],
   applying: ['view-code'],
