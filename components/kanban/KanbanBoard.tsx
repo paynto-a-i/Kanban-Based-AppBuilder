@@ -47,6 +47,7 @@ interface KanbanBoardProps {
   onPauseBuild: () => void;
   onResumeBuild: () => void;
   onEditTicket: (ticketId: string, updates: Partial<KanbanTicket>) => void;
+  onVerifyTicket?: (ticketId: string) => void;
   onSkipTicket: (ticketId: string) => void;
   onRetryTicket: (ticketId: string) => void;
   onDeleteTicket: (ticketId: string) => void;
@@ -77,6 +78,7 @@ export default function KanbanBoard({
   onPauseBuild,
   onResumeBuild,
   onEditTicket,
+  onVerifyTicket,
   onSkipTicket,
   onRetryTicket,
   onDeleteTicket,
@@ -228,6 +230,7 @@ export default function KanbanBoard({
                         emoji={COLUMN_EMOJIS[column.id]}
                         tickets={filteredTickets}
                         onEditTicket={(id) => setSelectedTicketId(id)}
+                        onVerifySplit={onVerifyTicket}
                         onSkipTicket={onSkipTicket}
                         onRetryTicket={onRetryTicket}
                         onDeleteTicket={onDeleteTicket}
@@ -279,6 +282,7 @@ export default function KanbanBoard({
                         emoji={COLUMN_EMOJIS[column.id]}
                         tickets={filteredTickets}
                         onEditTicket={(id) => setSelectedTicketId(id)}
+                        onVerifySplit={onVerifyTicket}
                         onSkipTicket={onSkipTicket}
                         onRetryTicket={onRetryTicket}
                         onDeleteTicket={onDeleteTicket}

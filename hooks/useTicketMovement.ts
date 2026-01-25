@@ -1,14 +1,24 @@
 import { useState, useCallback } from 'react';
 import type { TicketStatus } from '@/components/kanban/types';
 
-const COLUMN_ORDER: TicketStatus[] = [
-  'backlog',
-  'generating',
-  'applying',
-  'testing',
-  'pr_review',
-  'done',
-];
+// Keep this aligned with the UI's rendered columns and the build lifecycle.
+// Note: blocked/failed/skipped are treated as "special" states (order -1).
+const STATUS_ORDER: Record<TicketStatus, number> = {
+  planning: 0,
+  backlog: 1,
+  awaiting_input: 2,
+  generating: 3,
+  applying: 4,
+  pr_review: 5,
+  merge_queued: 6,
+  rebasing: 7,
+  merging: 8,
+  testing: 9,
+  done: 10,
+  blocked: -1,
+  failed: -1,
+  skipped: -1,
+};
 
 interface MoveValidation {
   isValid: boolean;
@@ -33,10 +43,11 @@ export function useTicketMovement() {
     toColumn: TicketStatus,
     ticketStatus?: TicketStatus
   ): MoveValidation => {
-    const fromIndex = COLUMN_ORDER.indexOf(fromColumn);
-    const toIndex = COLUMN_ORDER.indexOf(toColumn);
+    void ticketStatus;
+    const fromOrder = STATUS_ORDER[fromColumn];
+    const toOrder = STATUS_ORDER[toColumn];
 
-    if (fromIndex === -1 || toIndex === -1) {
+    if (typeof fromOrder !== 'number' || typeof toOrder !== 'number') {
       return { isValid: false, isBackward: false, requiresConfirmation: false, message: 'Invalid column' };
     }
 
@@ -44,7 +55,12 @@ export function useTicketMovement() {
       return { isValid: true, isBackward: false, requiresConfirmation: false };
     }
 
-    const isBackward = toIndex < fromIndex;
+    // Special states: allow moves in/out without sequential constraints.
+    if (fromOrder < 0 || toOrder < 0) {
+      return { isValid: true, isBackward: false, requiresConfirmation: false };
+    }
+
+    const isBackward = toOrder < fromOrder;
 
     if (isBackward) {
       if (fromColumn === 'done' || fromColumn === 'pr_review' || fromColumn === 'testing') {
@@ -58,7 +74,13 @@ export function useTicketMovement() {
       return { isValid: true, isBackward: true, requiresConfirmation: false };
     }
 
-    const stepDifference = toIndex - fromIndex;
+    // Forward move: do not allow skipping, but treat Backlog → Generating as the normal "start work" transition
+    // (Awaiting Input is only applicable to tickets that require credentials).
+    if (fromColumn === 'backlog' && toColumn === 'generating') {
+      return { isValid: true, isBackward: false, requiresConfirmation: false };
+    }
+
+    const stepDifference = toOrder - fromOrder;
     if (stepDifference > 1) {
       return {
         isValid: false,

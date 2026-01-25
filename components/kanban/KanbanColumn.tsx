@@ -11,6 +11,7 @@ interface KanbanColumnProps {
   emoji?: string;
   tickets: TicketType[];
   onEditTicket: (ticketId: string) => void;
+  onVerifySplit?: (ticketId: string) => void;
   onSkipTicket: (ticketId: string) => void;
   onRetryTicket: (ticketId: string) => void;
   onDeleteTicket: (ticketId: string) => void;
@@ -31,6 +32,7 @@ export default function KanbanColumn({
   emoji,
   tickets,
   onEditTicket,
+  onVerifySplit,
   onSkipTicket,
   onRetryTicket,
   onDeleteTicket,
@@ -234,13 +236,22 @@ export default function KanbanColumn({
           tickets.map(ticket => (
             <div
               key={ticket.id}
-              draggable={ticket.status === 'backlog' || ticket.status === 'skipped'}
+              // Allow users to drag backlog/skipped for planning,
+              // and done/review/testing for regression (revert) workflows.
+              draggable={
+                ticket.status === 'backlog' ||
+                ticket.status === 'skipped' ||
+                ticket.status === 'done' ||
+                ticket.status === 'pr_review' ||
+                ticket.status === 'testing'
+              }
               onDragStart={(e) => handleDragStart(e, ticket.id)}
               className="cursor-move"
             >
               <KanbanTicket
                 ticket={ticket}
                 onEdit={onEditTicket}
+                onVerifySplit={onVerifySplit}
                 onSkip={onSkipTicket}
                 onRetry={onRetryTicket}
                 onDelete={onDeleteTicket}
