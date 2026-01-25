@@ -17,47 +17,121 @@ interface SidebarInputProps {
   disabled?: boolean;
 }
 
+const UI_RICHNESS_APPENDIX =
+  "\n\nUI QUALITY BAR (make it feel premium):" +
+  "\n- Use a distinct, modern visual identity (not generic defaults)." +
+  "\n- Add tasteful animations and micro-interactions; respect prefers-reduced-motion." +
+  "\n- Use polished empty/loading states, rich surfaces (cards), and strong typography hierarchy." +
+  "\n- Make it responsive and accessible (focus states, contrast, semantics)." +
+  "\n- If I mention an aesthetic (e.g. anime/cyberpunk/retro), fully commit to it across the UI.";
+
 const SUGGESTED_BUILDS = [
   {
     id: "landing",
     name: "Landing Page",
     description: "Modern SaaS landing page with hero, features, and CTA",
-    prompt: "Create a modern SaaS landing page with a hero section featuring a headline, subheadline, and CTA button. Include a features grid with icons, a testimonials section, pricing cards, and a footer with links.",
+    prompt:
+      "Design and build an award-worthy SaaS landing page with a distinct visual identity and modern motion." +
+      "\n\nMust include:" +
+      "\n- A cinematic hero (headline + subheadline + dual CTAs) with a layered background (glow/gradient + subtle texture) and a tasteful animated centerpiece (e.g., floating UI mock card or bento hero)." +
+      "\n- Sticky glass header with clear nav + a subtle animated active indicator." +
+      "\n- Features presented as a bento grid with iconography + hover-reveal microcopy." +
+      "\n- Testimonials as premium cards (or a subtle carousel if appropriate) with polished empty/loading states." +
+      "\n- Pricing cards with a highlighted “most popular” tier, feature comparison, and a strong final CTA band." +
+      "\n- Footer with structured links + social." +
+      "\n\nInteraction & polish:" +
+      "\n- Micro-interactions everywhere (hover lift, press states, focus rings, magnetic/juicy primary button feel)." +
+      "\n- Motion-safe entrances for key sections and a refined loading experience (skeleton shimmer, not plain spinners)." +
+      "\n- Responsive, accessible, and high-contrast." +
+      UI_RICHNESS_APPENDIX,
     icon: "🚀",
   },
   {
     id: "dashboard",
     name: "Dashboard",
     description: "Admin dashboard with charts and data tables",
-    prompt: "Build an admin dashboard with a sidebar navigation, top header with user profile, stats cards showing KPIs, a line chart for trends, a bar chart for comparisons, and a data table with pagination.",
+    prompt:
+      "Build a premium admin dashboard that feels like a modern analytics console (not a generic CRUD page)." +
+      "\n\nLayout & navigation:" +
+      "\n- Collapsible sidebar with animated active indicator, icons, and a smooth expand/collapse interaction." +
+      "\n- Top command bar with global search (command-palette feel), notifications, and a profile menu." +
+      "\n\nCore content:" +
+      "\n- KPI cards with subtle gradients/surfaces, hover states, and tiny trend indicators." +
+      "\n- Interactive line chart (tooltips + legend toggles) and a comparison bar chart (hover highlights)." +
+      "\n- Data table with sticky header, filters, row actions, pagination, and polished empty/loading states." +
+      "\n\nPolish:" +
+      "\n- Motion-safe page/section transitions and micro-interactions throughout." +
+      "\n- Dark-first, high-contrast theme with a memorable accent color and consistent spacing rhythm." +
+      UI_RICHNESS_APPENDIX,
     icon: "📊",
   },
   {
     id: "ecommerce",
     name: "E-commerce",
     description: "Product listing with cart and checkout",
-    prompt: "Create an e-commerce product page with a product grid, filters sidebar, product cards with images and prices, a shopping cart drawer, and a checkout form with payment fields.",
+    prompt:
+      "Create a boutique e-commerce experience with a strong, modern visual identity and delightful interactions." +
+      "\n\nShopping UX:" +
+      "\n- Product grid with rich cards (hover reveal, quick actions, badges, and an elegant image treatment)." +
+      "\n- Filters sidebar with animated filter chips, sort controls, and a clear “reset filters” state." +
+      "\n- Product quick-view modal (or drawer) with variants, quantity, and add-to-cart." +
+      "\n- Cart drawer with springy motion and editable quantities + remove." +
+      "\n- Checkout as a multi-step flow with progress indicator, polished validation, and trust badges." +
+      "\n\nPolish:" +
+      "\n- Skeleton loading for the grid and a premium empty state when no results match." +
+      "\n- Micro-interactions on every card/button, motion-safe transitions, and responsive layout." +
+      UI_RICHNESS_APPENDIX,
     icon: "🛒",
   },
   {
     id: "blog",
     name: "Blog",
     description: "Blog with posts, categories, and comments",
-    prompt: "Build a blog homepage with featured post hero, post grid with thumbnails and excerpts, category sidebar, newsletter signup, and a single post view with author info and comments section.",
+    prompt:
+      "Build an editorial blog experience that feels like a digital magazine (typography-first, premium, and modern)." +
+      "\n\nHomepage:" +
+      "\n- Featured post hero with a striking layout and subtle motion-safe entrance." +
+      "\n- Post grid with hover previews, category/tags UI, and a newsletter signup that feels high-end." +
+      "\n- Category sidebar (or top nav) with clear active states and smooth interactions." +
+      "\n\nPost page:" +
+      "\n- Reading progress indicator, author card, related posts, and a comments section with polished empty/loading states." +
+      "\n- Optional table of contents if long-form content is implied." +
+      "\n\nPolish:" +
+      "\n- Editorial typography scale, generous spacing, tasteful textures, and micro-interactions everywhere." +
+      UI_RICHNESS_APPENDIX,
     icon: "📝",
   },
   {
     id: "portfolio",
     name: "Portfolio",
     description: "Personal portfolio with projects showcase",
-    prompt: "Create a personal portfolio site with an about section, skills list with progress bars, project gallery with modal previews, work experience timeline, and contact form.",
+    prompt:
+      "Create a modern personal portfolio with a bold personal brand, slick motion, and a cohesive design system." +
+      "\n\nMust include:" +
+      "\n- A standout hero (name + tagline + CTAs) with an art-directed background and motion-safe animation." +
+      "\n- About section with a premium layout and clear hierarchy." +
+      "\n- Skills presented in a modern way (chips, meters, or bento tiles — avoid plain progress bars unless stylized)." +
+      "\n- Projects gallery with filters and immersive modal case studies (images, role, outcomes, links)." +
+      "\n- Work experience timeline with scroll-reveal and great spacing." +
+      "\n- Contact form with polished validation and delightful micro-interactions." +
+      UI_RICHNESS_APPENDIX,
     icon: "💼",
   },
   {
     id: "saas-pricing",
     name: "Pricing Page",
     description: "SaaS pricing with feature comparison",
-    prompt: "Build a pricing page with 3 pricing tiers (Basic, Pro, Enterprise), monthly/yearly toggle, feature comparison table, FAQ accordion, and a CTA section.",
+    prompt:
+      "Build a high-converting pricing page with a distinctive, premium look and motion-forward interactions." +
+      "\n\nMust include:" +
+      "\n- 3 pricing tiers (Basic, Pro, Enterprise) with a highlighted “most popular” tier and clear value hierarchy." +
+      "\n- Monthly/yearly toggle with a smooth animated thumb and price transitions." +
+      "\n- Feature comparison (table or bento) with hover tooltips and crisp alignment." +
+      "\n- FAQ accordion with polished open/close motion and good content spacing." +
+      "\n- Final CTA section with trust signals (logos, badges, or guarantees) and a confident primary action." +
+      "\n\nPolish:" +
+      "\n- Micro-interactions on all interactive elements, premium empty/loading states, and responsive layout." +
+      UI_RICHNESS_APPENDIX,
     icon: "💰",
   },
 ];

@@ -142,9 +142,20 @@ function generateRunId() {
 function nextBuildableTicket(
   tickets: KanbanTicket[],
   onlyTicketId?: string,
-  excludeTicketIds: Set<string> = new Set()
+  excludeTicketIds: Set<string> = new Set(),
+  opts?: { planDataMode?: string }
 ): KanbanTicket | null {
   const currentTickets = tickets;
+  const planDataMode = String(opts?.planDataMode || '').trim().toLowerCase();
+  const treatAwaitingInputDbAsOptional = planDataMode === 'real_optional' || planDataMode === 'mock';
+
+  const isDepSatisfied = (dep: KanbanTicket | undefined | null): boolean => {
+    if (!dep) return true;
+    if (dep.status === 'done' || dep.status === 'skipped') return true;
+    // In real_optional/mock mode, database credential/setup tickets are optional and should not block.
+    if (treatAwaitingInputDbAsOptional && dep.status === 'awaiting_input' && dep.type === 'database') return true;
+    return false;
+  };
 
   if (onlyTicketId) {
     const t = currentTickets.find(x => x.id === onlyTicketId) || null;
@@ -153,7 +164,7 @@ function nextBuildableTicket(
     if (excludeTicketIds.has(t.id)) return null;
     const hasUnmetDeps = t.dependencies?.some(depId => {
       const dep = currentTickets.find(x => x.id === depId);
-      return dep && dep.status !== 'done';
+      return dep && !isDepSatisfied(dep);
     });
     return hasUnmetDeps ? null : t;
   }
@@ -166,7 +177,7 @@ function nextBuildableTicket(
     if (excludeTicketIds.has(ticket.id)) continue;
     const hasUnmetDeps = ticket.dependencies?.some(depId => {
       const dep = currentTickets.find(t => t.id === depId);
-      return dep && dep.status !== 'done';
+      return dep && !isDepSatisfied(dep);
     });
     if (!hasUnmetDeps) return ticket;
   }
@@ -226,6 +237,33 @@ export class BuildRunManager {
   private internalState = new Map<string, RunInternalState>();
   private contentionLocks = new Map<string, Map<string, string>>();
   private ticketWarningsByRunId = new Map<string, Map<string, string[]>>();
+  private cancelControllers = new Map<string, AbortController>();
+
+  private isCancelled(runId: string): boolean {
+    const run = this.runs.get(runId);
+    return Boolean(run && run.cancelled);
+  }
+
+  private attachCancelSignal(runId: string, controller: AbortController): () => void {
+    const cancel = this.cancelControllers.get(runId);
+    if (!cancel) return () => {};
+
+    const onAbort = () => {
+      try {
+        controller.abort();
+      } catch {
+        // ignore
+      }
+    };
+
+    if (cancel.signal.aborted) {
+      onAbort();
+      return () => {};
+    }
+
+    cancel.signal.addEventListener('abort', onAbort, { once: true });
+    return () => cancel.signal.removeEventListener('abort', onAbort);
+  }
 
   private pushHealRecord(runId: string, ticketId: string, stage: HealStage, message: string) {
     const state = this.internalState.get(runId);
@@ -292,6 +330,7 @@ export class BuildRunManager {
       updatedAt: now(),
       status: 'queued',
       paused: false,
+      cancelled: false,
       input,
       events: [],
       tickets: input.tickets,
@@ -301,12 +340,28 @@ export class BuildRunManager {
     this.runs.set(runId, record);
     this.subscribers.set(runId, new Set());
     this.resumeResolvers.set(runId, []);
+    this.cancelControllers.set(runId, new AbortController());
 
     return record;
   }
 
   getRun(runId: string): BuildRunRecord | null {
     return this.runs.get(runId) || null;
+  }
+
+  findActiveRunForSandbox(sandboxId: string): BuildRunRecord | null {
+    const sid = String(sandboxId || '').trim();
+    if (!sid) return null;
+
+    for (const run of Array.from(this.runs.values())) {
+      if (!run) continue;
+      if (run.cancelled) continue;
+      if (run.input?.sandboxId !== sid) continue;
+      if (run.status === 'queued' || run.status === 'running' || run.status === 'paused') {
+        return run;
+      }
+    }
+    return null;
   }
 
   listEvents(runId: string): BuildEvent[] {
@@ -387,6 +442,8 @@ export class BuildRunManager {
   pause(runId: string) {
     const run = this.runs.get(runId);
     if (!run) return;
+    if (run.cancelled) return;
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return;
     run.paused = true;
     this.setStatus(runId, 'paused', 'Paused');
   }
@@ -394,6 +451,8 @@ export class BuildRunManager {
   resume(runId: string) {
     const run = this.runs.get(runId);
     if (!run) return;
+    if (run.cancelled) return;
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return;
     run.paused = false;
     this.setStatus(runId, 'running', 'Resumed');
 
@@ -410,9 +469,76 @@ export class BuildRunManager {
     }
   }
 
+  cancel(runId: string, reason?: string) {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    if (run.cancelled) return;
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') return;
+
+    run.cancelled = true;
+    run.paused = false;
+
+    // Best-effort: unblock any pause waiters so loops can exit.
+    const resolvers = this.resumeResolvers.get(runId);
+    if (resolvers && resolvers.length > 0) {
+      const toRun = resolvers.splice(0, resolvers.length);
+      for (const r of toRun) {
+        try {
+          r();
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Best-effort: abort in-flight network work (LLM/apply/console).
+    try {
+      this.cancelControllers.get(runId)?.abort();
+    } catch {
+      // ignore
+    }
+
+    // Clear locks/queues so the run can terminate cleanly.
+    try {
+      this.contentionLocks.delete(runId);
+      const st = this.internalState.get(runId);
+      if (st) st.mergeQueue.length = 0;
+    } catch {
+      // ignore
+    }
+
+    // Reset any in-flight tickets back to backlog so a new run can resume later.
+    try {
+      const resettable: TicketStatus[] = ['generating', 'applying', 'pr_review', 'merge_queued', 'rebasing', 'merging', 'testing'];
+      const current = this.runs.get(runId);
+      if (current) {
+        for (const t of current.tickets || []) {
+          if (resettable.includes(t.status as any)) {
+            this.updateTicketStatus(runId, t.id, 'backlog', 0, null);
+            this.releaseLocksForTicket(runId, t.id);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    this.setStatus(runId, 'cancelled', reason || 'Cancelled');
+
+    // If the run never started executing (queued), there will be no executor to emit completion.
+    if (!this.executionPromises.has(runId)) {
+      this.emit(runId, { type: 'run_completed', runId, status: 'cancelled', at: now() });
+      // Best-effort cleanup for never-started runs.
+      this.internalState.delete(runId);
+      this.contentionLocks.delete(runId);
+      this.cancelControllers.delete(runId);
+    }
+  }
+
   async start(runId: string): Promise<void> {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Run not found: ${runId}`);
+    if (run.cancelled || run.status === 'cancelled') return;
 
     if (this.executionPromises.has(runId)) {
       return this.executionPromises.get(runId)!;
@@ -513,6 +639,10 @@ export class BuildRunManager {
     });
 
     try {
+      const planDataModeForDeps = String(
+        (run.input.plan as any)?.dataMode || (run.input.plan as any)?.blueprint?.dataMode || ''
+      ).trim();
+
       const clampInt = (n: unknown, min: number, max: number): number | undefined => {
         const v = typeof n === 'number' && Number.isFinite(n) ? Math.floor(n) : undefined;
         if (typeof v !== 'number') return undefined;
@@ -626,6 +756,9 @@ export class BuildRunManager {
 
         const fresh = this.runs.get(runId);
         if (!fresh) return;
+        if (fresh.cancelled || fresh.status === 'cancelled') {
+          break;
+        }
 
         // If any tickets are now impossible due to failed deps, mark them as blocked so the run can finish cleanly.
         this.propagateBlockedTickets(runId);
@@ -669,6 +802,18 @@ export class BuildRunManager {
               this.enqueueGeneratedPatchForMerge(runId, refined);
             })()
               .catch((e: any) => {
+                if (this.isCancelled(runId)) {
+                  this.updateTicketStatus(runId, ticketId, 'backlog', 0, null);
+                  this.emit(runId, {
+                    type: 'log',
+                    runId,
+                    at: now(),
+                    level: 'info',
+                    message: `Ticket cancelled.`,
+                    ticketId,
+                  });
+                  return;
+                }
                 hasFailures.value = true;
                 const msg = e?.message || 'Ticket failed';
                 this.updateTicketStatus(runId, ticketId, 'failed', undefined, msg);
@@ -734,7 +879,9 @@ export class BuildRunManager {
           let contentionGroup: string | null = null;
 
           while (true) {
-            next = nextBuildableTicket(fresh.tickets, fresh.input.onlyTicketId, exclude);
+            next = nextBuildableTicket(fresh.tickets, fresh.input.onlyTicketId, exclude, {
+              planDataMode: planDataModeForDeps,
+            });
             if (!next) break;
 
             contentionGroup = this.getContentionGroup(next);
@@ -776,6 +923,18 @@ export class BuildRunManager {
             }
           })()
             .catch((e: any) => {
+              if (this.isCancelled(runId)) {
+                this.updateTicketStatus(runId, ticketId, 'backlog', 0, null);
+                this.emit(runId, {
+                  type: 'log',
+                  runId,
+                  at: now(),
+                  level: 'info',
+                  message: `Ticket cancelled.`,
+                  ticketId,
+                });
+                return;
+              }
               hasFailures.value = true;
               const msg = e?.message || 'Ticket failed';
               this.updateTicketStatus(runId, ticketId, 'failed', undefined, msg);
@@ -797,7 +956,12 @@ export class BuildRunManager {
           genInFlight.set(ticketId, p);
         }
 
-        const nextSchedulable = nextBuildableTicket(fresh.tickets, fresh.input.onlyTicketId, new Set(genInFlight.keys()));
+        const nextSchedulable = nextBuildableTicket(
+          fresh.tickets,
+          fresh.input.onlyTicketId,
+          new Set(genInFlight.keys()),
+          { planDataMode: planDataModeForDeps }
+        );
         const mergePending = hasMergePending();
 
         const anyInFlight = genInFlight.size > 0 || reviewInFlight.size > 0;
@@ -859,7 +1023,7 @@ export class BuildRunManager {
         } else {
           for (let attempt = 1; attempt <= maxFinalGateAttempts; attempt++) {
             try {
-              await this.runIntegrationGate(baseUrl, integrationSandboxId);
+              await this.runIntegrationGate(runId, baseUrl, integrationSandboxId);
               deferredGateFailure = null;
               break;
             } catch (e: any) {
@@ -923,6 +1087,7 @@ export class BuildRunManager {
               let fixCode = '';
               try {
                 fixCode = await this.generateTicketCode(
+                  runId,
                   baseUrl,
                   run.input.model,
                   fixPrompt,
@@ -935,7 +1100,7 @@ export class BuildRunManager {
 
               if (fixCode && fixCode.includes('<file path="')) {
                 try {
-                  await this.applyCode(baseUrl, integrationSandboxId, fixCode, true);
+                  await this.applyCode(runId, baseUrl, integrationSandboxId, fixCode, true);
                 } catch {
                   // ignore and retry gate
                 }
@@ -983,6 +1148,11 @@ export class BuildRunManager {
       this.propagateBlockedTickets(runId);
 
       const finalRun = this.runs.get(runId);
+      if (finalRun && (finalRun.cancelled || finalRun.status === 'cancelled')) {
+        // Respect user-initiated cancellation: do not mark as failed due to unfinished tickets.
+        this.emit(runId, { type: 'run_completed', runId, status: 'cancelled', at: now() });
+        return;
+      }
       const anyTicketFailures =
         finalRun?.tickets?.some(t => t.status === 'failed' || t.status === 'blocked') ?? false;
 
@@ -1012,6 +1182,11 @@ export class BuildRunManager {
     } catch (e: any) {
       const message = e?.message || 'Build failed';
       const current = this.runs.get(runId);
+      if (current && (current.cancelled || current.status === 'cancelled')) {
+        // Cancellation is user-initiated; avoid marking the run as failed.
+        this.emit(runId, { type: 'run_completed', runId, status: 'cancelled', at: now() });
+        return;
+      }
       if (current?.currentTicketId) {
         this.updateTicketStatus(runId, current.currentTicketId, 'failed', undefined, message);
       }
@@ -1025,6 +1200,7 @@ export class BuildRunManager {
 
       this.internalState.delete(runId);
       this.contentionLocks.delete(runId);
+      this.cancelControllers.delete(runId);
     }
   }
 
@@ -1054,6 +1230,7 @@ export class BuildRunManager {
     const run = this.runs.get(runId);
     const state = this.internalState.get(runId);
     if (!run || !state) throw new Error(`Run not found: ${runId}`);
+    if (run.cancelled || run.status === 'cancelled') throw new Error('Cancelled');
 
     const ticket = run.tickets.find(t => t.id === ticketId);
     if (!ticket) throw new Error(`Ticket not found: ${ticketId}`);
@@ -1067,9 +1244,21 @@ export class BuildRunManager {
     const desiredTemplate: 'vite' | 'next' =
       (run.input.plan as any)?.templateTarget || planBlueprint?.templateTarget || 'vite';
 
-    const uiStyleBlock = run.input.uiStyle
-      ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(run.input.uiStyle, null, 2)}\n`
+    const themeForPrompt = planBlueprint?.theme || null;
+    const themeBlock = themeForPrompt
+      ? `\n\nBLUEPRINT THEME (apply consistently):\n${JSON.stringify(themeForPrompt, null, 2)}\n`
       : '';
+    const fallbackUiQualityBlock =
+      `\n\nUI QUALITY BAR (non-negotiable):\n` +
+      `- Make the UI visually rich: layered sections, premium typography, strong spacing rhythm, and polished empty/loading states.\n` +
+      `- Add motion: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion.\n` +
+      `- Avoid generic defaults. If something looks plain, upgrade it.\n` +
+      `- Reuse the existing UI primitives. Do NOT create duplicate UI kits.\n` +
+      `  - Vite primitives live in src/components/ui/* and src/lib/cn.js\n` +
+      `  - Next primitives live in components/ui/* and lib/cn.ts\n`;
+    const uiStyleBlock = run.input.uiStyle
+      ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(run.input.uiStyle, null, 2)}\n\nART DIRECTION (follow strictly):\n- Treat UI_STYLE as the creative-director spec. Commit consistently: typography, spacing rhythm, shape language, surfaces, shadows, iconography, and motion.\n- Build a signature look early by evolving shared primitives (Button/Card/Input/etc) so the “wow” propagates everywhere.\n- Motion is required: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion (use motion-safe/motion-reduce).\n- If UI_STYLE implies a specific aesthetic (e.g. anime/cyberpunk/retro/brutalist), go all-in (colors, motifs, icon/illustration style, copy tone) without sacrificing usability or contrast.\n- Never drift to a generic default look. If something looks plain, upgrade it.\n- Reuse the existing UI primitives in the codebase. Do NOT create duplicate UI kits.\n  - Vite primitives live in src/components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and src/lib/cn.js\n  - Next primitives live in components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and lib/cn.ts\n- If you need a new primitive, EXTEND the existing components in those folders instead of creating a parallel set.\n` + themeBlock
+      : themeBlock + fallbackUiQualityBlock;
 
     const conventionsSnapshot = state.snapshotsByVersion.get(baseVersion) || null;
     const conventionsBlock = conventionsSnapshot ? buildSnapshotConventions(conventionsSnapshot) : '';
@@ -1086,6 +1275,7 @@ export class BuildRunManager {
     // Generate patch (LLM) against the integration sandbox context.
     const genStart = now();
     const rawGenerated = await this.generateTicketCode(
+      runId,
       baseUrl,
       run.input.model,
       ticketPrompt,
@@ -1153,6 +1343,7 @@ export class BuildRunManager {
     const run = this.runs.get(runId);
     const state = this.internalState.get(runId);
     if (!run || !state) throw new Error(`Run not found: ${runId}`);
+    if (run.cancelled || run.status === 'cancelled') throw new Error('Cancelled');
 
     const ticket = run.tickets.find(t => t.id === patch.ticketId);
     if (!ticket) throw new Error(`Ticket not found: ${patch.ticketId}`);
@@ -1227,6 +1418,7 @@ export class BuildRunManager {
         `Code:\n${filesText}`;
 
       const fixCode = await this.generateTicketCode(
+        runId,
         baseUrl,
         run.input.model,
         fixPrompt,
@@ -1306,6 +1498,7 @@ export class BuildRunManager {
   private enqueueGeneratedPatchForMerge(runId: string, patch: GeneratedPatch) {
     const run = this.runs.get(runId);
     if (!run) return;
+    if (run.cancelled || run.status === 'cancelled') return;
 
     const ticket = run.tickets.find(t => t.id === patch.ticketId);
     const title = ticket?.title || patch.ticketId;
@@ -1390,9 +1583,21 @@ export class BuildRunManager {
     const desiredTemplate: 'vite' | 'next' =
       (run.input.plan as any)?.templateTarget || planBlueprint?.templateTarget || 'vite';
 
-    const uiStyleBlock = run.input.uiStyle
-      ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(run.input.uiStyle, null, 2)}\n`
+    const themeForPrompt = planBlueprint?.theme || null;
+    const themeBlock = themeForPrompt
+      ? `\n\nBLUEPRINT THEME (apply consistently):\n${JSON.stringify(themeForPrompt, null, 2)}\n`
       : '';
+    const fallbackUiQualityBlock =
+      `\n\nUI QUALITY BAR (non-negotiable):\n` +
+      `- Make the UI visually rich: layered sections, premium typography, strong spacing rhythm, and polished empty/loading states.\n` +
+      `- Add motion: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion.\n` +
+      `- Avoid generic defaults. If something looks plain, upgrade it.\n` +
+      `- Reuse the existing UI primitives. Do NOT create duplicate UI kits.\n` +
+      `  - Vite primitives live in src/components/ui/* and src/lib/cn.js\n` +
+      `  - Next primitives live in components/ui/* and lib/cn.ts\n`;
+    const uiStyleBlock = run.input.uiStyle
+      ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(run.input.uiStyle, null, 2)}\n\nART DIRECTION (follow strictly):\n- Treat UI_STYLE as the creative-director spec. Commit consistently: typography, spacing rhythm, shape language, surfaces, shadows, iconography, and motion.\n- Build a signature look early by evolving shared primitives (Button/Card/Input/etc) so the “wow” propagates everywhere.\n- Motion is required: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion (use motion-safe/motion-reduce).\n- If UI_STYLE implies a specific aesthetic (e.g. anime/cyberpunk/retro/brutalist), go all-in (colors, motifs, icon/illustration style, copy tone) without sacrificing usability or contrast.\n- Never drift to a generic default look. If something looks plain, upgrade it.\n- Reuse the existing UI primitives in the codebase. Do NOT create duplicate UI kits.\n  - Vite primitives live in src/components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and src/lib/cn.js\n  - Next primitives live in components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and lib/cn.ts\n- If you need a new primitive, EXTEND the existing components in those folders instead of creating a parallel set.\n` + themeBlock
+      : themeBlock + fallbackUiQualityBlock;
 
     const conventionsSnapshot = (() => {
       const state = this.internalState.get(runId);
@@ -1418,7 +1623,7 @@ export class BuildRunManager {
     this.emit(runId, { type: 'log', runId, at: now(), level: 'system', message: `Generating: ${ticket.title}`, ticketId });
 
     const genStart = now();
-    const generatedCode = await this.generateTicketCode(baseUrl, run.input.model, ticketPrompt, sandboxId);
+    const generatedCode = await this.generateTicketCode(runId, baseUrl, run.input.model, ticketPrompt, sandboxId);
     const genMs = now() - genStart;
 
     run.tickets = updateTicket(run.tickets, ticketId, { generatedCode } as any);
@@ -1434,7 +1639,7 @@ export class BuildRunManager {
     this.updateTicketStatus(runId, ticketId, 'applying', 90);
     this.emit(runId, { type: 'log', runId, at: now(), level: 'system', message: `Applying: ${ticket.title}`, ticketId });
 
-    const applyRes = await this.applyCode(baseUrl, sandboxId, generatedCode, true);
+    const applyRes = await this.applyCode(runId, baseUrl, sandboxId, generatedCode, true);
     const appliedFilesSet = new Set(applyRes.appliedFiles);
     let appliedFiles = Array.from(appliedFilesSet);
 
@@ -1513,6 +1718,7 @@ export class BuildRunManager {
         `Code:\n${filesText}`;
 
       const fixCode = await this.generateTicketCode(
+        runId,
         baseUrl,
         run.input.model,
         fixPrompt,
@@ -1524,7 +1730,7 @@ export class BuildRunManager {
         break;
       }
 
-      const fixApplyRes = await this.applyCode(baseUrl, sandboxId, fixCode, true);
+      const fixApplyRes = await this.applyCode(runId, baseUrl, sandboxId, fixCode, true);
       for (const p of fixApplyRes.appliedFiles) {
         appliedFilesSet.add(p);
       }
@@ -1650,6 +1856,7 @@ export class BuildRunManager {
   }
 
   private async generateTicketCode(
+    runId: string,
     baseUrl: string,
     model: string,
     prompt: string,
@@ -1662,6 +1869,7 @@ export class BuildRunManager {
     });
 
     const controller = new AbortController();
+    const detachCancel = this.attachCancelSignal(runId, controller);
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let res: Response;
@@ -1679,6 +1887,7 @@ export class BuildRunManager {
         signal: controller.signal,
       });
     } catch (e: any) {
+      detachCancel();
       clearTimeout(timeoutId);
       const msg = String(e?.name || '') === 'AbortError'
         ? `AI generation timed out after ${(timeoutMs / 1000).toFixed(0)}s`
@@ -1687,6 +1896,7 @@ export class BuildRunManager {
     }
 
     if (!res.ok) {
+      detachCancel();
       clearTimeout(timeoutId);
       const bodyText = await readResponseTextSafe(res, 4000);
       const details = bodyText ? `\n${bodyText}` : '';
@@ -1715,6 +1925,7 @@ export class BuildRunManager {
         : (e?.message || 'AI generation failed');
       throw new Error(msg);
     } finally {
+      detachCancel();
       clearTimeout(timeoutId);
     }
 
@@ -1722,6 +1933,7 @@ export class BuildRunManager {
   }
 
   private async applyCode(
+    runId: string,
     baseUrl: string,
     sandboxId: string,
     code: string,
@@ -1734,6 +1946,7 @@ export class BuildRunManager {
     });
 
     const controller = new AbortController();
+    const detachCancel = this.attachCancelSignal(runId, controller);
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     let res: Response;
@@ -1749,6 +1962,7 @@ export class BuildRunManager {
         signal: controller.signal,
       });
     } catch (e: any) {
+      detachCancel();
       clearTimeout(timeoutId);
       const msg = String(e?.name || '') === 'AbortError'
         ? `Apply timed out after ${(timeoutMs / 1000).toFixed(0)}s`
@@ -1757,6 +1971,7 @@ export class BuildRunManager {
     }
 
     if (!res.ok) {
+      detachCancel();
       clearTimeout(timeoutId);
       const bodyText = await readResponseTextSafe(res, 4000);
       const details = bodyText ? `\n${bodyText}` : '';
@@ -1777,6 +1992,7 @@ export class BuildRunManager {
         : (e?.message || 'Apply failed');
       throw new Error(msg);
     } finally {
+      detachCancel();
       clearTimeout(timeoutId);
     }
 
@@ -2075,6 +2291,12 @@ export class BuildRunManager {
     while (true) {
       await this.waitIfPaused(runId);
 
+      const live = this.runs.get(runId);
+      if (!live) return;
+      if (live.cancelled || live.status === 'cancelled') {
+        break;
+      }
+
       const next = state.mergeQueue.shift();
       if (!next) break;
 
@@ -2219,6 +2441,7 @@ export class BuildRunManager {
             let fixCode = '';
             try {
               fixCode = await this.generateTicketCode(
+                runId,
                 baseUrl,
                 run.input.model,
                 fixPrompt,
@@ -2397,8 +2620,21 @@ export class BuildRunManager {
       // Apply patch (merge)
       let applyRes: { appliedFiles: string[]; durationMs?: number } | null = null;
       try {
-        applyRes = await this.applyCode(baseUrl, state.mainSandboxId, next.patchCode, true);
+        applyRes = await this.applyCode(runId, baseUrl, state.mainSandboxId, next.patchCode, true);
       } catch (e: any) {
+        if (this.isCancelled(runId)) {
+          this.updateTicketStatus(runId, next.ticketId, 'backlog', 0, null);
+          this.emit(runId, {
+            type: 'log',
+            runId,
+            at: now(),
+            level: 'info',
+            message: `Merge cancelled.`,
+            ticketId: next.ticketId,
+          });
+          // Stop processing merges immediately.
+          break;
+        }
         const msg = e?.message || 'Merge apply failed';
         this.pushHealRecord(runId, next.ticketId, 'merge_apply', msg);
 
@@ -2462,6 +2698,18 @@ export class BuildRunManager {
         let gateAttempt = 0;
 
         while (true) {
+          if (this.isCancelled(runId)) {
+            this.updateTicketStatus(runId, next.ticketId, 'backlog', 0, null);
+            this.emit(runId, {
+              type: 'log',
+              runId,
+              at: now(),
+              level: 'info',
+              message: `Integration gate cancelled.`,
+              ticketId: next.ticketId,
+            });
+            return;
+          }
           gateAttempt += 1;
           try {
             this.emit(runId, {
@@ -2472,9 +2720,21 @@ export class BuildRunManager {
               message: `Integration gate running (attempt ${gateAttempt})...`,
               ticketId: next.ticketId,
             });
-            await this.runIntegrationGate(baseUrl, state.mainSandboxId);
+            await this.runIntegrationGate(runId, baseUrl, state.mainSandboxId);
             break;
           } catch (e: any) {
+            if (this.isCancelled(runId)) {
+              this.updateTicketStatus(runId, next.ticketId, 'backlog', 0, null);
+              this.emit(runId, {
+                type: 'log',
+                runId,
+                at: now(),
+                level: 'info',
+                message: `Integration gate cancelled.`,
+                ticketId: next.ticketId,
+              });
+              return;
+            }
             const msg = e?.message || 'Integration gate failed';
             this.pushHealRecord(runId, next.ticketId, 'integration_gate', msg);
 
@@ -2525,6 +2785,7 @@ export class BuildRunManager {
               (problemFilesText ? `Current file contents (authoritative):\n${problemFilesText}\n\n` : '');
 
             const fixCode = await this.generateTicketCode(
+              runId,
               baseUrl,
               run.input.model,
               fixPrompt,
@@ -2539,7 +2800,7 @@ export class BuildRunManager {
             }
 
             try {
-              const fixApplyRes = await this.applyCode(baseUrl, state.mainSandboxId, fixCode, true);
+              const fixApplyRes = await this.applyCode(runId, baseUrl, state.mainSandboxId, fixCode, true);
               // Expand the patch file set with any new files touched by the fix.
               for (const p of fixApplyRes.appliedFiles) {
                 if (p && !mergedFiles.includes(p)) mergedFiles.push(p);
@@ -2629,10 +2890,11 @@ export class BuildRunManager {
     }
   }
 
-  private async runIntegrationGate(baseUrl: string, sandboxId: string): Promise<void> {
+  private async runIntegrationGate(runId: string, baseUrl: string, sandboxId: string): Promise<void> {
     // Deterministic integration gate (hard signal):
     // 1) Build must succeed (`npm run build`), then
     // 2) Console log check must pass (best-effort).
+    if (this.isCancelled(runId)) throw new Error('Cancelled');
 
     const provider =
       sandboxManager.getProvider(sandboxId) ||
@@ -2673,6 +2935,7 @@ export class BuildRunManager {
         max: 120_000,
       });
       const controller = new AbortController();
+      const detachCancel = this.attachCancelSignal(runId, controller);
       const timeoutId = setTimeout(() => controller.abort(), consoleTimeoutMs);
 
       try {
@@ -2691,6 +2954,7 @@ export class BuildRunManager {
           throw new Error(`Console check failed (${consoleResult.errorCount || 0} issue(s))`);
         }
       } finally {
+        detachCancel();
         clearTimeout(timeoutId);
       }
     } catch {
@@ -2702,21 +2966,42 @@ export class BuildRunManager {
     const run = this.runs.get(runId);
     if (!run) return;
 
+    const planDataMode = String(
+      (run.input.plan as any)?.dataMode || (run.input.plan as any)?.blueprint?.dataMode || ''
+    )
+      .trim()
+      .toLowerCase();
+    const treatAwaitingInputDbAsOptional = planDataMode === 'real_optional' || planDataMode === 'mock';
+
     const byId = new Map(run.tickets.map(t => [t.id, t] as const));
 
     for (const t of run.tickets) {
-      if (t.status !== 'backlog' && t.status !== 'rebasing') continue;
+      // Blocked is a *derived* state from dependencies. It should automatically clear when deps recover.
+      // Keep the surface area small: only tickets that are buildable-ish or dependency-blocked should be mutated here.
+      if (t.status !== 'backlog' && t.status !== 'rebasing' && t.status !== 'blocked') continue;
       const deps = Array.isArray(t.dependencies) ? t.dependencies : [];
       if (deps.length === 0) continue;
 
+      const isIgnored = (dep: KanbanTicket) =>
+        Boolean(treatAwaitingInputDbAsOptional && dep.status === 'awaiting_input' && dep.type === 'database');
+
       const blocker = deps
         .map(id => byId.get(id))
-        .find(dep => dep && (dep.status === 'failed' || dep.status === 'blocked' || dep.status === 'skipped' || dep.status === 'awaiting_input'));
+        .find(dep => dep && (dep.status === 'failed' || dep.status === 'blocked' || dep.status === 'awaiting_input') && !isIgnored(dep));
 
-      if (!blocker) continue;
+      if (blocker) {
+        const msg = `Blocked by dependency: ${blocker.title} (${blocker.status})`;
+        this.updateTicketStatus(runId, t.id, 'blocked', undefined, msg);
+        continue;
+      }
 
-      const msg = `Blocked by dependency: ${blocker.title} (${blocker.status})`;
-      this.updateTicketStatus(runId, t.id, 'blocked', undefined, msg);
+      // No blocker anymore: if we previously set this ticket to blocked-by-dep, return it to backlog so it can run.
+      if (t.status === 'blocked') {
+        const err = String((t as any)?.error || '');
+        if (err.startsWith('Blocked by dependency:')) {
+          this.updateTicketStatus(runId, t.id, 'backlog', 0, null);
+        }
+      }
     }
   }
 }
@@ -2873,12 +3158,21 @@ function hasBlockingIssues(review: any): boolean {
   });
 }
 
+function stripMarkdownFenceLines(content: string): string {
+  const src = String(content ?? '');
+  if (!src.includes('```')) return src;
+  const lines = src.split(/\r?\n/);
+  const out = lines.filter(line => !/^\s*```[A-Za-z0-9_-]*\s*$/.test(line));
+  return out.join('\n').trim();
+}
+
 function extractFileBlocks(generatedCode: string): Array<{ path: string; content: string }> {
   const files: Array<{ path: string; content: string }> = [];
   const fileRegex = /<file path="([^"]+)">([\s\S]*?)(?:<\/file>|(?=<file path="|$))/g;
   let match: RegExpExecArray | null;
   while ((match = fileRegex.exec(generatedCode)) !== null) {
-    files.push({ path: match[1], content: (match[2] || '').trim() });
+    const raw = (match[2] || '').trim();
+    files.push({ path: match[1], content: stripMarkdownFenceLines(raw) });
   }
   return files;
 }

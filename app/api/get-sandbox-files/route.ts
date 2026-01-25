@@ -44,100 +44,137 @@ export async function GET(request: NextRequest) {
       return RELEVANT_EXTS.has(s.slice(dot).toLowerCase());
     };
 
-    // Get list of all relevant files (primary strategy: find with grouped -name predicates)
-    const findCommand = shJoin([
-      'find', '.',
-      '-name', 'node_modules', '-prune', '-o',
-      '-name', '.git', '-prune', '-o',
-      '-name', 'dist', '-prune', '-o',
-      '-name', 'build', '-prune', '-o',
-      '-type', 'f',
-      '(',
-      '-name', '*.jsx',
-      '-o', '-name', '*.js',
-      '-o', '-name', '*.tsx',
-      '-o', '-name', '*.ts',
-      '-o', '-name', '*.css',
-      '-o', '-name', '*.json',
-      ')',
-      '-print'
-    ]);
+    // PERFORMANCE: Reading sandbox files via one in-sandbox Node script is far faster than
+    // invoking hundreds of `wc`/`cat` commands over the provider RPC boundary.
+    const MAX_FILE_BYTES = 10_000;
+    const MAX_FILES = 900;
+    const MAX_TOTAL_BYTES = 900_000;
 
-    let fileList: string[] = [];
-    const findResult = await provider.runCommand(findCommand);
-    if (findResult.exitCode === 0) {
-      fileList = (findResult.stdout || '').split('\n').filter((f: string) => f.trim());
-    } else {
-      const msg = findResult.stderr || 'Failed to list files';
-      if (msg.includes('Status code 410')) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Sandbox has stopped execution and is no longer available',
-          },
-          { status: 410 }
-        );
+    let filesContent: Record<string, string> = {};
+    let structure = '';
+
+    const nodeWalker = `
+const fs = require('fs');
+const path = require('path');
+
+const RELEVANT_EXTS = new Set(['.jsx', '.js', '.tsx', '.ts', '.css', '.json']);
+const IGNORE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next']);
+
+const MAX_FILE_BYTES = ${MAX_FILE_BYTES};
+const MAX_FILES = ${MAX_FILES};
+const MAX_TOTAL_BYTES = ${MAX_TOTAL_BYTES};
+
+let totalBytes = 0;
+const files = {};
+const dirs = new Set(['.']);
+
+function addDirs(relPath) {
+  try {
+    const d = path.dirname(relPath).replace(/\\\\/g, '/');
+    if (!d || d === '.') return;
+    const parts = d.split('/').filter(Boolean);
+    let cur = '';
+    for (const p of parts) {
+      cur = cur ? (cur + '/' + p) : p;
+      dirs.add(cur);
+    }
+  } catch {}
+}
+
+function walk(dir) {
+  if (Object.keys(files).length >= MAX_FILES) return;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const ent of entries) {
+    if (Object.keys(files).length >= MAX_FILES) break;
+    const name = ent.name;
+    if (IGNORE_DIRS.has(name)) continue;
+    const full = path.join(dir, name);
+
+    if (ent.isDirectory()) {
+      const relDir = full.replace(/^\\.\\/?/, '').replace(/\\\\/g, '/');
+      dirs.add(relDir || '.');
+      walk(full);
+      continue;
+    }
+
+    if (!ent.isFile()) continue;
+    const ext = path.extname(name).toLowerCase();
+    if (!RELEVANT_EXTS.has(ext)) continue;
+
+    let stat;
+    try { stat = fs.statSync(full); } catch { continue; }
+    if (!stat || !stat.isFile()) continue;
+    if (stat.size > MAX_FILE_BYTES) continue;
+    if (totalBytes + stat.size > MAX_TOTAL_BYTES) continue;
+
+    let content = '';
+    try { content = fs.readFileSync(full, 'utf8'); } catch { continue; }
+    const rel = full.replace(/^\\.\\/?/, '').replace(/\\\\/g, '/');
+    if (!rel) continue;
+    files[rel] = content;
+    totalBytes += stat.size;
+    addDirs(rel);
+  }
+}
+
+walk('.');
+
+process.stdout.write(JSON.stringify({
+  files,
+  dirs: Array.from(dirs).filter(Boolean).sort().slice(0, 50),
+  fileCount: Object.keys(files).length,
+  totalBytes,
+}));
+`.trim();
+
+    try {
+      const nodeRes = await provider.runCommand(`node -e ${shQuote(nodeWalker)}`);
+      if (nodeRes.exitCode === 0) {
+        const parsed = JSON.parse(String(nodeRes.stdout || '').trim() || '{}') as any;
+        if (parsed?.files && typeof parsed.files === 'object') {
+          filesContent = Object.fromEntries(
+            Object.entries(parsed.files as Record<string, unknown>).map(([p, c]) => [String(p), typeof c === 'string' ? c : String(c ?? '')])
+          );
+        }
+        if (Array.isArray(parsed?.dirs)) {
+          structure = (parsed.dirs as unknown[])
+            .map(d => String(d || '').trim())
+            .filter(Boolean)
+            .slice(0, 50)
+            .join('\n');
+        }
       }
+    } catch {
+      // ignore; we'll fall back below
+    }
 
-      // Fallback strategy: provider-native file listing (avoid shell parsing issues)
+    // Fallback: provider-native listing + direct file reads (best-effort capped to avoid timeouts).
+    if (Object.keys(filesContent).length === 0) {
+      let fileList: string[] = [];
       try {
         const listed = await provider.listFiles();
-        fileList = (listed || [])
-          .map((p: string) => String(p || '').trim())
-          .filter(Boolean)
-          .filter(isRelevantFile)
-          .map((p: string) => (p.startsWith('./') ? p : `./${p}`));
+        fileList = (listed || []).map((p: string) => String(p || '').trim()).filter(Boolean).filter(isRelevantFile);
       } catch {
         fileList = [];
       }
 
-      if (fileList.length === 0) {
-        throw new Error(msg);
-      }
-    }
+      console.log('[get-sandbox-files] Fallback file listing found', fileList.length, 'files');
 
-    console.log('[get-sandbox-files] Found', fileList.length, 'files');
-    
-    // Read content of each file (limit to reasonable sizes)
-    const filesContent: Record<string, string> = {};
-    
-    for (const filePath of fileList) {
-      try {
-        // Check file size first (portable across Linux/macOS)
-        const sizeResult = await provider.runCommand(`wc -c -- ${shQuote(filePath)}`);
-        if (sizeResult.exitCode !== 0) continue;
-
-        const sizeToken = (sizeResult.stdout || '').trim().split(/\s+/)[0];
-        const fileSize = parseInt(sizeToken, 10);
-        if (!Number.isFinite(fileSize)) continue;
-
-        // Only read files smaller than 10KB
-        if (fileSize < 10000) {
-          const catResult = await provider.runCommand(`cat -- ${shQuote(filePath)}`);
-          if (catResult.exitCode === 0) {
-            const content = catResult.stdout || '';
-            // Remove leading './' from path
-            const relativePath = filePath.replace(/^\.\//, '');
-            filesContent[relativePath] = content;
+      const capped = fileList.slice(0, 250);
+      for (const relPath of capped) {
+        try {
+          const content = await provider.readFile(relPath);
+          if (typeof content === 'string' && content.length > 0 && content.length <= MAX_FILE_BYTES) {
+            filesContent[relPath.replace(/^\.\//, '')] = content;
           }
+        } catch {
+          // ignore
         }
-      } catch (parseError) {
-        console.debug('Error parsing component info:', parseError);
-        // Skip files that can't be read
-        continue;
       }
     }
-    
-    // Get directory structure
-    const treeResult = await provider.runCommand(
-      shJoin(['find', '.', '-type', 'd', '-not', '-path', '*/node_modules*', '-not', '-path', '*/.git*'])
-    );
-    
-    let structure = '';
-    if (treeResult.exitCode === 0) {
-      const dirs = (treeResult.stdout || '').split('\n').filter((d: string) => d.trim());
-      structure = dirs.slice(0, 50).join('\n'); // Limit to 50 lines
-    }
+
+    console.log('[get-sandbox-files] Returning', Object.keys(filesContent).length, 'files');
     
     // Build enhanced file manifest
     const fileManifest: FileManifest = {

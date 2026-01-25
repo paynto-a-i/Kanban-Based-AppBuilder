@@ -117,6 +117,19 @@ export const DESIGN_EXCELLENCE = `## DESIGN EXCELLENCE STANDARDS
 
 Your code must produce visually stunning, production-ready interfaces. Follow these principles:
 
+### 🎬 ART DIRECTION (NON-NEGOTIABLE)
+
+- Every build MUST have a distinct visual identity (not a generic "default shadcn" look).
+- Establish a coherent **design system** early: typography scale, spacing rhythm, shape language (radius/stroke), surfaces, shadows, and iconography.
+- Create at least one "signature moment" that makes the UI feel premium (e.g., a beautiful hero, a standout card pattern, a delightful empty state, a tasteful animated background).
+- Motion is REQUIRED where appropriate:
+  - Micro-interactions on ALL interactive elements (hover/press/focus).
+  - Tasteful entrances for key sections/components.
+  - Respect user preferences: use motion-safe:* / motion-reduce:* patterns and never force heavy motion.
+- If the user requests a specific theme/aesthetic (e.g. anime/cyberpunk/retro/brutalist), GO ALL-IN:
+  - Adapt palette, typography, icon/illustration style, background motifs/texture, and microcopy tone to match the theme.
+  - Keep it usable: contrast, readability, and accessible focus states still matter.
+
 ### 🎨 COLOR SYSTEMS
 
 Use curated, harmonious color palettes - NEVER use raw colors:
@@ -1224,6 +1237,11 @@ import { Menu, X } from 'lucide-react';
 // ✅ Render a stable field or a string
 // <div>{user.name}</div>
 // <div>{String(user.name ?? '')}</div>
+//
+// ✅ For common entity objects, always derive a display label:
+// const label = typeof item === 'string' ? item : (item?.name ?? item?.title ?? item?.label ?? item?.slug ?? String(item?.id ?? ''));
+// <Badge>{label}</Badge>
+// <option>{label}</option>
 \`\`\``;
 
 // ============================================================================

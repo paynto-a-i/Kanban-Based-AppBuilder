@@ -166,7 +166,7 @@ export function ProjectSwitcherDropdown({
             <AlertDialogHeader className="space-y-2">
               <AlertDialogTitle className="text-lg">Start a new project?</AlertDialogTitle>
               <AlertDialogDescription className="text-sm">
-                This will clear your current plan, chat, and in-page project state. Your sandbox URL and selected model will be kept.
+                This will clear your current plan, chat, and in-page project state. We’ll also reset your sandbox so the View tab starts clean (you’ll get a new sandbox URL).
               </AlertDialogDescription>
             </AlertDialogHeader>
           </div>

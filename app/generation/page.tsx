@@ -1856,7 +1856,23 @@ Visual Features: ${uiOption.features.join(', ')}`;
     }
 
     const planTemplate = (plan as any).templateTarget;
-    const template: 'vite' | 'next' = planTemplate === 'next' || planTemplate === 'nextjs' ? 'next' : 'vite';
+    // Sandboxes currently run Vite only. If the plan says "next", restore as Vite so scaffold writes `src/*` files.
+    // (If we scaffold as Next into a Vite sandbox, the preview can end up blank due to missing `src/lib/data/*` etc.)
+    let template: 'vite' | 'next' = planTemplate === 'next' || planTemplate === 'nextjs' ? 'next' : 'vite';
+    if (template === 'next') {
+      template = 'vite';
+      addChatMessage('Next.js template requested, but sandboxes currently run Vite. Restoring as Vite.', 'system');
+      try {
+        if (kanban.plan) {
+          const bp: any = (kanban.plan as any).blueprint && typeof (kanban.plan as any).blueprint === 'object'
+            ? { ...(kanban.plan as any).blueprint, templateTarget: 'vite' }
+            : undefined;
+          kanban.setPlan({ ...(kanban.plan as any), templateTarget: 'vite', ...(bp ? { blueprint: bp } : {}) });
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     restoringSandboxRef.current = true;
     setIsRestoringSandbox(true);
@@ -2563,6 +2579,10 @@ Requirements:
 
   // Reset everything and start fresh with a new project
   const handleStartNewProject = useCallback(() => {
+    const previousSandboxId = String(sandboxData?.sandboxId || '').trim() || null;
+    const desiredTemplate = (((sandboxData as any)?.templateTarget || 'vite') === 'next' ? 'next' : 'vite') as 'vite' | 'next';
+    const runIdToCancel = buildRunId;
+
     // Clear kanban state
     kanban.setPlan(null);
     kanban.setTickets([]);
@@ -2585,6 +2605,48 @@ Requirements:
     // Clear any pending prompts
     setPendingPrompt('');
 
+    // Reset preview-related UI so "View" can't show the prior build
+    setActiveTab('kanban');
+    setIsFullscreenPreview(false);
+    setPreviewHasUpdate(false);
+    setPreviewDiagnostics(null);
+    setSandboxExpired(false);
+    setIsRestoringSandbox(false);
+    setIsPreviewRefreshing(false);
+
+    // Immediately clear iframe content (avoid showing stale UI while we reset)
+    try {
+      if (iframeRef.current) iframeRef.current.src = 'about:blank';
+    } catch {
+      // ignore
+    }
+
+    // Immediately clear sandbox state + files view so Preview can't reload old code while we reset.
+    setSandboxData(null);
+    setSandboxFiles({});
+    setSelectedFile(null);
+
+    // Best-effort: stop any active server-side build run
+    try {
+      buildRunEventSourceRef.current?.close();
+    } catch {
+      // ignore
+    }
+    buildRunEventSourceRef.current = null;
+    if (runIdToCancel) {
+      try {
+        void fetch(`/api/build-runs/${encodeURIComponent(runIdToCancel)}/cancel`, { method: 'POST' });
+      } catch {
+        // ignore
+      }
+    }
+    setBuildRunId(null);
+    try {
+      sessionStorage.removeItem('active_build_run_id');
+    } catch {
+      // ignore
+    }
+
     // Clear localStorage for kanban plans
     try {
       localStorage.removeItem('kanban_build_plans');
@@ -2592,14 +2654,51 @@ Requirements:
       console.warn('Failed to clear localStorage:', e);
     }
 
-    // Clear URL params but keep sandbox if exists
+    // Clear URL params (don’t keep the old sandbox — it contains previous code)
     const params = new URLSearchParams();
-    if (sandboxData?.sandboxId) {
-      params.set('sandbox', sandboxData.sandboxId);
-    }
     params.set('model', aiModel);
-    router.push(`/generation?${params.toString()}`);
-  }, [kanban, sandboxData, aiModel, router, setConversationContext, setChatMessages, setHasInitialSubmission, setPendingPrompt]);
+    params.set('provider', sandboxProviderPreference);
+    router.replace(`/generation?${params.toString()}`, { scroll: false });
+
+    // Recreate sandbox in background so the next "View" is always a clean slate.
+    void (async () => {
+      try {
+        if (previousSandboxId) {
+          await fetch('/api/kill-sandbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sandboxId: previousSandboxId, reason: 'new_project' }),
+          });
+        }
+      } catch (e) {
+        console.warn('[new-project] Failed to stop previous sandbox (non-fatal):', e);
+      }
+
+      try {
+        const created = await createSandbox(true, 0, desiredTemplate);
+        if (created?.sandboxId) {
+          const cleaned = new URLSearchParams();
+          cleaned.set('sandbox', created.sandboxId);
+          cleaned.set('model', aiModel);
+          cleaned.set('provider', sandboxProviderPreference);
+          router.replace(`/generation?${cleaned.toString()}`, { scroll: false });
+        }
+      } catch (e) {
+        console.warn('[new-project] Failed to create fresh sandbox (non-fatal):', e);
+      }
+    })();
+  }, [
+    aiModel,
+    buildRunId,
+    kanban,
+    router,
+    sandboxData,
+    sandboxProviderPreference,
+    setChatMessages,
+    setConversationContext,
+    setHasInitialSubmission,
+    setPendingPrompt,
+  ]);
 
   const handleBuildRunEvent = (evt: any) => {
     if (!evt || typeof evt !== 'object') return;
@@ -2634,12 +2733,71 @@ Requirements:
         } catch {
           setPreviewHasUpdate(true);
         }
+        try {
+          buildRunEventSourceRef.current?.close();
+        } catch {
+          // ignore
+        }
+        setBuildRunId(null);
+        try {
+          sessionStorage.removeItem('active_build_run_id');
+        } catch {
+          // ignore
+        }
+        try {
+          const newParams = new URLSearchParams(searchParams.toString());
+          newParams.delete('run');
+          router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+        } catch {
+          // ignore
+        }
       } else if (evt.status === 'failed') {
         setKanbanBuildActive(false);
         kanban.setIsPaused(false);
         const msg = evt.error || evt.message || 'Build failed';
         setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: `Failed: ${msg}` }));
         addChatMessage(`Build failed: ${msg}`, 'error');
+        try {
+          buildRunEventSourceRef.current?.close();
+        } catch {
+          // ignore
+        }
+        setBuildRunId(null);
+        try {
+          sessionStorage.removeItem('active_build_run_id');
+        } catch {
+          // ignore
+        }
+        try {
+          const newParams = new URLSearchParams(searchParams.toString());
+          newParams.delete('run');
+          router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+        } catch {
+          // ignore
+        }
+      } else if (evt.status === 'cancelled') {
+        setKanbanBuildActive(false);
+        kanban.setIsPaused(false);
+        setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build cancelled' }));
+        addChatMessage('Build cancelled.', 'system');
+        try {
+          buildRunEventSourceRef.current?.close();
+        } catch {
+          // ignore
+        }
+        setBuildRunId(null);
+        try {
+          sessionStorage.removeItem('active_build_run_id');
+        } catch {
+          // ignore
+        }
+        try {
+          const newParams = new URLSearchParams(searchParams.toString());
+          newParams.delete('run');
+          router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+        } catch {
+          // ignore
+        }
       }
       return;
     }
@@ -2745,6 +2903,127 @@ Requirements:
     };
   };
 
+  // Restore an in-flight BuildRun after refresh (URL param or sessionStorage).
+  useEffect(() => {
+    if (buildRunId) return;
+
+    const fromUrl = String(searchParams.get('run') || '').trim();
+    let fromSession = '';
+    try {
+      fromSession = String(sessionStorage.getItem('active_build_run_id') || '').trim();
+    } catch {
+      fromSession = '';
+    }
+
+    const candidate = fromUrl || fromSession;
+    if (!candidate) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/build-runs/${candidate}/status`);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+
+        const run = data?.run;
+        if (!res.ok || !data?.success || !run?.runId) {
+          try {
+            sessionStorage.removeItem('active_build_run_id');
+          } catch {
+            // ignore
+          }
+          // If the server lost the run (restart/eviction), reset any "in-flight" tickets so the user can safely re-run.
+          try {
+            const resettable = new Set([
+              'generating',
+              'applying',
+              'pr_review',
+              'merge_queued',
+              'rebasing',
+              'merging',
+              'testing',
+            ]);
+            const nextTickets = (kanban.tickets || []).map((t: any) => {
+              if (!t || !resettable.has(t.status)) return t;
+              return { ...t, status: 'backlog', progress: 0, error: undefined };
+            });
+            kanban.setTickets(nextTickets);
+          } catch {
+            // ignore
+          }
+          setKanbanBuildActive(false);
+          kanban.setIsPaused(false);
+          setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build run not found. You can start again.' }));
+          if (fromUrl) {
+            try {
+              const newParams = new URLSearchParams(searchParams.toString());
+              newParams.delete('run');
+              router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+            } catch {
+              // ignore
+            }
+          }
+          return;
+        }
+
+        if (Array.isArray(run.tickets)) {
+          kanban.setTickets(run.tickets);
+        }
+
+        const status = String(run.status || '');
+        const paused = Boolean(run.paused);
+
+        if (status === 'running' || status === 'paused' || status === 'queued') {
+          setBuildRunId(run.runId);
+          setKanbanBuildActive(true);
+          kanban.setIsPaused(paused);
+          connectBuildRunEvents(run.runId);
+
+          try {
+            sessionStorage.setItem('active_build_run_id', run.runId);
+          } catch {
+            // ignore
+          }
+          if (fromUrl !== run.runId) {
+            try {
+              const newParams = new URLSearchParams(searchParams.toString());
+              newParams.set('run', run.runId);
+              router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+            } catch {
+              // ignore
+            }
+          }
+          return;
+        }
+
+        // Run is already terminal; clear links.
+        setKanbanBuildActive(false);
+        kanban.setIsPaused(false);
+        try {
+          sessionStorage.removeItem('active_build_run_id');
+        } catch {
+          // ignore
+        }
+        if (fromUrl) {
+          try {
+            const newParams = new URLSearchParams(searchParams.toString());
+            newParams.delete('run');
+            router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildRunId, searchParams]);
+
   const startServerBuildRun = async (activeSandbox: any, onlyTicketId?: string) => {
     if (!kanban.plan) {
       addChatMessage('❌ No plan found. Please create a build plan first.', 'error');
@@ -2759,11 +3038,20 @@ Requirements:
 
     setGenerationProgress(prev => ({ ...prev, isGenerating: true, status: 'Starting build…', streamedCode: '' }));
 
+    // Sandboxes currently run Vite. If the plan blueprint says `next`, force a Vite-shaped run payload
+    // so the server-side runner scaffolds + generates Vite-compatible code paths (and the preview updates early).
+    const planBlueprint: any = (kanban.plan as any)?.blueprint || null;
+    const planForRun: any = {
+      ...(kanban.plan as any),
+      templateTarget: 'vite',
+      ...(planBlueprint ? { blueprint: { ...(planBlueprint as any), templateTarget: 'vite' } } : {}),
+    };
+
     const res = await fetch('/api/build-runs/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        plan: kanban.plan,
+        plan: planForRun,
         tickets: kanban.tickets,
         sandboxId,
         model: aiModel,
@@ -2778,6 +3066,29 @@ Requirements:
 
     const data = await res.json().catch(() => null);
 
+    if (!res.ok) {
+      const existingRunId = typeof data?.existingRunId === 'string' ? data.existingRunId.trim() : '';
+      if (res.status === 409 && existingRunId) {
+        setBuildRunId(existingRunId);
+        connectBuildRunEvents(existingRunId);
+        setKanbanBuildActive(true);
+        try {
+          sessionStorage.setItem('active_build_run_id', existingRunId);
+        } catch {
+          // ignore
+        }
+        try {
+          const newParams = new URLSearchParams(searchParams.toString());
+          newParams.set('run', existingRunId);
+          router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+        } catch {
+          // ignore
+        }
+        addChatMessage(`↩️ Reconnected to existing build (run: ${existingRunId})`, 'system');
+        return;
+      }
+    }
+
     if (!res.ok || !data?.success || !data?.runId) {
       const msg = data?.error || `Failed to start build run (HTTP ${res.status})`;
       setKanbanBuildActive(false);
@@ -2788,6 +3099,18 @@ Requirements:
 
     setBuildRunId(data.runId);
     connectBuildRunEvents(data.runId);
+    try {
+      sessionStorage.setItem('active_build_run_id', data.runId);
+    } catch {
+      // ignore
+    }
+    try {
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.set('run', data.runId);
+      router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+    } catch {
+      // ignore
+    }
     addChatMessage(`Build started (run: ${data.runId})`, 'system');
   };
 
@@ -2810,6 +3133,60 @@ Requirements:
     }
     try {
       await fetch(`/api/build-runs/${buildRunId}/resume`, { method: 'POST' });
+    } catch {
+      // ignore
+    }
+  };
+
+  const cancelServerBuildRun = async () => {
+    setGenerationProgress(prev => ({ ...prev, status: 'Cancelling build…' }));
+
+    if (!buildRunId) {
+      // Fallback: local builds (if any) are client-driven.
+      setKanbanBuildActive(false);
+      kanban.setIsPaused(false);
+      return;
+    }
+    try {
+      const rid = buildRunId;
+      const res = await fetch(`/api/build-runs/${rid}/cancel`, { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        // Best-effort: reconcile tickets after cancelling (in case SSE is disconnected).
+        try {
+          const statusRes = await fetch(`/api/build-runs/${rid}/status`);
+          const statusData = await statusRes.json().catch(() => null);
+          const run = statusData?.run;
+          if (statusRes.ok && statusData?.success && Array.isArray(run?.tickets)) {
+            kanban.setTickets(run.tickets);
+          }
+        } catch {
+          // ignore
+        }
+
+        // Optimistic UI cleanup (SSE may be disconnected).
+        setKanbanBuildActive(false);
+        kanban.setIsPaused(false);
+        setGenerationProgress(prev => ({ ...prev, isGenerating: false, status: 'Build cancelled' }));
+        try {
+          buildRunEventSourceRef.current?.close();
+        } catch {
+          // ignore
+        }
+        setBuildRunId(null);
+        try {
+          sessionStorage.removeItem('active_build_run_id');
+        } catch {
+          // ignore
+        }
+        try {
+          const newParams = new URLSearchParams(searchParams.toString());
+          newParams.delete('run');
+          router.replace(`/generation?${newParams.toString()}`, { scroll: false });
+        } catch {
+          // ignore
+        }
+      }
     } catch {
       // ignore
     }
@@ -2849,8 +3226,14 @@ Requirements:
       (kanban.plan as any)?.templateTarget ||
       planBlueprint?.templateTarget ||
       'vite';
-    const effectiveTemplate: 'vite' | 'next' =
+    // IMPORTANT: The sandbox runtime currently supports Vite only (see `/api/create-ai-sandbox-v2`).
+    // Even if the planner outputs `next`, we must build/scaffold as Vite or the preview will remain the default template.
+    let effectiveTemplate: 'vite' | 'next' =
       desiredTemplate === 'next' && !nextTemplateEnabled ? 'vite' : desiredTemplate;
+    if (effectiveTemplate === 'next') {
+      effectiveTemplate = 'vite';
+      addChatMessage('Next.js template requested, but sandboxes currently run Vite. Using Vite template for this build.', 'system');
+    }
 
     // Ensure sandbox exists (and matches the plan template)
     let activeSandbox = sandboxData as any;
@@ -3298,9 +3681,19 @@ Requirements:
             : '';
 
         const uiStyleForPrompt = (kanban.plan as any)?.uiStyle;
-        const uiStyleBlock = uiStyleForPrompt
-          ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(uiStyleForPrompt, null, 2)}\n\nUI RULES:\n- Keep the UI visually rich (layered sections, modern spacing/typography, hover+focus states, and polished empty/loading states).\n- Do NOT drift to a generic default look; follow the selected style + blueprint theme.\n- Reuse the existing UI primitives in the codebase. Do NOT create duplicate UI kits.\n  - Vite primitives live in src/components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and src/lib/cn.js\n  - Next primitives live in components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and lib/cn.ts\n- If you need a new primitive, EXTEND the existing components in those folders instead of creating a parallel set.\n`
+        const themeForPrompt = (planBlueprint as any)?.theme;
+        const themeBlock = themeForPrompt
+          ? `\n\nBLUEPRINT THEME (apply consistently):\n${JSON.stringify(themeForPrompt, null, 2)}\n`
           : '';
+        const fallbackUiQualityBlock =
+          `\n\nUI QUALITY BAR (non-negotiable):\n` +
+          `- Make the UI visually rich: layered sections, premium typography, strong spacing rhythm, and polished empty/loading states.\n` +
+          `- Add motion: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion.\n` +
+          `- Avoid generic defaults. If something looks plain, upgrade it.\n` +
+          `- Reuse the existing UI primitives. Do NOT create duplicate UI kits.\n`;
+        const uiStyleBlock = uiStyleForPrompt
+          ? `\n\nUI STYLE (apply consistently across all tickets):\n${JSON.stringify(uiStyleForPrompt, null, 2)}\n\nART DIRECTION (follow strictly):\n- Treat UI_STYLE as the creative-director spec. Commit consistently: typography, spacing rhythm, shape language, surfaces, shadows, iconography, and motion.\n- Build a signature look early by evolving shared primitives (Button/Card/Input/etc) so the “wow” propagates everywhere.\n- Motion is required: micro-interactions on ALL interactive elements + tasteful entrances for key sections. Respect prefers-reduced-motion (use motion-safe/motion-reduce).\n- If UI_STYLE implies a specific aesthetic (e.g. anime/cyberpunk/retro/brutalist), go all-in (colors, motifs, icon/illustration style, copy tone) without sacrificing usability or contrast.\n- Never drift to a generic default look. If something looks plain, upgrade it.\n- Reuse the existing UI primitives in the codebase. Do NOT create duplicate UI kits.\n  - Vite primitives live in src/components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and src/lib/cn.js\n  - Next primitives live in components/ui/* (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) and lib/cn.ts\n- If you need a new primitive, EXTEND the existing components in those folders instead of creating a parallel set.\n` + themeBlock
+          : themeBlock + fallbackUiQualityBlock;
 
         const ticketPrompt = `Implement the following ticket in the existing application.\n\nTemplate: ${desiredTemplate}\n${uiStyleBlock}\nBlueprint (high-level contract):\n${planBlueprint ? JSON.stringify(planBlueprint, null, 2) : '(none)'}\n\nTicket:\n- Title: ${nextTicket.title}\n- Description: ${nextTicket.description}${credentialText}\n\nRules:\n- Implement the ticket completely.\n- Preserve existing routes/navigation and the mock-first data layer.\n- Create new files if required by this ticket.\n- Output ONLY <file path=\"...\"> blocks for files you changed/created.`;
 
@@ -7294,13 +7687,13 @@ Focus on the key sections and content, making it clean and modern.`;
             {/* Build Plan - Always visible in building state */}
             {(isPlanning || kanban.tickets.length > 0) && (
               <div className="flex-1 overflow-y-auto border-b border-border">
-                <div className="p-3 border-b border-gray-100 bg-gray-50 sticky top-0 z-10">
+                <div className="p-2.5 border-b border-gray-100 bg-gray-50 sticky top-0 z-10">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       {isPlanning && (
                         <div className="w-3 h-3 border-2 border-comfort-sage-500 border-t-transparent rounded-full animate-spin" />
                       )}
-                      <span className="text-xs font-semibold text-gray-700">
+                      <span className="text-[13px] font-semibold text-gray-700 whitespace-nowrap">
                         {isPlanning ? 'Planning Build...' : `Build Plan (${kanban.tickets.length} tasks)`}
                       </span>
                     </div>
@@ -7311,13 +7704,19 @@ Focus on the key sections and content, making it clean and modern.`;
                           ticketCount={kanban.tickets.length}
                           completedCount={kanban.tickets.filter(t => t.status === 'done').length}
                           isBuilding={kanbanBuildActive}
-                          isPaused={false}
-                          onStart={() => handleStartKanbanBuild()}
+                          isPaused={kanban.isPaused}
+                          onStart={() => {
+                            if (kanban.isPaused) {
+                              void resumeServerBuildRun();
+                              return;
+                            }
+                            void handleStartKanbanBuild();
+                          }}
                           onPause={() => {
-                            setKanbanBuildActive(false);
+                            void pauseServerBuildRun();
                           }}
                           onStop={() => {
-                            setKanbanBuildActive(false);
+                            void cancelServerBuildRun();
                           }}
                         />
                       )}

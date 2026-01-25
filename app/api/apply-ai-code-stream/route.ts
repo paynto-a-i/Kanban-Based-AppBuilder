@@ -23,6 +23,15 @@ interface ParsedResponse {
   structure: string | null;
 }
 
+function stripMarkdownFenceLines(content: string): string {
+  const src = String(content ?? '');
+  if (!src.includes('```')) return src;
+  const lines = src.split(/\r?\n/);
+  const out = lines.filter(line => !/^\s*```[A-Za-z0-9_-]*\s*$/.test(line));
+  // Trim to remove leftover blank lines from fence removal.
+  return out.join('\n').trim();
+}
+
 function parseAIResponse(response: string): ParsedResponse {
   const sections = {
     files: [] as Array<{ path: string; content: string }>,
@@ -782,6 +791,24 @@ export async function POST(request: NextRequest) {
               // Replace any other non-existent shadow utilities
               fileContent = fileContent.replace(/shadow-4xl/g, 'shadow-2xl');
               fileContent = fileContent.replace(/shadow-5xl/g, 'shadow-2xl');
+            }
+
+            // Guardrail: the model sometimes includes markdown code fences inside <file> blocks.
+            // Those fences make the file invalid JS/TS/CSS and can lead to a blank preview (no Vite overlay).
+            const shouldStrip =
+              normalizedPath.endsWith('.js') ||
+              normalizedPath.endsWith('.jsx') ||
+              normalizedPath.endsWith('.ts') ||
+              normalizedPath.endsWith('.tsx') ||
+              normalizedPath.endsWith('.css') ||
+              normalizedPath.endsWith('.json') ||
+              normalizedPath.endsWith('.html');
+            if (shouldStrip && fileContent.includes('```')) {
+              const cleaned = stripMarkdownFenceLines(fileContent);
+              if (cleaned !== fileContent) {
+                console.warn(`[apply-ai-code-stream] Stripped markdown fences from ${normalizedPath}`);
+                fileContent = cleaned;
+              }
             }
 
             // Store the final content we'll write (used later for missing-import placeholder generation)

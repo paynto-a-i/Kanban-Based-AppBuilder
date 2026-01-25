@@ -1,7 +1,7 @@
 import type { BuildPlan, KanbanTicket, TicketStatus } from '@/components/kanban/types';
 import type { UIStyle } from '@/types/ui-style';
 
-export type BuildRunStatus = 'queued' | 'running' | 'paused' | 'completed' | 'failed';
+export type BuildRunStatus = 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 export type BuildRunMode = 'full' | 'single_ticket';
 
@@ -109,6 +109,7 @@ export interface BuildRunRecord {
   updatedAt: number;
   status: BuildRunStatus;
   paused: boolean;
+  cancelled?: boolean;
   input: BuildRunInput;
   events: BuildEvent[];
   /**

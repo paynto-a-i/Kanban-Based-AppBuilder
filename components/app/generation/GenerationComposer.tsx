@@ -6,6 +6,7 @@ import * as React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/shadcn/popover";
 import Button from "@/components/ui/shadcn/button";
 import { cn } from "@/utils/cn";
+import { GENERATION_TEMPLATES } from "@/components/app/generation/build-templates";
 
 export type GenerationComposerMode = "build" | "clone" | "edit";
 
@@ -18,54 +19,13 @@ export interface BuildTemplate {
 }
 
 export const DEFAULT_BUILD_TEMPLATES: BuildTemplate[] = [
-  {
-    id: "landing",
-    name: "Landing Page",
-    description: "Hero, features, testimonials, pricing, footer",
-    prompt:
-      "Create a modern SaaS landing page with a hero section featuring a headline, subheadline, and CTA button. Include a features grid with icons, a testimonials section, pricing cards, and a footer with links.",
-    icon: "🚀",
-  },
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    description: "Sidebar nav, KPIs, charts, tables",
-    prompt:
-      "Build an admin dashboard with a sidebar navigation, top header with user profile, stats cards showing KPIs, a line chart for trends, a bar chart for comparisons, and a data table with pagination.",
-    icon: "📊",
-  },
-  {
-    id: "ecommerce",
-    name: "E-commerce",
-    description: "Product grid, filters, cart, checkout",
-    prompt:
-      "Create an e-commerce product page with a product grid, filters sidebar, product cards with images and prices, a shopping cart drawer, and a checkout form with payment fields.",
-    icon: "🛒",
-  },
-  {
-    id: "blog",
-    name: "Blog",
-    description: "Posts, categories, newsletter, post page",
-    prompt:
-      "Build a blog homepage with featured post hero, post grid with thumbnails and excerpts, category sidebar, newsletter signup, and a single post view with author info and comments section.",
-    icon: "📝",
-  },
-  {
-    id: "portfolio",
-    name: "Portfolio",
-    description: "Projects, timeline, skills, contact",
-    prompt:
-      "Create a personal portfolio site with an about section, skills list with progress bars, project gallery with modal previews, work experience timeline, and contact form.",
-    icon: "💼",
-  },
-  {
-    id: "pricing",
-    name: "Pricing Page",
-    description: "Tiers, toggle, comparison, FAQ",
-    prompt:
-      "Build a pricing page with 3 pricing tiers (Basic, Pro, Enterprise), monthly/yearly toggle, feature comparison table, FAQ accordion, and a CTA section.",
-    icon: "💰",
-  },
+  ...GENERATION_TEMPLATES.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    prompt: t.prompt,
+    icon: t.icon,
+  })),
 ];
 
 interface GenerationComposerProps {

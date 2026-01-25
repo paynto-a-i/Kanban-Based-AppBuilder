@@ -3,74 +3,11 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/utils/cn";
+import { GENERATION_TEMPLATES, type GenerationTemplate } from "./build-templates";
 
-export interface Template {
-  id: string;
-  name: string;
-  description: string;
-  prompt: string;
-  icon: string;
-  color: string;
-  features: string[];
-  preview?: string;
-}
+export type Template = GenerationTemplate;
 
-export const TEMPLATES: Template[] = [
-  {
-    id: "dashboard",
-    name: "Dashboard",
-    description: "Admin dashboard with charts and data tables",
-    prompt: "Build an admin dashboard with a sidebar navigation, top header with user profile, stats cards showing KPIs, a line chart for trends, a bar chart for comparisons, and a data table with pagination.",
-    icon: "📊",
-    color: "#3B82F6",
-    features: ["Charts", "Tables", "KPIs"],
-  },
-  {
-    id: "ecommerce",
-    name: "E-commerce",
-    description: "Product listing with cart and checkout",
-    prompt: "Create an e-commerce product page with a product grid, filters sidebar, product cards with images and prices, a shopping cart drawer, and a checkout form with payment fields.",
-    icon: "🛒",
-    color: "#10B981",
-    features: ["Products", "Cart", "Checkout"],
-  },
-  {
-    id: "blog",
-    name: "Blog",
-    description: "Blog with posts, categories, and comments",
-    prompt: "Build a blog homepage with featured post hero, post grid with thumbnails and excerpts, category sidebar, newsletter signup, and a single post view with author info and comments section.",
-    icon: "📝",
-    color: "#8B5CF6",
-    features: ["Posts", "Categories", "Comments"],
-  },
-  {
-    id: "portfolio",
-    name: "Portfolio",
-    description: "Personal portfolio with projects showcase",
-    prompt: "Create a personal portfolio site with an about section, skills list with progress bars, project gallery with modal previews, work experience timeline, and contact form.",
-    icon: "💼",
-    color: "#F59E0B",
-    features: ["Projects", "Skills", "Contact"],
-  },
-  {
-    id: "pricing",
-    name: "Pricing Page",
-    description: "SaaS pricing with feature comparison",
-    prompt: "Build a pricing page with 3 pricing tiers (Basic, Pro, Enterprise), monthly/yearly toggle, feature comparison table, FAQ accordion, and a CTA section.",
-    icon: "💰",
-    color: "#EC4899",
-    features: ["Tiers", "Comparison", "FAQ"],
-  },
-  {
-    id: "landing",
-    name: "Landing Page",
-    description: "Marketing landing with hero and features",
-    prompt: "Create a modern SaaS landing page with a hero section featuring a headline, subheadline, and CTA button. Include a features grid with icons, a testimonials section, pricing cards, and a footer with links.",
-    icon: "🚀",
-    color: "#fa5d19",
-    features: ["Hero", "Features", "CTA"],
-  },
-];
+export const TEMPLATES: Template[] = GENERATION_TEMPLATES;
 
 interface TemplateGridProps {
   templates?: Template[];

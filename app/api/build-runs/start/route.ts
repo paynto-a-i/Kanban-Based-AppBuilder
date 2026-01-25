@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     const sandboxId = String(body?.sandboxId || '').trim();
     const model = String(body?.model || '').trim();
-    const plan = body?.plan;
+    const rawPlan = body?.plan;
     const tickets = body?.tickets;
     const uiStyle = body?.uiStyle;
     const onlyTicketId = typeof body?.onlyTicketId === 'string' ? body.onlyTicketId : undefined;
@@ -40,12 +40,23 @@ export async function POST(request: NextRequest) {
     if (!model) {
       return NextResponse.json({ success: false, error: 'model is required' }, { status: 400 });
     }
-    if (!plan || typeof plan !== 'object') {
+    if (!rawPlan || typeof rawPlan !== 'object') {
       return NextResponse.json({ success: false, error: 'plan is required' }, { status: 400 });
     }
     if (!Array.isArray(tickets)) {
       return NextResponse.json({ success: false, error: 'tickets must be an array' }, { status: 400 });
     }
+
+    // Sandboxes currently run Vite only (even if the planner produced templateTarget=next).
+    // Normalize the run input so the server runner scaffolds/merges Vite-shaped files and the preview updates.
+    const planBlueprint = (rawPlan as any)?.blueprint && typeof (rawPlan as any).blueprint === 'object'
+      ? (rawPlan as any).blueprint
+      : null;
+    const plan: any = {
+      ...(rawPlan as any),
+      templateTarget: 'vite',
+      ...(planBlueprint ? { blueprint: { ...(planBlueprint as any), templateTarget: 'vite' } } : {}),
+    };
 
     const input: BuildRunInput = {
       plan,
@@ -60,6 +71,20 @@ export async function POST(request: NextRequest) {
     };
 
     const baseUrl = new URL(request.url).origin;
+
+    const existing = buildRunManager.findActiveRunForSandbox(sandboxId);
+    if (existing) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `A build is already ${existing.status} for this sandbox.`,
+          existingRunId: existing.runId,
+          status: existing.status,
+        },
+        { status: 409 }
+      );
+    }
+
     const run = buildRunManager.createRun(input, baseUrl);
 
     // Kick the run asynchronously (Phase 1: single worker). SSE clients can attach immediately.

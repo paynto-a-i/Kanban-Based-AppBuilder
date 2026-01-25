@@ -91,7 +91,7 @@ export function BuildButton({
   };
 
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <div className={cn("flex items-center gap-1", className)}>
       {/* Main Build Button */}
       <motion.button
         whileHover={state !== 'building' && !disabled ? { scale: 1.02 } : {}}
@@ -99,9 +99,9 @@ export function BuildButton({
         onClick={handleMainClick}
         disabled={disabled || state === 'building'}
         className={cn(
-          // Sweet spot between h-10/px-3 and h-11/px-3.5
-          "relative group flex items-center justify-start gap-[5px] h-[39px] px-[10px] rounded-lg overflow-hidden",
-          "font-semibold text-sm text-white",
+          // Slightly more compact so labels never truncate in the plan header.
+          "relative group flex items-center justify-start gap-1.5 h-9 px-[9px] rounded-lg overflow-hidden",
+          "font-semibold text-[13px] leading-none text-white",
           "transition-all duration-200",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-comfort-sage-400/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
           config.shadowClass,
@@ -140,11 +140,11 @@ export function BuildButton({
 
         {/* Button content - always on top */}
         <Icon className={cn(
-          "relative z-10 w-[25px] h-[25px] transition-opacity duration-200 ease-out group-hover:opacity-0",
+          "relative z-10 w-[22px] h-[22px] transition-opacity duration-200 ease-out group-hover:opacity-0",
           state === 'building' && "animate-spin"
         )} />
         <span className={cn(
-          "relative z-10 max-w-[140px] truncate",
+          "relative z-10 max-w-[120px] truncate",
           "transition-opacity duration-200 ease-out group-hover:opacity-0"
         )}>
           {config.label}
@@ -156,13 +156,13 @@ export function BuildButton({
           className={cn(
             "pointer-events-none absolute top-1/2 -translate-y-1/2 translate-x-0",
             // Start where the icon normally sits (left padded), then glide to center.
-            "left-[10px] group-hover:left-1/2 group-hover:-translate-x-1/2",
+            "left-[9px] group-hover:left-1/2 group-hover:-translate-x-1/2",
             // Start same size as default icon (no shrink), then grow.
             "opacity-0 scale-100 transition-all duration-200 ease-out",
             "group-hover:opacity-100 group-hover:scale-[1.4]"
           )}
         >
-          <Icon className={cn("w-[25px] h-[25px]", state === 'building' && "animate-spin")} />
+          <Icon className={cn("w-[22px] h-[22px]", state === 'building' && "animate-spin")} />
         </span>
       </motion.button>
 
@@ -177,7 +177,7 @@ export function BuildButton({
             whileTap={{ scale: 0.95 }}
             onClick={onPause}
             className={cn(
-              "flex items-center justify-center w-11 h-11 rounded-lg border border-gray-200",
+              "flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200",
               "bg-gray-50 text-gray-700",
               "hover:bg-gray-100 hover:text-gray-900",
               "transition-colors duration-150",
@@ -185,7 +185,7 @@ export function BuildButton({
             )}
             title="Pause build"
           >
-            <Pause className="w-7 h-7" />
+            <Pause className="w-[17px] h-[17px]" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -201,7 +201,7 @@ export function BuildButton({
             whileTap={{ scale: 0.95 }}
             onClick={onStop}
             className={cn(
-              "flex items-center justify-center w-11 h-11 rounded-lg border border-red-200",
+              "flex items-center justify-center w-9 h-9 rounded-lg border border-red-200",
               "bg-red-50 text-red-700",
               "hover:bg-red-100",
               "transition-colors duration-150",
@@ -209,7 +209,7 @@ export function BuildButton({
             )}
             title="Stop build"
           >
-            <Square className="w-7 h-7" />
+            <Square className="w-[17px] h-[17px]" />
           </motion.button>
         )}
       </AnimatePresence>

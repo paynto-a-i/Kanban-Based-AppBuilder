@@ -414,6 +414,18 @@ function buildBackdropComponent(template: TemplateTarget, ui: UiTheme, uiStyle?:
   const secondary = normalizeHex(cs?.secondary);
   const accent = normalizeHex(cs?.accent ?? cs?.primary);
 
+  const primaryRgb = primary ? hexToRgb(primary) : null;
+  const secondaryRgb = secondary ? hexToRgb(secondary) : null;
+  const accentRgb = accent ? hexToRgb(accent) : null;
+
+  const rgba = (rgb: { r: number; g: number; b: number } | null, a: number, fallback: string) =>
+    rgb ? `rgba(${rgb.r},${rgb.g},${rgb.b},${a})` : fallback;
+
+  // Use custom palette when available; otherwise fall back to theme-like glows.
+  const glowA = rgba(primaryRgb, ui.isDark ? 0.28 : 0.18, ui.isDark ? 'rgba(99,102,241,0.24)' : 'rgba(59,130,246,0.14)');
+  const glowB = rgba(accentRgb, ui.isDark ? 0.22 : 0.14, ui.isDark ? 'rgba(34,211,238,0.20)' : 'rgba(16,185,129,0.12)');
+  const glowC = rgba(secondaryRgb, ui.isDark ? 0.18 : 0.12, ui.isDark ? 'rgba(168,85,247,0.18)' : 'rgba(168,85,247,0.10)');
+
   const fallbackGradients: Record<ThemeAccent, { g1: string; g2: string }> = {
     indigo: {
       g1: 'from-indigo-500 via-violet-500 to-cyan-400',
@@ -456,17 +468,54 @@ function buildBackdropComponent(template: TemplateTarget, ui: UiTheme, uiStyle?:
   const blob1Opacity = ui.isDark ? 'opacity-30' : 'opacity-20';
   const blob2Opacity = ui.isDark ? 'opacity-25' : 'opacity-15';
   const overlay = ui.isDark ? 'bg-gradient-to-b from-black/0 via-black/0 to-black/35' : 'bg-gradient-to-b from-white/0 via-white/0 to-white/60';
+  const gridInk = ui.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)';
+  const gridOpacity = ui.isDark ? 'opacity-40' : 'opacity-25';
+  const blend = ui.isDark ? 'mix-blend-screen' : 'mix-blend-multiply';
 
   if (template === 'next') {
     return {
       filePath: 'components/Backdrop.tsx',
-      content: `export function Backdrop() {\n  return (\n    <div aria-hidden className=\"pointer-events-none absolute inset-0 overflow-hidden\">\n      <div className=\"absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} bg-gradient-to-tr ${g1}\" />\n      <div className=\"absolute -bottom-40 -right-32 h-[36rem] w-[36rem] rounded-full blur-3xl ${blob2Opacity} bg-gradient-to-tr ${g2}\" />\n      <div className=\"absolute inset-0 ${overlay}\" />\n    </div>\n  );\n}\n`,
+      content:
+        `export function Backdrop() {\n` +
+        `  return (\n` +
+        `    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">\n` +
+        `      {/* Soft glows */}\n` +
+        `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_top,${glowA},transparent_60%)]" />\n` +
+        `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_bottom_right,${glowB},transparent_55%)]" />\n` +
+        `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_bottom_left,${glowC},transparent_60%)]" />\n\n` +
+        `      {/* Subtle grid texture */}\n` +
+        `      <div className="absolute inset-0 ${gridOpacity} [background-image:linear-gradient(to_right,${gridInk}_1px,transparent_1px),linear-gradient(to_bottom,${gridInk}_1px,transparent_1px)] [background-size:56px_56px]" />\n\n` +
+        `      {/* Gradient blobs (slow motion-safe rotation) */}\n` +
+        `      <div className="absolute -top-40 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} ${blend} bg-gradient-to-tr ${g1} motion-safe:animate-[spin_48s_linear_infinite] motion-reduce:animate-none" />\n` +
+        `      <div className="absolute -bottom-48 -right-40 h-[38rem] w-[38rem] rounded-full blur-3xl ${blob2Opacity} ${blend} bg-gradient-to-tr ${g2} motion-safe:animate-[spin_64s_linear_infinite] motion-reduce:animate-none" />\n\n` +
+        `      {/* Contrast overlay */}\n` +
+        `      <div className="absolute inset-0 ${overlay}" />\n` +
+        `    </div>\n` +
+        `  );\n` +
+        `}\n`,
     };
   }
 
   return {
     filePath: 'src/components/Backdrop.jsx',
-    content: `export function Backdrop() {\n  return (\n    <div aria-hidden className=\"pointer-events-none absolute inset-0 overflow-hidden\">\n      <div className=\"absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} bg-gradient-to-tr ${g1}\" />\n      <div className=\"absolute -bottom-40 -right-32 h-[36rem] w-[36rem] rounded-full blur-3xl ${blob2Opacity} bg-gradient-to-tr ${g2}\" />\n      <div className=\"absolute inset-0 ${overlay}\" />\n    </div>\n  );\n}\n`,
+    content:
+      `export function Backdrop() {\n` +
+      `  return (\n` +
+      `    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">\n` +
+      `      {/* Soft glows */}\n` +
+      `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_top,${glowA},transparent_60%)]" />\n` +
+      `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_bottom_right,${glowB},transparent_55%)]" />\n` +
+      `      <div className="absolute inset-0 ${blend} [background-image:radial-gradient(ellipse_at_bottom_left,${glowC},transparent_60%)]" />\n\n` +
+      `      {/* Subtle grid texture */}\n` +
+      `      <div className="absolute inset-0 ${gridOpacity} [background-image:linear-gradient(to_right,${gridInk}_1px,transparent_1px),linear-gradient(to_bottom,${gridInk}_1px,transparent_1px)] [background-size:56px_56px]" />\n\n` +
+      `      {/* Gradient blobs (slow motion-safe rotation) */}\n` +
+      `      <div className="absolute -top-40 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full blur-3xl ${blob1Opacity} ${blend} bg-gradient-to-tr ${g1} motion-safe:animate-[spin_48s_linear_infinite] motion-reduce:animate-none" />\n` +
+      `      <div className="absolute -bottom-48 -right-40 h-[38rem] w-[38rem] rounded-full blur-3xl ${blob2Opacity} ${blend} bg-gradient-to-tr ${g2} motion-safe:animate-[spin_64s_linear_infinite] motion-reduce:animate-none" />\n\n` +
+      `      {/* Contrast overlay */}\n` +
+      `      <div className="absolute inset-0 ${overlay}" />\n` +
+      `    </div>\n` +
+      `  );\n` +
+      `}\n`,
   };
 }
 
@@ -482,7 +531,11 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
     return [
       {
         filePath: 'lib/cn.ts',
-        content: `export function cn(...classes: Array<string | false | null | undefined>) {\n  return classes.filter(Boolean).join(' ');\n}\n`,
+        content:
+          `export function cn(...classes: Array<string | false | null | undefined>) {\n` +
+          `  return classes.filter(Boolean).join(' ');\n` +
+          `}\n\n` +
+          `export default cn;\n`,
       },
       {
         filePath: 'components/ui/Button.tsx',
@@ -495,7 +548,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `export function buttonClasses(opts?: { variant?: ButtonVariant; size?: ButtonSize; className?: string }) {\n` +
           `  const variant = opts?.variant || 'primary';\n` +
           `  const size = opts?.size || 'md';\n` +
-          `  const base = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50';\n` +
+          `  const base = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 motion-safe:transform-gpu motion-safe:hover:-translate-y-0.5 motion-safe:hover:scale-[1.01] active:scale-[0.99]';\n` +
           `  const sizes: Record<ButtonSize, string> = {\n` +
           `    sm: 'h-9 px-3 text-sm',\n` +
           `    md: 'h-10 px-4 text-sm',\n` +
@@ -533,7 +586,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
           `import { cn } from '@/lib/cn';\n\n` +
           `export function Card({ title, subtitle, children, className }: { title?: string; subtitle?: string; children: React.ReactNode; className?: string }) {\n` +
           `  return (\n` +
-          `    <section className={cn('rounded-2xl border ${ui.border} ${ui.cardBg} shadow-sm hover:shadow-md transition-shadow', className)}>\n` +
+          `    <section className={cn('group relative overflow-hidden rounded-2xl border ${ui.border} ${ui.cardBg} shadow-sm hover:shadow-xl transition-all duration-300 motion-safe:hover:-translate-y-0.5', className)}>\n` +
           `      {title ? (\n` +
           `        <header className={cn('px-4 py-3 border-b ${cardDividerClass}')}>\n` +
           `          <div className={cn('text-sm font-semibold ${headingTextClass}')}>{title}</div>\n` +
@@ -868,15 +921,37 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
   return [
     {
       filePath: 'src/lib/cn.js',
-      content: `export function cn(...classes) {\n  return classes.flat().filter(Boolean).join(' ');\n}\n`,
+        // Export BOTH named + default so generated code can safely use either:
+        // - import { cn } from '../lib/cn.js'
+        // - import cn from '../lib/cn.js'
+        content:
+          `export function cn(...classes) {\n` +
+          `  return classes.flat().filter(Boolean).join(' ');\n` +
+          `}\n\n` +
+          `export default cn;\n`,
     },
     {
       filePath: 'src/components/ui/Button.jsx',
       content:
-        `import { cn } from '../../lib/cn.js';\n\n` +
+          `import React from 'react';\n` +
+          `import { cn } from '../../lib/cn.js';\n\n` +
+          `function __payntoSafeChild(child) {\n` +
+          `  if (child === null || child === undefined || child === false) return child;\n` +
+          `  if (Array.isArray(child)) return child.map(__payntoSafeChild);\n` +
+          `  const t = typeof child;\n` +
+          `  if (t === 'string' || t === 'number') return child;\n` +
+          `  if (t === 'object') {\n` +
+          `    if (React.isValidElement(child)) return child;\n` +
+          `    const v = child;\n` +
+          `    const picked = v?.name ?? v?.title ?? v?.label ?? v?.slug ?? v?.id;\n` +
+          `    if (typeof picked === 'string' || typeof picked === 'number') return String(picked);\n` +
+          `    try { return JSON.stringify(v); } catch { return String(v); }\n` +
+          `  }\n` +
+          `  return String(child);\n` +
+          `}\n\n` +
         `export function buttonClasses(opts = {}) {\n` +
         `  const { variant = 'primary', size = 'md', className } = opts;\n` +
-        `  const base = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50';\n` +
+        `  const base = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 motion-safe:transform-gpu motion-safe:hover:-translate-y-0.5 motion-safe:hover:scale-[1.01] active:scale-[0.99]';\n` +
         `  const sizes = {\n` +
         `    sm: 'h-9 px-3 text-sm',\n` +
         `    md: 'h-10 px-4 text-sm',\n` +
@@ -897,9 +972,13 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `  };\n` +
         `  return cn(base, sizes[size] || sizes.md, variants[variant] || variants.primary, className);\n` +
         `}\n\n` +
-        `export function Button({ variant = 'primary', size = 'md', className, ...props }) {\n` +
-        `  return <button className={buttonClasses({ variant, size, className })} {...props} />;\n` +
-        `}\n\nexport default Button;\n`,
+          `export function Button({ as: Comp = 'button', children, variant = 'primary', size = 'md', className, ...props }) {\n` +
+          `  return (\n` +
+          `    <Comp className={buttonClasses({ variant, size, className })} {...props}>\n` +
+          `      {__payntoSafeChild(children)}\n` +
+          `    </Comp>\n` +
+          `  );\n` +
+          `}\n\nexport default Button;\n`,
     },
     {
       filePath: 'src/components/ui/Card.jsx',
@@ -907,7 +986,7 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
         `import { cn } from '../../lib/cn.js';\n\n` +
         `export function Card({ title, subtitle, children, className }) {\n` +
         `  return (\n` +
-        `    <section className={cn('rounded-2xl border ${ui.border} ${ui.cardBg} shadow-sm hover:shadow-md transition-shadow', className)}>\n` +
+        `    <section className={cn('group relative overflow-hidden rounded-2xl border ${ui.border} ${ui.cardBg} shadow-sm hover:shadow-xl transition-all duration-300 motion-safe:hover:-translate-y-0.5', className)}>\n` +
         `      {title ? (\n` +
         `        <header className={cn('px-4 py-3 border-b ${cardDividerClass}')}>\n` +
         `          <div className={cn('text-sm font-semibold ${headingTextClass}')}>{title}</div>\n` +
@@ -938,18 +1017,35 @@ function buildUiKitFiles(template: TemplateTarget, ui: UiTheme): Array<{ filePat
     {
       filePath: 'src/components/ui/Badge.jsx',
       content:
-        `import { cn } from '../../lib/cn.js';\n\n` +
-        `export function Badge({ className, ...props }) {\n` +
-        `  return (\n` +
-        `    <span\n` +
-        `      className={cn(\n` +
-        `        'inline-flex items-center rounded-full border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'} px-2.5 py-1 text-xs font-medium ${ui.accentText}',\n` +
-        `        className\n` +
-        `      )}\n` +
-        `      {...props}\n` +
-        `    />\n` +
-        `  );\n` +
-        `}\n\nexport default Badge;\n`,
+          `import React from 'react';\n` +
+          `import { cn } from '../../lib/cn.js';\n\n` +
+          `function __payntoSafeChild(child) {\n` +
+          `  if (child === null || child === undefined || child === false) return child;\n` +
+          `  if (Array.isArray(child)) return child.map(__payntoSafeChild);\n` +
+          `  const t = typeof child;\n` +
+          `  if (t === 'string' || t === 'number') return child;\n` +
+          `  if (t === 'object') {\n` +
+          `    if (React.isValidElement(child)) return child;\n` +
+          `    const v = child;\n` +
+          `    const picked = v?.name ?? v?.title ?? v?.label ?? v?.slug ?? v?.id;\n` +
+          `    if (typeof picked === 'string' || typeof picked === 'number') return String(picked);\n` +
+          `    try { return JSON.stringify(v); } catch { return String(v); }\n` +
+          `  }\n` +
+          `  return String(child);\n` +
+          `}\n\n` +
+          `export function Badge({ children, className, ...props }) {\n` +
+          `  return (\n` +
+          `    <span\n` +
+          `      className={cn(\n` +
+          `        'inline-flex items-center rounded-full border ${ui.border} ${ui.isDark ? 'bg-white/5' : 'bg-black/5'} px-2.5 py-1 text-xs font-medium ${ui.accentText}',\n` +
+          `        className\n` +
+          `      )}\n` +
+          `      {...props}\n` +
+          `    >\n` +
+          `      {__payntoSafeChild(children)}\n` +
+          `    </span>\n` +
+          `  );\n` +
+          `}\n\nexport default Badge;\n`,
     },
     {
       filePath: 'src/components/ui/Skeleton.jsx',

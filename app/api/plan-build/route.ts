@@ -59,6 +59,7 @@ interface PlanTicket {
 
 interface PlanningResponse {
   blueprint?: Partial<BuildBlueprint>;
+  uiStyle?: UIStyle;
   tickets?: PlanTicket[];
   totalEstimatedTime?: string;
   summary?: string;
@@ -175,6 +176,7 @@ function normalizeUiStyle(raw: any): UIStyle | undefined {
 
   const description = typeof raw.description === 'string' ? raw.description.trim().slice(0, 300) : undefined;
   const style = typeof raw.style === 'string' ? raw.style.trim().slice(0, 40) : undefined;
+  const vibe = typeof raw.vibe === 'string' && raw.vibe.trim().length > 0 ? raw.vibe.trim().slice(0, 80) : undefined;
   const layout = typeof raw.layout === 'string' ? raw.layout.trim().slice(0, 140) : undefined;
 
   const cs = raw.colorScheme && typeof raw.colorScheme === 'object' ? raw.colorScheme : undefined;
@@ -195,13 +197,126 @@ function normalizeUiStyle(raw: any): UIStyle | undefined {
         .slice(0, 10)
     : undefined;
 
+  const themeKeywords = Array.isArray(raw.themeKeywords)
+    ? raw.themeKeywords
+        .filter((k: any) => typeof k === 'string' && k.trim().length > 0)
+        .map((k: string) => k.trim().slice(0, 40))
+        .slice(0, 12)
+    : undefined;
+
+  const motifs = Array.isArray(raw.motifs)
+    ? raw.motifs
+        .filter((m: any) => typeof m === 'string' && m.trim().length > 0)
+        .map((m: string) => m.trim().slice(0, 60))
+        .slice(0, 10)
+    : undefined;
+
+  const typographyRaw = raw.typography && typeof raw.typography === 'object' ? raw.typography : undefined;
+  const typography = typographyRaw
+    ? {
+        displayFont:
+          typeof typographyRaw.displayFont === 'string' && typographyRaw.displayFont.trim().length > 0
+            ? typographyRaw.displayFont.trim().slice(0, 60)
+            : undefined,
+        bodyFont:
+          typeof typographyRaw.bodyFont === 'string' && typographyRaw.bodyFont.trim().length > 0
+            ? typographyRaw.bodyFont.trim().slice(0, 60)
+            : undefined,
+        monoFont:
+          typeof typographyRaw.monoFont === 'string' && typographyRaw.monoFont.trim().length > 0
+            ? typographyRaw.monoFont.trim().slice(0, 60)
+            : undefined,
+        notes:
+          typeof typographyRaw.notes === 'string' && typographyRaw.notes.trim().length > 0
+            ? typographyRaw.notes.trim().slice(0, 220)
+            : undefined,
+      }
+    : undefined;
+
+  const motionRaw = raw.motion && typeof raw.motion === 'object' ? raw.motion : undefined;
+  const motion = motionRaw
+    ? {
+        intensity:
+          motionRaw.intensity === 'subtle' || motionRaw.intensity === 'moderate' || motionRaw.intensity === 'bold'
+            ? motionRaw.intensity
+            : undefined,
+        personality:
+          motionRaw.personality === 'snappy' ||
+          motionRaw.personality === 'smooth' ||
+          motionRaw.personality === 'bouncy' ||
+          motionRaw.personality === 'cinematic'
+            ? motionRaw.personality
+            : undefined,
+        notes:
+          typeof motionRaw.notes === 'string' && motionRaw.notes.trim().length > 0
+            ? motionRaw.notes.trim().slice(0, 220)
+            : undefined,
+      }
+    : undefined;
+
+  const iconographyRaw = raw.iconography && typeof raw.iconography === 'object' ? raw.iconography : undefined;
+  const iconography = iconographyRaw
+    ? {
+        style:
+          typeof iconographyRaw.style === 'string' && iconographyRaw.style.trim().length > 0
+            ? iconographyRaw.style.trim().slice(0, 60)
+            : undefined,
+        notes:
+          typeof iconographyRaw.notes === 'string' && iconographyRaw.notes.trim().length > 0
+            ? iconographyRaw.notes.trim().slice(0, 220)
+            : undefined,
+      }
+    : undefined;
+
+  const shapeRaw = raw.shapeLanguage && typeof raw.shapeLanguage === 'object' ? raw.shapeLanguage : undefined;
+  const shapeLanguage = shapeRaw
+    ? {
+        radius:
+          shapeRaw.radius === 'sharp' || shapeRaw.radius === 'soft' || shapeRaw.radius === 'pill' || shapeRaw.radius === 'mixed'
+            ? shapeRaw.radius
+            : undefined,
+        stroke:
+          shapeRaw.stroke === 'thin' || shapeRaw.stroke === 'medium' || shapeRaw.stroke === 'thick'
+            ? shapeRaw.stroke
+            : undefined,
+        notes:
+          typeof shapeRaw.notes === 'string' && shapeRaw.notes.trim().length > 0 ? shapeRaw.notes.trim().slice(0, 220) : undefined,
+      }
+    : undefined;
+
+  const texture = typeof raw.texture === 'string' && raw.texture.trim().length > 0 ? raw.texture.trim().slice(0, 80) : undefined;
+
+  const references = Array.isArray(raw.references)
+    ? raw.references
+        .filter((r: any) => typeof r === 'string' && r.trim().length > 0)
+        .map((r: string) => r.trim().slice(0, 80))
+        .slice(0, 10)
+    : undefined;
+
+  const avoid = Array.isArray(raw.avoid)
+    ? raw.avoid
+        .filter((a: any) => typeof a === 'string' && a.trim().length > 0)
+        .map((a: string) => a.trim().slice(0, 80))
+        .slice(0, 10)
+    : undefined;
+
   return {
     name,
     description,
     style,
+    vibe,
     colorScheme,
     layout,
     features,
+    themeKeywords,
+    motifs,
+    typography,
+    motion,
+    iconography,
+    shapeLanguage,
+    texture,
+    references,
+    avoid,
   };
 }
 
@@ -240,6 +355,7 @@ RULES:
 6. Integration tickets (data, API) come last
 7. DATABASE tickets should be created EARLY in the build when data persistence is needed
 8. Always produce a BUILD BLUEPRINT (routes/navigation/flows/entities) so the build can be validated for breadth and completeness
+9. Always produce a UI STYLE spec (art direction + motion language) so the build looks premium by default
 
 For each ticket provide (inside "tickets"):
 - title: Short, descriptive name (e.g., "Hero Title & Subtitle")
@@ -297,6 +413,29 @@ BUILD BLUEPRINT (required in "blueprint"):
 - entities (optional): Array of data entities with fields
 - flows (optional): Array of user flows, each with steps that describe what \"working\" means
 
+UI STYLE (required in "uiStyle"):
+- name: Memorable style name (e.g., "Neon Arcade", "Kawaii Dashboard", "Editorial Luxe")
+- description: 2-4 sentences describing the visual identity and what it feels like to use
+- style: Short bucket string (e.g., modern, playful, elegant, futuristic, glassmorphic, brutalist, organic, retro, cyberpunk, anime)
+- vibe: 2-8 words describing the vibe (e.g., "sleek, premium, cinematic")
+- colorScheme: { primary, secondary, accent, background, text } as hex colors
+- layout: 1-2 sentences describing layout philosophy (density, hierarchy, spacing rhythm)
+- features: 5-8 specific visual features (micro-interactions, surfaces, textures, etc.)
+- themeKeywords: 3-10 keywords/tags for the aesthetic
+- motifs: 3-8 recurring motifs/patterns/shapes
+- typography: { displayFont, bodyFont, monoFont?, notes? } (realistic Google fonts)
+- motion: { intensity: subtle|moderate|bold, personality: snappy|smooth|bouncy|cinematic, notes }
+- shapeLanguage: { radius: sharp|soft|pill|mixed, stroke: thin|medium|thick, notes }
+- iconography: { style, notes }
+- texture: short descriptor (none|subtle grain|paper|grid|halftone|etc.)
+- references: optional short list of inspirations (strings)
+- avoid: optional list of “do not do” items (strings)
+
+UI STYLE RULES:
+- The UI style must be distinctive and "premium by default" (not generic).
+- Include a clear motion language and specify what animates.
+- If the user explicitly requests a theme/aesthetic (anime/cyberpunk/retro/brutalist), your uiStyle MUST commit to it.
+
 IMPORTANT - DETECT INTEGRATIONS REQUIRING USER INPUT:
 - Payment processing (Stripe, PayPal) → needs API keys
 - Authentication (Auth0, Clerk, Supabase Auth) → needs credentials/URLs
@@ -342,12 +481,21 @@ COMPLEXITY GUIDE:
 Return ONLY a valid JSON object with this structure:
 {
   "blueprint": { ... },
+  "uiStyle": { ... },
   "tickets": [...],
   "totalEstimatedTime": "~X-Y minutes",
   "summary": "Brief build overview"
 }`;
 
 function inferTemplateTarget(prompt: string): TemplateTarget {
+  // IMPORTANT: The sandbox runtime currently supports Vite only.
+  // Planning for `next` here leads to a mismatch where scaffolding writes Next-style files
+  // into a Vite sandbox, leaving `src/App.jsx` untouched and the preview stuck on the default template.
+  //
+  // When Next sandboxes are supported, set `PLAN_BUILD_ALLOW_NEXT_TEMPLATE=true`.
+  const allowNext = String(process.env.PLAN_BUILD_ALLOW_NEXT_TEMPLATE || '').toLowerCase() === 'true';
+  if (!allowNext) return 'vite';
+
   const text = prompt.toLowerCase();
   const nextSignals = [
     'next.js',
@@ -376,10 +524,10 @@ function inferTemplateTarget(prompt: string): TemplateTarget {
 
 function inferThemePreset(prompt: string): ThemePreset {
   const text = prompt.toLowerCase();
-  if (/\b(dark|night|cyber|neo|terminal|hacker|devtool)\b/.test(text)) return 'modern_dark';
+  if (/\b(dark|night|cyber|cyberpunk|neon|synthwave|vaporwave|neo|terminal|hacker|devtool)\b/.test(text)) return 'modern_dark';
   if (/\b(fintech|finance|bank|banking|payments|crypto|trading|portfolio|invoice)\b/.test(text)) return 'fintech_dark';
-  if (/\b(blog|editorial|magazine|news|writer|writing|publishing)\b/.test(text)) return 'editorial_light';
-  if (/\b(playful|kids|children|toy|fun|cute)\b/.test(text)) return 'playful_light';
+  if (/\b(blog|editorial|magazine|news|writer|writing|publishing|retro|vintage|newspaper)\b/.test(text)) return 'editorial_light';
+  if (/\b(playful|kids|children|toy|fun|cute|anime|manga|kawaii|otaku|cartoon|comic)\b/.test(text)) return 'playful_light';
   return 'modern_light';
 }
 
@@ -392,6 +540,25 @@ function inferThemeAccent(prompt: string): ThemeAccent {
   if (/\b(violet|purple)\b/.test(text)) return 'violet';
   if (/\b(blue)\b/.test(text)) return 'blue';
   return 'indigo';
+}
+
+function inferThemeVibe(prompt: string, preset: ThemePreset): string | undefined {
+  const text = prompt.toLowerCase();
+
+  if (/\b(anime|manga|kawaii|otaku)\b/.test(text)) return 'anime-inspired, playful, high-energy';
+  if (/\b(cyberpunk|neon|synthwave|vaporwave)\b/.test(text)) return 'neon, futuristic, high-contrast';
+  if (/\b(brutalism|brutalist|neubrutal|neo-brutal)\b/.test(text)) return 'bold, punchy, high-contrast';
+  if (/\b(minimal|minimalist|apple|clean|simple)\b/.test(text)) return 'minimal, premium, airy';
+  if (/\b(luxury|luxe|premium)\b/.test(text)) return 'luxurious, editorial, premium';
+  if (/\b(organic|natural|earthy)\b/.test(text)) return 'organic, warm, textured';
+  if (/\b(retro|vintage)\b/.test(text)) return 'retro, warm, nostalgic';
+
+  // Fallback by preset
+  if (preset === 'fintech_dark') return 'sleek, trustworthy, data-forward';
+  if (preset === 'modern_dark') return 'sleek, modern, cinematic';
+  if (preset === 'editorial_light') return 'editorial, elegant, readable';
+  if (preset === 'playful_light') return 'playful, vibrant, friendly';
+  return 'modern, crisp, polished';
 }
 
 function normalizeBlueprint(raw: PlanningResponse['blueprint'] | undefined, prompt: string): BuildBlueprint {
@@ -544,7 +711,7 @@ function normalizeBlueprint(raw: PlanningResponse['blueprint'] | undefined, prom
   const vibe: string | undefined =
     rawTheme && typeof rawTheme === 'object' && typeof rawTheme.vibe === 'string' && rawTheme.vibe.trim().length > 0
       ? rawTheme.vibe.trim().slice(0, 60)
-      : undefined;
+      : inferThemeVibe(prompt, preset)?.slice(0, 60);
 
   return {
     templateTarget,
@@ -568,10 +735,24 @@ function ensureMockFirstDataTickets(tickets: PlanTicket[], blueprint: BuildBluep
   // Caller passes prompt into normalizeBlueprint; we still want a conservative behavior here.
   if (!needsData) return tickets;
 
-  const hasDataLayer = tickets.some(t => (t.title || '').toLowerCase().includes('data layer') || t.type === 'database');
   const base: PlanTicket[] = [...tickets];
+  const lower = (s: unknown) => String(s || '').toLowerCase();
+  const dataLayerTitle = 'Data layer (mock-first)';
 
-  if (!hasDataLayer) {
+  const hasMockFirstDataLayer = base.some(t => {
+    const title = lower(t.title);
+    const desc = lower(t.description);
+    // We specifically want a no-input, mock-first adapter ticket so the build can progress without credentials.
+    return (
+      title.includes('data layer') ||
+      title.includes('mock-first') ||
+      desc.includes('mock-first') ||
+      desc.includes('mock data') ||
+      desc.includes('seeded')
+    );
+  });
+
+  if (!hasMockFirstDataLayer) {
     base.unshift({
       title: 'Data layer (mock-first)',
       description: 'Set up a mock-first data adapter with seeded demo data and a switchable real adapter (optional).',
@@ -588,6 +769,34 @@ function ensureMockFirstDataTickets(tickets: PlanTicket[], blueprint: BuildBluep
       },
     });
   }
+
+  // In real_optional mode, any database setup/config ticket that requires user input should be OPTIONAL
+  // and must not block other tickets. We enforce this by removing dependencies on those tickets.
+  const optionalDbTitles =
+    blueprint.dataMode === 'real_optional' || blueprint.dataMode === 'mock'
+      ? base
+          .filter(t => {
+            if (t.title === dataLayerTitle) return false;
+            if (t.type !== 'database') return false;
+            const text = `${lower(t.title)}\n${lower(t.description)}`;
+            const provider = String(t.databaseConfig?.provider || '').toLowerCase();
+            const looksLikeRealDbSetup =
+              Boolean(t.requiresInput) ||
+              provider === 'supabase' ||
+              text.includes('supabase') ||
+              text.includes('database setup') ||
+              text.includes('credentials') ||
+              text.includes('api key') ||
+              text.includes('connection string') ||
+              text.includes('env var') ||
+              text.includes('env vars') ||
+              text.includes('anon key') ||
+              text.includes('service role');
+            return looksLikeRealDbSetup;
+          })
+          .map(t => t.title)
+          .filter(Boolean)
+      : [];
 
   // Ensure an optional Supabase ticket exists (does not block anything).
   const hasSupabaseOptional = base.some(t => (t.title || '').toLowerCase().includes('supabase'));
@@ -607,7 +816,6 @@ function ensureMockFirstDataTickets(tickets: PlanTicket[], blueprint: BuildBluep
   }
 
   // Ensure data-dependent tickets depend on the mock-first data layer ticket title, not on Supabase.
-  const dataLayerTitle = 'Data layer (mock-first)';
   return base.map(t => {
     if (t.title === dataLayerTitle) return t;
     if ((t.title || '').toLowerCase().includes('supabase')) return t;
@@ -616,11 +824,14 @@ function ensureMockFirstDataTickets(tickets: PlanTicket[], blueprint: BuildBluep
     const looksDataDependent =
       typeSignals.includes(t.type as any) ||
       /\b(data|crud|save|load|create|update|delete|list|search|filter|db|database|api)\b/.test(text);
-    if (!looksDataDependent) return t;
-
     const deps = Array.isArray(t.dependencies) ? t.dependencies : [];
-    if (deps.includes(dataLayerTitle)) return t;
-    return { ...t, dependencies: [dataLayerTitle, ...deps] };
+    // Remove deps on optional DB setup/config tickets so the build isn't blocked by missing credentials.
+    const prunedDeps = optionalDbTitles.length > 0 ? deps.filter(d => !optionalDbTitles.includes(d)) : deps;
+
+    if (!looksDataDependent) return { ...t, dependencies: prunedDeps };
+
+    if (prunedDeps.includes(dataLayerTitle)) return { ...t, dependencies: prunedDeps };
+    return { ...t, dependencies: [dataLayerTitle, ...prunedDeps] };
   });
 }
 
@@ -632,9 +843,9 @@ function ensureUiFoundationTickets(tickets: PlanTicket[], opts: { uiStyle?: UISt
   if (!hasFoundation) {
     base.unshift({
       title: 'Design system + app shell',
-      description: `Establish a cohesive visual system and a polished app shell (layout, typography, spacing, reusable UI primitives, and consistent interactive states).${
+      description: `Establish a cohesive visual system and a polished app shell (layout, typography scale, spacing rhythm, shape language, surfaces, shadows, iconography, and a clear motion language with reduced-motion safety).${
         opts.uiStyle?.name ? ` Apply the selected style: "${opts.uiStyle.name}".` : ''
-      } Reuse and extend the existing UI primitives (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) instead of creating a new UI kit.`,
+      } Prefer evolving shared primitives (Button, Card, Input, Badge, Skeleton, EmptyState, DataTable, Tabs, Modal) so the look “snaps” into place across the app instead of restyling every screen ad-hoc.`,
       type: 'styling',
       priority: 'critical',
       complexity: 'M',
@@ -708,7 +919,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { prompt, context, uiStyle: rawUiStyle, model: rawModel } = await request.json();
-    const uiStyle = normalizeUiStyle(rawUiStyle);
+    const selectedUiStyle = normalizeUiStyle(rawUiStyle);
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
@@ -779,7 +990,7 @@ export async function POST(request: NextRequest) {
 
           const promptText =
             `Build request: ${prompt}` +
-            (uiStyle ? `\n\nSelected UI style (apply consistently):\n${JSON.stringify(uiStyle, null, 2)}` : '') +
+            (selectedUiStyle ? `\n\nSelected UI style (apply consistently):\n${JSON.stringify(selectedUiStyle, null, 2)}` : '') +
             (context?.existingFiles ? `\n\nExisting files: ${context.existingFiles.join(', ')}` : '');
 
           const runPlanningOnce = async (modelId: string) => {
@@ -859,10 +1070,12 @@ export async function POST(request: NextRequest) {
           }
 
           const baseTime = Date.now();
+          const plannerUiStyle = normalizeUiStyle((parsed as any)?.uiStyle);
+          const effectiveUiStyle = selectedUiStyle || plannerUiStyle;
           const blueprint = normalizeBlueprint(parsed.blueprint, prompt);
           const rawTickets = Array.isArray(parsed.tickets) ? parsed.tickets : [];
           const ticketsWithData = ensureMockFirstDataTickets(rawTickets, blueprint, prompt);
-          const ticketsWithFoundation = ensureUiFoundationTickets(ticketsWithData, { uiStyle });
+          const ticketsWithFoundation = ensureUiFoundationTickets(ticketsWithData, { uiStyle: effectiveUiStyle });
 
           // Emit blueprint early so the client can show coverage immediately (optional)
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'blueprint', blueprint })}\n\n`));
@@ -909,7 +1122,7 @@ export async function POST(request: NextRequest) {
             plan: {
               id: `plan-${baseTime}`,
               prompt,
-              uiStyle: uiStyle || undefined,
+              uiStyle: effectiveUiStyle || undefined,
               blueprint,
               templateTarget: blueprint.templateTarget,
               dataMode: blueprint.dataMode,
